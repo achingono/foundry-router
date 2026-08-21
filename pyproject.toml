@@ -78,6 +78,16 @@ unfixable = ["T10", "TCH", "INT", "ASYNC"]
 "src/foundry_router/auth/__init__.py" = ["B008"]
 "src/foundry_router/backends/__init__.py" = ["PLW0603"]
 "src/foundry_router/config/__init__.py" = ["PLR0912", "PLR0915"]
+"src/foundry_router/credit.py" = [
+    "E501",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR2004",
+    "PLR5501",
+    "SIM108",
+    "SIM114",
+]
 
 [tool.ruff.format]
 quote-style = "double"

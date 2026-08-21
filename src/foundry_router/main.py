@@ -23,6 +23,13 @@ from structlog import get_logger
 from foundry_router.auth import verify_admin_auth, verify_client_auth
 from foundry_router.backends import close_backend_client, get_backend_client
 from foundry_router.config import load_settings
+from foundry_router.credit import (
+    CreditState,
+    InMemoryCreditStore,
+    estimate_request_cost,
+    estimate_response_usage_cost,
+    score_credit_assessment,
+)
 from foundry_router.logging import setup_logging
 
 if TYPE_CHECKING:
@@ -33,6 +40,7 @@ MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 HTTP_OK = 200
 HTTP_SUCCESS_LIMIT = 300
 HTTP_TOO_MANY_REQUESTS = 429
+HTTP_SERVER_ERROR_MIN = 500
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 SAFE_UPSTREAM_RESPONSE_HEADERS = frozenset({"cache-control", "retry-after"})
 MAX_EMPTY_PRE_OUTPUT_CHUNKS = 16
@@ -71,6 +79,15 @@ class BackendRequestResult:
 
 _backend_health_state: dict[str, BackendHealthRecord] = {}
 _backend_health_lock = asyncio.Lock()
+_credit_store = InMemoryCreditStore()
+
+
+@dataclass(frozen=True)
+class BackendSelectionResult:
+    backend_id: str | None
+    candidates: list[str]
+    snapshots: dict[str, BackendHealthSnapshot]
+    insufficient_credit_capacity: bool
 
 
 def _ranked_model_backends(
@@ -203,77 +220,241 @@ def _cooldown_exhausted_response(
     return response
 
 
-async def _select_candidate_backend(
+async def _select_candidate_backend(  # noqa: PLR0913
     settings: Any,
     model: str,
     *,
+    operation: str,
+    body: dict[str, Any],
+    request_id: str,
     excluded: set[str] | None = None,
-) -> tuple[str | None, list[str], dict[str, BackendHealthSnapshot]]:
+) -> BackendSelectionResult:
     ranked_candidates = _ranked_model_backends(settings, model, excluded=excluded)
     if not ranked_candidates:
-        return None, [], {}
+        return BackendSelectionResult(None, [], {}, False)
+
     snapshots = await _snapshot_backend_health(ranked_candidates)
-    active_candidates = [
+    await _credit_store.sync_from_settings(settings)
+
+    estimate = estimate_request_cost(
+        model=model,
+        operation=operation,
+        body=body,
+        pricing=settings.pricing,
+    )
+    if estimate is None:
+        return BackendSelectionResult(None, ranked_candidates, snapshots, True)
+
+    health_eligible = [
         backend_id
         for backend_id in ranked_candidates
         if snapshots[backend_id].state == BackendHealthState.ACTIVE
     ]
-    if active_candidates:
-        return active_candidates[0], ranked_candidates, snapshots
-    if settings.protected_emergency_fallback and len(ranked_candidates) == 1:
+    if (
+        not health_eligible
+        and settings.protected_emergency_fallback
+        and len(ranked_candidates) == 1
+    ):
         fallback_candidate = ranked_candidates[0]
         if snapshots[fallback_candidate].state in COOLDOWN_STATES:
-            return fallback_candidate, ranked_candidates, snapshots
-    return None, ranked_candidates, snapshots
+            health_eligible = [fallback_candidate]
+
+    if not health_eligible:
+        return BackendSelectionResult(None, ranked_candidates, snapshots, False)
+
+    scored_candidates: list[tuple[float, float, str]] = []
+    has_credit_capacity = False
+    for backend_id in health_eligible:
+        assessment = await _credit_store.assess(
+            backend_id,
+            estimate.estimated_cost_usd,
+            min_credit_reserve_usd=settings.min_credit_reserve_usd,
+            min_credit_reserve_percent=settings.min_credit_reserve_percent,
+        )
+        if assessment.state not in {CreditState.USABLE, CreditState.CONSERVATION}:
+            continue
+        has_credit_capacity = True
+        score = score_credit_assessment(
+            state=assessment.state,
+            is_health_active=snapshots[backend_id].state == BackendHealthState.ACTIVE,
+            is_error_cooldown=snapshots[backend_id].state == BackendHealthState.ERROR_COOLDOWN,
+            available_credit_usd=assessment.available_credit_usd,
+            estimated_request_cost_usd=assessment.estimated_request_cost_usd,
+            projected_unused_credit_usd=assessment.projected_unused_credit_usd,
+            cycle_allowance_usd=assessment.cycle_allowance_usd,
+        )
+        scored_candidates.append((score, settings.models[model].backends[backend_id], backend_id))
+
+    if not scored_candidates:
+        return BackendSelectionResult(None, ranked_candidates, snapshots, not has_credit_capacity)
+
+    scored_candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    for _score, _weight, backend_id in scored_candidates:
+        reserved = await _credit_store.try_assign_reservation(
+            request_id,
+            backend_id,
+            estimate.estimated_cost_usd,
+            min_credit_reserve_usd=settings.min_credit_reserve_usd,
+            min_credit_reserve_percent=settings.min_credit_reserve_percent,
+        )
+        if reserved:
+            return BackendSelectionResult(backend_id, ranked_candidates, snapshots, False)
+
+    return BackendSelectionResult(None, ranked_candidates, snapshots, True)
 
 
-async def _all_candidates_cooldown_response(settings: Any, model: str) -> JSONResponse | None:
-    backend_id, candidates, snapshots = await _select_candidate_backend(settings, model)
-    if backend_id is not None:
-        return None
-    return _cooldown_exhausted_response(candidates, snapshots)
-
-
-async def _execute_with_single_failover(  # noqa: PLR0911
+async def _all_candidates_cooldown_response(
     settings: Any,
     model: str,
-    execute_backend: Callable[[str], Awaitable[BackendRequestResult]],
-) -> Response:
-    first_backend_id, first_candidates, first_snapshots = await _select_candidate_backend(
+    *,
+    operation: str,
+    body: dict[str, Any],
+    request_id: str,
+) -> JSONResponse | None:
+    selection = await _select_candidate_backend(
         settings,
         model,
+        operation=operation,
+        body=body,
+        request_id=request_id,
     )
-    if first_backend_id is None:
-        cooldown_response = _cooldown_exhausted_response(first_candidates, first_snapshots)
+    if selection.backend_id is not None:
+        return None
+    return _cooldown_exhausted_response(selection.candidates, selection.snapshots)
+
+
+async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
+    settings: Any,
+    model: str,
+    *,
+    operation: str,
+    body: dict[str, Any],
+    request_id: str,
+    execute_backend: Callable[[str], Awaitable[BackendRequestResult]],
+) -> Response:
+    first_selection = await _select_candidate_backend(
+        settings,
+        model,
+        operation=operation,
+        body=body,
+        request_id=request_id,
+    )
+    if first_selection.backend_id is None:
+        cooldown_response = _cooldown_exhausted_response(
+            first_selection.candidates,
+            first_selection.snapshots,
+        )
         if cooldown_response is not None:
             return cooldown_response
+        if first_selection.insufficient_credit_capacity:
+            return _api_error(
+                503,
+                "No backend has sufficient estimated credit capacity",
+                "insufficient_credit_capacity",
+            )
         return _api_error(
             503,
             "No active backend available for the requested model",
             "upstream_error",
         )
 
-    first_result = await execute_backend(first_backend_id)
+    first_backend_id = first_selection.backend_id
+    try:
+        first_result = await execute_backend(first_backend_id)
+    except Exception:
+        await _credit_store.finalize_request(
+            request_id,
+            charge_reserved=False,
+            charged_cost_usd=None,
+        )
+        raise
+
     if not first_result.retryable_failure:
+        if not isinstance(first_result.response, StreamingResponse):
+            await _finalize_non_streaming_credit(
+                request_id=request_id,
+                model=model,
+                settings=settings,
+                response=first_result.response,
+            )
         return first_result.response
 
-    second_backend_id, second_candidates, second_snapshots = await _select_candidate_backend(
+    second_selection = await _select_candidate_backend(
         settings,
         model,
+        operation=operation,
+        body=body,
+        request_id=request_id,
         excluded={first_backend_id},
     )
+    second_backend_id = second_selection.backend_id
     if second_backend_id is None:
-        all_cooldown_response = await _all_candidates_cooldown_response(settings, model)
+        if (
+            first_result.response.status_code >= HTTP_SERVER_ERROR_MIN
+            and second_selection.insufficient_credit_capacity
+        ):
+            await _finalize_non_streaming_credit(
+                request_id=request_id,
+                model=model,
+                settings=settings,
+                response=first_result.response,
+            )
+            return _api_error(
+                503,
+                "No backend has sufficient estimated credit capacity",
+                "insufficient_credit_capacity",
+            )
+        all_cooldown_response = await _all_candidates_cooldown_response(
+            settings,
+            model,
+            operation=operation,
+            body=body,
+            request_id=request_id,
+        )
         if all_cooldown_response is not None:
+            await _finalize_non_streaming_credit(
+                request_id=request_id,
+                model=model,
+                settings=settings,
+                response=first_result.response,
+            )
             return all_cooldown_response
-        cooldown_response = _cooldown_exhausted_response(second_candidates, second_snapshots)
+        cooldown_response = _cooldown_exhausted_response(
+            second_selection.candidates,
+            second_selection.snapshots,
+        )
         if cooldown_response is not None:
+            await _finalize_non_streaming_credit(
+                request_id=request_id,
+                model=model,
+                settings=settings,
+                response=first_result.response,
+            )
             return cooldown_response
+        await _finalize_non_streaming_credit(
+            request_id=request_id,
+            model=model,
+            settings=settings,
+            response=first_result.response,
+        )
         return first_result.response
 
     second_result = await execute_backend(second_backend_id)
+    if not isinstance(second_result.response, StreamingResponse):
+        await _finalize_non_streaming_credit(
+            request_id=request_id,
+            model=model,
+            settings=settings,
+            response=second_result.response,
+        )
     if second_result.retryable_failure:
-        all_cooldown_response = await _all_candidates_cooldown_response(settings, model)
+        all_cooldown_response = await _all_candidates_cooldown_response(
+            settings,
+            model,
+            operation=operation,
+            body=body,
+            request_id=request_id,
+        )
         if all_cooldown_response is not None:
             return all_cooldown_response
     return second_result.response
@@ -382,6 +563,7 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
     *,
     settings: Any,
     backend_id: str,
+    request_id: str,
     headers: dict[str, str],
     body: dict[str, Any],
 ) -> BackendRequestResult:
@@ -543,6 +725,7 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
                     chunks,
                     first_chunk,
                     context,
+                    request_id=request_id,
                     backend_id=backend_id,
                     cooldown_seconds=settings.retry_max_delay_seconds,
                 ),
@@ -562,6 +745,25 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
 async def _reset_backend_health_state() -> None:
     async with _backend_health_lock:
         _backend_health_state.clear()
+
+
+async def _reset_credit_state() -> None:
+    await _credit_store.reset()
+
+
+async def _finalize_non_streaming_credit(
+    *,
+    request_id: str,
+    model: str,
+    settings: Any,
+    response: Response,
+) -> None:
+    charged_cost = estimate_response_usage_cost(response, model, settings.pricing)
+    await _credit_store.finalize_request(
+        request_id,
+        charge_reserved=True,
+        charged_cost_usd=charged_cost,
+    )
 
 
 def _api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
@@ -627,11 +829,12 @@ def _upstream_response(response: httpx.Response, body: bytes) -> Response:
     )
 
 
-async def _stream_response(
+async def _stream_response(  # noqa: PLR0913
     chunks: AsyncIterator[bytes],
     first_chunk: bytes,
     context: Any,
     *,
+    request_id: str,
     backend_id: str,
     cooldown_seconds: float,
 ) -> AsyncIterator[bytes]:
@@ -648,6 +851,11 @@ async def _stream_response(
         yield b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
     finally:
         await context.__aexit__(None, None, None)
+        await _credit_store.finalize_request(
+            request_id,
+            charge_reserved=True,
+            charged_cost_usd=None,
+        )
 
 
 @asynccontextmanager
@@ -666,12 +874,14 @@ async def lifespan(_app: FastAPI) -> Any:
 
     # Initialize backend client
     get_backend_client()
+    await _credit_store.sync_from_settings(settings)
 
     yield
 
     # Shutdown
     logger.info("foundry_router_shutting_down")
     await close_backend_client()
+    await _reset_credit_state()
 
 
 app = FastAPI(
@@ -757,6 +967,19 @@ async def readiness() -> Response:
     )
 
 
+def _admin_backend_status(name: str, config: Any, settings: Any) -> dict[str, Any]:
+    return {
+        "endpoint": str(config.endpoint),
+        "region": config.region,
+        "deployment": config.deployment,
+        "cycle_start_day": settings.backend_cycle_start_day.get(name),
+        "cycle_allowance_usd": settings.backend_cycle_allowance_usd.get(name),
+        "initial_estimated_remaining_usd": settings.backend_initial_estimated_remaining_usd.get(
+            name
+        ),
+    }
+
+
 # Admin endpoint (requires admin authentication)
 @app.get("/admin/status", tags=["Admin"], dependencies=[Depends(verify_admin_auth)])
 async def admin_status(_request: Request) -> dict[str, Any]:
@@ -766,12 +989,7 @@ async def admin_status(_request: Request) -> dict[str, Any]:
     return {
         "version": "0.1.0",
         "backends": {
-            name: {
-                "endpoint": str(config.endpoint),
-                "region": config.region,
-                "deployment": config.deployment,
-                "cycle_start_day": settings.backend_cycle_start_day.get(name),
-            }
+            name: _admin_backend_status(name, config, settings)
             for name, config in settings.backends.items()
         },
         "models": {
@@ -826,9 +1044,13 @@ async def create_response(request: Request) -> Response:
         return await _execute_with_single_failover(
             settings,
             body["model"],
-            lambda backend_id: _forward_streaming_with_retries(
+            operation="responses",
+            body=body,
+            request_id=request.state.correlation_id,
+            execute_backend=lambda backend_id: _forward_streaming_with_retries(
                 settings=settings,
                 backend_id=backend_id,
+                request_id=request.state.correlation_id,
                 headers=headers,
                 body=body,
             ),
@@ -837,7 +1059,10 @@ async def create_response(request: Request) -> Response:
     return await _execute_with_single_failover(
         settings,
         body["model"],
-        lambda backend_id: _forward_non_streaming_with_retries(
+        operation="responses",
+        body=body,
+        request_id=request.state.correlation_id,
+        execute_backend=lambda backend_id: _forward_non_streaming_with_retries(
             settings=settings,
             backend_id=backend_id,
             operation="responses",
@@ -859,7 +1084,10 @@ async def create_embeddings(request: Request) -> Response:
     return await _execute_with_single_failover(
         settings,
         body["model"],
-        lambda backend_id: _forward_non_streaming_with_retries(
+        operation="embeddings",
+        body=body,
+        request_id=request.state.correlation_id,
+        execute_backend=lambda backend_id: _forward_non_streaming_with_retries(
             settings=settings,
             backend_id=backend_id,
             operation="embeddings",

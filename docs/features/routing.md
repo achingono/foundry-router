@@ -2,7 +2,7 @@
 
 ## Status: Partially implemented
 
-For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, evaluate quota and credit, evaluate cycle urgency, score candidates, select the highest score, forward, account for usage, update state, and return the response. Equal scores use weighted round-robin.
+For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 
 ## Separate Quota from Credit
 
@@ -29,7 +29,7 @@ Reserve a conservative estimated request cost before dispatch:
 available_credit = estimated_remaining_credit - reserved_inflight_cost - safety_reserve
 ```
 
-Release the reservation and record actual estimated usage after completion. Estimate large input and expected output cost before dispatch; if no backend can safely accept it, reject clearly instead of risking exhaustion.
+Release the reservation and record local estimated usage after completion. Estimate large input and expected output cost before dispatch; if no backend can safely accept it, reject with `503` and `insufficient_credit_capacity` instead of risking exhaustion. These balances and costs are local estimates, not authoritative Azure balances.
 
 ## Scoring and Explainability
 
