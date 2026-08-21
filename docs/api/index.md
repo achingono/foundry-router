@@ -15,7 +15,7 @@ The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
-| `GET /admin/status` | Implemented; authenticated configuration and model/backends snapshot |
+| `GET /admin/status` | Implemented; authenticated configuration/model snapshots with reconciliation diagnostics |
 | `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
 
 Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
@@ -343,6 +343,14 @@ x-admin-key: admin-key-789
     "retry_attempts": 2,
     "retry_max_delay_seconds": 30.0,
     "protected_emergency_fallback": false
+  },
+  "reconciliation": {
+    "last_attempt_utc": "2026-08-21T18:20:00+00:00",
+    "last_success_utc": "2026-08-21T18:20:00+00:00",
+    "last_error": null,
+    "last_updated_backends": 2,
+    "consecutive_failures": 0,
+    "stale": false
   }
 }
 ```

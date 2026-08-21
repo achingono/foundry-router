@@ -249,6 +249,22 @@ class TestSettings:
             with pytest.raises(ValueError, match="unknown backend"):
                 load_settings()
 
+    def test_reconciliation_override_unknown_backend_rejected(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+                "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+                "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                "FOUNDRY_PRICING_JSON": "{}",
+                "FOUNDRY_BACKEND_CYCLE_START_DAY_JSON": "{}",
+                "FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON": '{"backend_b": 12.5}',
+            },
+        ):
+            with pytest.raises(ValueError, match="unknown backend"):
+                load_settings()
+
     def test_get_allowed_hostnames(self) -> None:
         backends = {
             "backend_a": {

@@ -394,6 +394,36 @@ class InMemoryCreditStore:
             self._snapshots.clear()
             self._reservations.clear()
 
+    async def apply_reconciled_remaining(
+        self,
+        authoritative_remaining_usd: dict[str, float],
+        *,
+        now_utc: datetime | None = None,
+    ) -> int:
+        """Apply authoritative remaining-credit updates for known backends.
+
+        Returns the number of backend snapshots updated.
+        """
+        now = now_utc or datetime.now(UTC)
+        updated = 0
+        async with self._lock:
+            for backend_id, amount in authoritative_remaining_usd.items():
+                snapshot = self._snapshots.get(backend_id)
+                if snapshot is None:
+                    continue
+                if isinstance(amount, bool):
+                    continue
+                try:
+                    amount_float = float(amount)
+                except (TypeError, ValueError):
+                    continue
+                if not _valid_non_negative_finite(amount_float):
+                    continue
+                self._rollover_if_needed(snapshot, now)
+                snapshot.estimated_remaining_usd = min(snapshot.cycle_allowance_usd, amount_float)
+                updated += 1
+        return updated
+
     def _release_locked(
         self,
         reservation: _Reservation,
