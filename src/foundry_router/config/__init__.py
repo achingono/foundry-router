@@ -16,7 +16,8 @@ class BackendConfig(BaseModel):
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
     region: str | None = None
-    deployment: str | None = None
+    deployment: str = Field(min_length=1)
+    api_version: str = "2025-04-01-preview"
 
     @field_validator("endpoint")
     @classmethod
@@ -30,6 +31,20 @@ class BackendConfig(BaseModel):
     def validate_credential(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("Backend credential must not be blank")
+        return v
+
+    @field_validator("deployment")
+    @classmethod
+    def validate_deployment(cls, v: str) -> str:
+        if not v.strip() or "/" in v or "\\" in v:
+            raise ValueError("Backend deployment must be a single non-empty path segment")
+        return v
+
+    @field_validator("api_version")
+    @classmethod
+    def validate_api_version(cls, v: str) -> str:
+        if not v.strip() or any(char in v for char in "&#?/"):
+            raise ValueError("Backend API version must be a non-empty query value")
         return v
 
 

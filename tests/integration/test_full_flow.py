@@ -18,7 +18,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_settings(monkeypatch):
     test_settings = Settings(
-        backends_json='{"mock_backend": {"endpoint": "https://testserver", "credential": "mock-key"}}',
+        backends_json='{"mock_backend": {"endpoint": "https://testserver", "credential": "mock-key", "deployment": "gpt-4"}}',
         models_json='{"gpt-4": {"backends": {"mock_backend": 1.0}}}',
         client_api_keys_json='["client-key-123"]',
         admin_api_keys_json='["admin-key-789"]',
@@ -69,8 +69,13 @@ class TestFullFlow:
         assert data["data"][0]["id"] == "gpt-4"
 
     def test_unknown_model_returns_404(self) -> None:
-        # Model validation is a later-phase contract; Phase 1 must not claim it.
-        pytest.skip("Unknown-model routing is planned for a later phase")
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "unknown-model", "input": "Hello"},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["type"] == "model_not_found"
 
     def test_malformed_request_returns_422(self) -> None:
         response = client.post(
@@ -78,7 +83,7 @@ class TestFullFlow:
             headers={"api-key": "client-key-123"},
             json={"invalid": "request"},
         )
-        assert response.status_code == 501
+        assert response.status_code == 422
 
     def test_correlation_id_in_all_responses(self) -> None:
         endpoints = [
@@ -166,7 +171,7 @@ class TestDockerBuild:
                     "-p",
                     "18000:8000",
                     "-e",
-                    'FOUNDRY_BACKENDS_JSON={"mock": {"endpoint": "https://mock.openai.azure.com", "credential": "key"}}',
+                    'FOUNDRY_BACKENDS_JSON={"mock": {"endpoint": "https://mock.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                     "-e",
                     'FOUNDRY_MODELS_JSON={"gpt-4": {"backends": {"mock": 1.0}}}',
                     "-e",

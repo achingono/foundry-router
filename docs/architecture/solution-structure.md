@@ -24,7 +24,7 @@ foundry-router/
 └── pyproject.toml
 ```
 
-`infra/` and the routing, credit, and forwarding subsystems do not yet exist. Responses and embeddings routes are authenticated stubs returning 501.
+`infra/` and the health-aware routing and credit subsystems do not yet exist. Responses and embeddings forwarding is implemented in the API/backend boundaries; retries, failover, and scheduling remain Planned.
 
 ## Target Structure
 

@@ -18,7 +18,7 @@ from foundry_router.config import Settings
 @pytest.fixture
 def test_settings(monkeypatch):
     settings = Settings(
-        backends_json='{"backend_a": {"endpoint": "https://allowed-a.openai.azure.com", "credential": "key-a"}, "backend_b": {"endpoint": "https://allowed-b.openai.azure.com", "credential": "key-b"}}',
+        backends_json='{"backend_a": {"endpoint": "https://allowed-a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://allowed-b.openai.azure.com", "credential": "key-b", "deployment": "gpt-4"}}',
         models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
         client_api_keys_json='["client-key"]',
         admin_api_keys_json='["admin-key"]',
@@ -140,6 +140,25 @@ class TestAllowedBackendClient:
         with pytest.raises(SecurityError):
             async with client.stream("GET", "https://blocked.openai.azure.com/stream"):
                 pass
+
+    @respx.mock
+    async def test_shared_hostname_targets_are_validated_independently(self, monkeypatch):
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://shared.example/a", "credential": "key-a", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://shared.example/b", "credential": "key-b", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+        )
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: settings)
+        respx.post(
+            "https://shared.example/a/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=httpx.Response(200, json={"ok": True}))
+        client = AllowedBackendClient()
+        response = await client.request_backend("backend_a", "responses", json={})
+        assert response.status_code == 200
 
 
 class TestGlobalBackendClient:

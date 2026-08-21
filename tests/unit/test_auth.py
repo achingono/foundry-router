@@ -32,7 +32,7 @@ class TestClientAuth:
     def setup_settings(self, monkeypatch):
         # Mock settings with known keys
         test_settings = Settings(
-            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key-123", "client-key-456"]',
             admin_api_keys_json='["admin-key-789"]',
@@ -76,7 +76,7 @@ class TestAdminAuth:
     @pytest.fixture(autouse=True)
     def setup_settings(self, monkeypatch):
         test_settings = Settings(
-            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key-123"]',
             admin_api_keys_json='["admin-key-789", "admin-key-abc"]',

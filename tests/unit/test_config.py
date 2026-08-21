@@ -36,6 +36,14 @@ class TestBackendConfig:
         with pytest.raises(ValidationError):
             BackendConfig(endpoint="not-a-url", credential="key")
 
+    def test_deployment_is_required(self) -> None:
+        with pytest.raises(ValidationError):
+            BackendConfig(endpoint="https://example.com", credential="key")
+
+    def test_deployment_must_be_one_path_segment(self) -> None:
+        with pytest.raises(ValidationError):
+            BackendConfig(endpoint="https://example.com", credential="key", deployment="a/b")
+
 
 class TestModelBackendPool:
     def test_valid_pool(self) -> None:
@@ -73,6 +81,7 @@ class TestSettings:
             "backend_a": {
                 "endpoint": "https://backend-a.openai.azure.com",
                 "credential": "key-a",
+                "deployment": "gpt-4",
             }
         }
         models = {"gpt-4": {"backends": {"backend_a": 1.0}}}
@@ -118,7 +127,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": "{}",
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -133,7 +142,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_b": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -148,7 +157,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": "[]",
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -163,7 +172,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": "[]",
@@ -178,7 +187,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["shared-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["shared-key"]',
@@ -193,7 +202,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -207,7 +216,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -222,7 +231,7 @@ class TestSettings:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                 "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -235,8 +244,16 @@ class TestSettings:
 
     def test_get_allowed_hostnames(self) -> None:
         backends = {
-            "backend_a": {"endpoint": "https://backend-a.openai.azure.com", "credential": "key-a"},
-            "backend_b": {"endpoint": "https://backend-b.openai.azure.com", "credential": "key-b"},
+            "backend_a": {
+                "endpoint": "https://backend-a.openai.azure.com",
+                "credential": "key-a",
+                "deployment": "gpt-4",
+            },
+            "backend_b": {
+                "endpoint": "https://backend-b.openai.azure.com",
+                "credential": "key-b",
+                "deployment": "gpt-4",
+            },
         }
         with patch.dict(
             os.environ,

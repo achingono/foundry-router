@@ -13,7 +13,7 @@
 2. **Implement configuration module (`src/foundry_router/config/`)**
    - Define `Settings` class using `pydantic-settings.BaseSettings`
    - Model all settings from `docs/configuration/index.md`:
-     - `backends`: dict of backend configs (endpoint, credential, optional: region, deployment)
+     - `backends`: dict of backend configs (endpoint, credential, optional: region; forwarding requires deployment)
      - `models`: dict of model configs with backend pools and weights
      - `client_auth`: API key or JWT validation config
      - `admin_auth`: separate auth config for `/admin/status`

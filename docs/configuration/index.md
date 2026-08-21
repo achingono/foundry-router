@@ -6,7 +6,7 @@ Configuration is externalized through validated environment variables and dotenv
 
 ## Backend and Model Pools
 
-The configuration must support an arbitrary number of backends and an independent backend pool per model. A backend should identify subscription, project, region, endpoint, and deployment even if the first release uses only two subscriptions.
+The configuration must support an arbitrary number of backends and an independent backend pool per model. A backend should identify subscription, project, region, endpoint, and deployment even if the first release uses only two subscriptions. Forwarding-capable backends require a deployment identifier.
 
 ```yaml
 backends:
@@ -23,7 +23,7 @@ The initial logical model set is `gpt-5.6-luna`, `gpt-5.4`, `gpt-5.4-mini`, `gpt
 
 ## Core Settings
 
-The implementation validates client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, and whether protected backends may be emergency fallbacks. Pricing values are local estimates; zero is valid for an uncharged dimension. The effective reserve and dynamic reserve behavior remain Planned.
+The implementation validates client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, backend API version, and whether protected backends may be emergency fallbacks. Pricing values are local estimates; zero is valid for an uncharged dimension. The effective reserve and dynamic reserve behavior remain Planned.
 
 ## Authoritative Data
 

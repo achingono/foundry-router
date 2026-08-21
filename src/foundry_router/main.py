@@ -5,11 +5,12 @@ from __future__ import annotations
 import re
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import httpx
 import structlog
 from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from structlog import get_logger
 
 from foundry_router.auth import verify_admin_auth, verify_client_auth
@@ -17,7 +18,93 @@ from foundry_router.backends import close_backend_client, get_backend_client
 from foundry_router.config import load_settings
 from foundry_router.logging import setup_logging
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 logger = get_logger(__name__)
+MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
+HTTP_OK = 200
+HTTP_SUCCESS_LIMIT = 300
+
+
+def _select_backend(settings: Any, model: str) -> str | None:
+    pool = settings.models.get(model)
+    if pool is None:
+        return None
+    highest_weight = max(pool.backends.values())
+    return str(
+        min(backend for backend, weight in pool.backends.items() if weight == highest_weight)
+    )
+
+
+def _api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"message": message, "type": error_type}},
+    )
+
+
+async def _request_body(  # noqa: PLR0911
+    request: Request, endpoint: str
+) -> dict[str, Any] | JSONResponse:
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+        return _api_error(415, "Content-Type must be application/json", "invalid_request")
+    try:
+        body = await request.json()
+    except ValueError:
+        return _api_error(400, "Request body must contain valid JSON", "invalid_request")
+    if not isinstance(body, dict):
+        return _api_error(400, "Request body must be a JSON object", "invalid_request")
+    model = body.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return _api_error(422, "The 'model' field must be a non-empty string", "invalid_request")
+    if endpoint == "responses" and "stream" in body and not isinstance(body["stream"], bool):
+        return _api_error(422, "The 'stream' field must be a boolean", "invalid_request")
+    if endpoint == "embeddings":
+        input_value = body.get("input")
+        if not isinstance(input_value, (str, list)) or (
+            isinstance(input_value, list) and not input_value
+        ):
+            return _api_error(
+                422, "The 'input' field must be a non-empty string or array", "invalid_request"
+            )
+        if isinstance(input_value, list) and any(
+            not isinstance(item, str) or not item.strip() for item in input_value
+        ):
+            return _api_error(
+                422, "The 'input' array must contain non-empty strings", "invalid_request"
+            )
+    return body
+
+
+def _forward_headers(request: Request) -> dict[str, str]:
+    headers = {"content-type": "application/json", "accept": "application/json"}
+    if request.headers.get("user-agent"):
+        headers["user-agent"] = request.headers["user-agent"]
+    headers["x-request-id"] = request.state.correlation_id
+    return headers
+
+
+def _upstream_response(response: httpx.Response, body: bytes) -> Response:
+    content_type = response.headers.get("content-type", "application/json")
+    return Response(
+        content=body, status_code=response.status_code, media_type=content_type.split(";", 1)[0]
+    )
+
+
+async def _stream_response(
+    chunks: AsyncIterator[bytes],
+    first_chunk: bytes,
+    context: Any,
+) -> AsyncIterator[bytes]:
+    try:
+        yield first_chunk
+        async for chunk in chunks:
+            yield chunk
+    except httpx.HTTPError:
+        yield b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
+    finally:
+        await context.__aexit__(None, None, None)
 
 
 @asynccontextmanager
@@ -112,6 +199,8 @@ async def readiness() -> Response:
     checks = {
         "config_valid": True,
         "backends_configured": len(settings.backends) > 0,
+        "deployments_configured": bool(settings.backends)
+        and all(config.deployment for config in settings.backends.values()),
         "models_configured": len(settings.models) > 0,
         "client_auth_configured": len(settings.client_api_keys) > 0,
         "admin_auth_configured": len(settings.admin_api_keys) > 0,
@@ -160,7 +249,6 @@ async def admin_status(_request: Request) -> dict[str, Any]:
 
 
 # OpenAI-compatible endpoints (require client authentication)
-# These are stubs for Phase 1 - full implementation in Phase 2+
 
 
 @app.get("/openai/v1/models", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)])
@@ -181,31 +269,78 @@ async def list_models() -> dict[str, Any]:
 
 
 @app.post("/openai/v1/responses", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)])
-async def create_response(_request: Request) -> Response:
-    """Create a response - stub implementation."""
-    return JSONResponse(
-        status_code=501,
-        content={
-            "error": {
-                "message": "Responses API not yet implemented",
-                "type": "not_implemented",
-            }
-        },
+async def create_response(request: Request) -> Response:  # noqa: PLR0911
+    """Forward a non-streaming or streaming Responses request."""
+    body = await _request_body(request, "responses")
+    if isinstance(body, JSONResponse):
+        return body
+    settings = load_settings()
+    backend_id = _select_backend(settings, body["model"])
+    if backend_id is None:
+        return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
+    backend_client = get_backend_client()
+    headers = _forward_headers(request)
+
+    if body.get("stream") is True:
+        context = backend_client.stream_backend(backend_id, "responses", headers=headers, json=body)
+        try:
+            upstream = await context.__aenter__()
+        except httpx.HTTPError:
+            await context.__aexit__(None, None, None)
+            return _api_error(502, "Unable to contact the configured backend", "upstream_error")
+        if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
+            error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
+            await context.__aexit__(None, None, None)
+            return _upstream_response(upstream, error_body)
+        chunks = upstream.aiter_raw()
+        try:
+            first_chunk = await anext(chunks)
+        except (StopAsyncIteration, httpx.HTTPError):
+            await context.__aexit__(None, None, None)
+            return _api_error(502, "Unable to read the configured backend stream", "upstream_error")
+        return StreamingResponse(
+            _stream_response(chunks, first_chunk, context),
+            status_code=upstream.status_code,
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache"},
+        )
+
+    try:
+        upstream = await backend_client.request_backend(
+            backend_id, "responses", headers=headers, json=body
+        )
+    except httpx.HTTPError:
+        return _api_error(502, "Unable to contact the configured backend", "upstream_error")
+    forwarded_body = (
+        upstream.content
+        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
+        else upstream.content[:MAX_UPSTREAM_ERROR_BYTES]
     )
+    return _upstream_response(upstream, forwarded_body)
 
 
 @app.post("/openai/v1/embeddings", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)])
-async def create_embeddings(_request: Request) -> Response:
-    """Create embeddings - stub implementation."""
-    return JSONResponse(
-        status_code=501,
-        content={
-            "error": {
-                "message": "Embeddings API not yet implemented",
-                "type": "not_implemented",
-            }
-        },
+async def create_embeddings(request: Request) -> Response:
+    """Forward an embeddings request."""
+    body = await _request_body(request, "embeddings")
+    if isinstance(body, JSONResponse):
+        return body
+    settings = load_settings()
+    backend_id = _select_backend(settings, body["model"])
+    if backend_id is None:
+        return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
+    try:
+        upstream = await get_backend_client().request_backend(
+            backend_id, "embeddings", headers=_forward_headers(request), json=body
+        )
+    except httpx.HTTPError:
+        return _api_error(502, "Unable to contact the configured backend", "upstream_error")
+    forwarded_body = (
+        upstream.content
+        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
+        else upstream.content[:MAX_UPSTREAM_ERROR_BYTES]
     )
+    return _upstream_response(upstream, forwarded_body)
 
 
 if __name__ == "__main__":
