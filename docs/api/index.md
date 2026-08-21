@@ -18,7 +18,7 @@ The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api
 | `GET /admin/status` | Implemented; authenticated configuration and model/backends snapshot |
 | `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
 
-Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When the configured backend cannot be contacted, the router returns an upstream-style error and never reports success falsely. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
+Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
 ## Authentication
 
@@ -372,7 +372,7 @@ All errors follow the OpenAI-compatible format:
 Common error types:
 - `model_not_found` - Requested model not configured
 - `rate_limit_exceeded` - All backends rate limited
-- `insufficient_capacity` - No backend has sufficient credit/quota
+- `insufficient_credit_capacity` - No backend has sufficient safe estimated credit capacity
 - `invalid_request` - Malformed request body
 - `authentication_error` - Invalid or missing credentials
 - `internal_error` - Unexpected server error

@@ -53,3 +53,13 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Exhausted-cooldown response (`429`/`503`) with minimum remaining `Retry-After` | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Streaming contract preservation: retry/failover only before first chunk; post-start failures emitted as SSE error events | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Safe upstream response-header propagation and stream context cleanup | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+
+## Phase 04 Credit Scheduling Traceability
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Local per-request cost estimation for Responses and embeddings with pricing fail-closed behavior | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| UTC cycle-window handling and local backend estimate initialization | `src/foundry_router/credit.py`, `src/foundry_router/config/__init__.py` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |
+| In-memory request reservation lifecycle with release on terminal paths | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Safe-capacity rejection without backend egress (`insufficient_credit_capacity`) | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Credit-aware candidate scoring layered after health/cooldown filtering | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |

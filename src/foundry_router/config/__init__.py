@@ -162,6 +162,20 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_PROTECTED_EMERGENCY_FALLBACK",
     )
 
+    # Backend local credit-cycle allowance estimates (JSON string)
+    backend_cycle_allowance_usd_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON",
+        description="JSON object mapping backend IDs to local estimated cycle allowance (USD)",
+    )
+
+    # Backend local initial remaining estimates (JSON string)
+    backend_initial_estimated_remaining_usd_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON",
+        description="JSON object mapping backend IDs to local estimated remaining credit (USD)",
+    )
+
     # Computed fields (populated after validation)
     backends: dict[str, BackendConfig] = Field(default_factory=dict, exclude=True)
     models: dict[str, ModelBackendPool] = Field(default_factory=dict, exclude=True)
@@ -169,6 +183,11 @@ class Settings(BaseSettings):
     admin_api_keys: list[str] = Field(default_factory=list, exclude=True)
     pricing: dict[str, PricingConfig] = Field(default_factory=dict, exclude=True)
     backend_cycle_start_day: dict[str, int] = Field(default_factory=dict, exclude=True)
+    backend_cycle_allowance_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
+    backend_initial_estimated_remaining_usd: dict[str, float] = Field(
+        default_factory=dict,
+        exclude=True,
+    )
 
     @model_validator(mode="after")
     def parse_json_fields(self) -> Settings:
@@ -285,6 +304,48 @@ class Settings(BaseSettings):
         # Validate at least one model configured
         if not self.models:
             raise ValueError("At least one model must be configured")
+
+        # Parse backend local credit allowance estimates
+        allowance_data = load_object(
+            self.backend_cycle_allowance_usd_json,
+            "FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON",
+        )
+        for backend_id, amount in allowance_data.items():
+            if backend_id not in self.backends:
+                raise ValueError(f"Cycle allowance references unknown backend '{backend_id}'")
+            if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                raise TypeError(
+                    f"Cycle allowance for '{backend_id}' must be a finite non-negative number"
+                )
+            amount_float = float(amount)
+            if not math.isfinite(amount_float) or amount_float < 0:
+                raise ValueError(
+                    f"Cycle allowance for '{backend_id}' must be a finite non-negative number"
+                )
+            self.backend_cycle_allowance_usd[backend_id] = amount_float
+
+        # Parse backend local initial remaining estimates
+        remaining_data = load_object(
+            self.backend_initial_estimated_remaining_usd_json,
+            "FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON",
+        )
+        for backend_id, amount in remaining_data.items():
+            if backend_id not in self.backends:
+                raise ValueError(
+                    f"Initial estimated remaining credit references unknown backend '{backend_id}'"
+                )
+            if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                raise TypeError(
+                    f"Initial estimated remaining credit for '{backend_id}' "
+                    "must be a finite non-negative number"
+                )
+            amount_float = float(amount)
+            if not math.isfinite(amount_float) or amount_float < 0:
+                raise ValueError(
+                    f"Initial estimated remaining credit for '{backend_id}' "
+                    "must be a finite non-negative number"
+                )
+            self.backend_initial_estimated_remaining_usd[backend_id] = amount_float
 
         return self
 

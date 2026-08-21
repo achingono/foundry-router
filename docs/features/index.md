@@ -11,7 +11,7 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Two or more configurable Foundry backends, extensible without code changes. **Partially implemented**
 - Per-model pools, weighted routing, health tracking, bounded retry, and failover. **Partially implemented**
 - 429 and transient 5xx cooldown behavior. **Implemented**
-- Credit-aware routing with safety reserves and cycle awareness. **Planned**
+- Credit-aware routing with safety reserves and cycle awareness. **Partially implemented**
 - Persistent or externally reconciled usage/cost state. **Planned**
 - Liveness/readiness, structured logs, and useful metrics. **Partially implemented**
 - Secure credentials, IaC, automated deployment, local mocked-backend development, and tests. **Partially implemented**

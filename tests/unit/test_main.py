@@ -22,6 +22,7 @@ from foundry_router.main import (
     _forward_streaming_with_retries,
     _parse_retry_after,
     _reset_backend_health_state,
+    _reset_credit_state,
     _retry_delay_seconds,
     _set_backend_active,
     _set_backend_cooldown,
@@ -41,8 +42,10 @@ def setup_settings(monkeypatch):
         models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.8}}, "text-embedding-3-large": {"backends": {"backend_a": 1.0, "backend_b": 0.8}}}',
         client_api_keys_json='["client-key-123"]',
         admin_api_keys_json='["admin-key-789"]',
-        pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+        pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}, "text-embedding-3-large": {"input_per_million": 0.13, "output_per_million": 0.0}}',
         backend_cycle_start_day_json='{"backend_a": 1, "backend_b": 1}',
+        backend_cycle_allowance_usd_json='{"backend_a": 200.0, "backend_b": 200.0}',
+        backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0, "backend_b": 200.0}',
         retry_attempts=2,
         retry_max_delay_seconds=0.01,
     )
@@ -56,8 +59,10 @@ def setup_settings(monkeypatch):
     monkeypatch.setattr("foundry_router.config.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.main.asyncio.sleep", no_sleep)
     asyncio.run(_reset_backend_health_state())
+    asyncio.run(_reset_credit_state())
     yield test_settings
     asyncio.run(_reset_backend_health_state())
+    asyncio.run(_reset_credit_state())
 
 
 class TestHealthEndpoints:
@@ -256,8 +261,10 @@ class TestOpenAIEndpoints:
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key-123"]',
             admin_api_keys_json='["admin-key-789"]',
-            pricing_json="{}",
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
             backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
             retry_attempts=2,
             retry_max_delay_seconds=0.01,
         )
@@ -384,8 +391,10 @@ class TestOpenAIEndpoints:
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key-123"]',
             admin_api_keys_json='["admin-key-789"]',
-            pricing_json="{}",
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
             backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
             protected_emergency_fallback=True,
             retry_attempts=1,
             retry_max_delay_seconds=0.01,
@@ -589,8 +598,10 @@ class TestOpenAIEndpoints:
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.9, "backend_c": 0.8}}}',
             client_api_keys_json='["client"]',
             admin_api_keys_json='["admin"]',
-            pricing_json="{}",
-            backend_cycle_start_day_json="{}",
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1, "backend_b": 1, "backend_c": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
             retry_attempts=2,
             retry_max_delay_seconds=10.0,
         )
@@ -605,7 +616,16 @@ class TestOpenAIEndpoints:
             )
             return BackendRequestResult(Response(503), retryable_failure=True)
 
-        result = asyncio.run(_execute_with_single_failover(settings, "gpt-4", execute))
+        result = asyncio.run(
+            _execute_with_single_failover(
+                settings,
+                "gpt-4",
+                operation="responses",
+                body={"model": "gpt-4", "input": "hello"},
+                request_id="req-single-failover",
+                execute_backend=execute,
+            )
+        )
         assert result.status_code == 503
         assert calls == ["backend_a", "backend_b"]
 
@@ -646,6 +666,7 @@ class TestOpenAIEndpoints:
                     "SettingsStub", (), {"retry_attempts": 1, "retry_max_delay_seconds": 1.0}
                 )(),
                 backend_id="backend_a",
+                request_id="req-pre-output",
                 headers={},
                 body={"model": "gpt-4", "stream": True},
             )
@@ -687,6 +708,7 @@ class TestOpenAIEndpoints:
                     "SettingsStub", (), {"retry_attempts": 1, "retry_max_delay_seconds": 1.0}
                 )(),
                 backend_id="backend_a",
+                request_id="req-stream-error-body",
                 headers={},
                 body={"model": "gpt-4", "stream": True},
             )
@@ -715,6 +737,7 @@ class TestOpenAIEndpoints:
                 chunks(),
                 b'data: {"id":"one"}\n\n',
                 context,
+                request_id="req-cancel",
                 backend_id="backend_a",
                 cooldown_seconds=10.0,
             )
@@ -761,6 +784,70 @@ class TestOpenAIEndpoints:
             json={"model": "text-embedding-3-large", "input": ["valid", 123]},
         )
         assert response.status_code == 422
+        assert not route.called
+
+    @respx.mock
+    def test_missing_pricing_fails_closed_without_egress(self, monkeypatch) -> None:
+        no_pricing_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key-123"]',
+            admin_api_keys_json='["admin-key-789"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: no_pricing_settings)
+        monkeypatch.setattr("foundry_router.auth.load_settings", lambda: no_pricing_settings)
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: no_pricing_settings)
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: no_pricing_settings)
+
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"id": "should-not-run"}))
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello"},
+        )
+
+        assert response.status_code == 503
+        assert response.json()["error"]["type"] == "insufficient_credit_capacity"
+        assert not route.called
+
+    @respx.mock
+    def test_insufficient_estimated_credit_fails_closed_without_egress(self, monkeypatch) -> None:
+        low_credit_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key-123"]',
+            admin_api_keys_json='["admin-key-789"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 50.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 1.0}',
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: low_credit_settings)
+        monkeypatch.setattr("foundry_router.auth.load_settings", lambda: low_credit_settings)
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: low_credit_settings)
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: low_credit_settings)
+
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"id": "should-not-run"}))
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello"},
+        )
+
+        assert response.status_code == 503
+        assert response.json()["error"]["type"] == "insufficient_credit_capacity"
         assert not route.called
 
     def test_equal_weight_selection_is_lexicographically_smallest(self) -> None:
@@ -922,8 +1009,10 @@ class TestOpenAIEndpoints:
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key-123"]',
             admin_api_keys_json='["admin-key-789"]',
-            pricing_json="{}",
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
             backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
             retry_attempts=2,
             retry_max_delay_seconds=0.01,
         )
