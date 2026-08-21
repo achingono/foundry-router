@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import math
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -19,22 +26,486 @@ from foundry_router.config import load_settings
 from foundry_router.logging import setup_logging
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
 logger = get_logger(__name__)
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 HTTP_OK = 200
 HTTP_SUCCESS_LIMIT = 300
+HTTP_TOO_MANY_REQUESTS = 429
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+class BackendHealthState(StrEnum):
+    """Ephemeral backend routing health state."""
+
+    ACTIVE = "ACTIVE"
+    QUOTA_COOLDOWN = "QUOTA_COOLDOWN"
+    ERROR_COOLDOWN = "ERROR_COOLDOWN"
+    DISABLED = "DISABLED"
+
+
+COOLDOWN_STATES = frozenset({BackendHealthState.QUOTA_COOLDOWN, BackendHealthState.ERROR_COOLDOWN})
+
+
+@dataclass
+class BackendHealthRecord:
+    state: BackendHealthState = BackendHealthState.ACTIVE
+    cooldown_until: float = 0.0
+
+
+@dataclass(frozen=True)
+class BackendHealthSnapshot:
+    state: BackendHealthState
+    cooldown_remaining_seconds: float
+
+
+@dataclass(frozen=True)
+class BackendRequestResult:
+    response: Response
+    retryable_failure: bool
+
+
+_backend_health_state: dict[str, BackendHealthRecord] = {}
+_backend_health_lock = asyncio.Lock()
+
+
+def _ranked_model_backends(
+    settings: Any, model: str, *, excluded: set[str] | None = None
+) -> list[str]:
+    pool = settings.models.get(model)
+    if pool is None:
+        return []
+    excluded_ids = excluded or set()
+    ranked = [backend for backend in pool.backends if backend not in excluded_ids]
+    return sorted(ranked, key=lambda backend: (-pool.backends[backend], backend))
 
 
 def _select_backend(settings: Any, model: str) -> str | None:
-    pool = settings.models.get(model)
-    if pool is None:
+    ranked = _ranked_model_backends(settings, model)
+    if not ranked:
         return None
-    highest_weight = max(pool.backends.values())
-    return str(
-        min(backend for backend, weight in pool.backends.items() if weight == highest_weight)
+    return ranked[0]
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code in RETRYABLE_STATUS_CODES
+
+
+def _parse_retry_after(raw_value: str | None, max_delay_seconds: float) -> float | None:
+    if raw_value is None:
+        return None
+    value = raw_value.strip()
+    if not value:
+        return None
+    parsed_seconds: float | None = None
+    if value.isdigit():
+        parsed_seconds = float(value)
+    else:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        parsed_seconds = (retry_at - datetime.now(UTC)).total_seconds()
+    return max(0.0, min(max_delay_seconds, parsed_seconds))
+
+
+def _retry_delay_seconds(
+    *,
+    attempt_number: int,
+    max_delay_seconds: float,
+    retry_after_header: str | None,
+) -> float:
+    exponential = min(max_delay_seconds, float(2 ** max(0, attempt_number - 1)))
+    parsed_retry_after = _parse_retry_after(retry_after_header, max_delay_seconds)
+    if parsed_retry_after is None:
+        return exponential
+    return min(max_delay_seconds, max(exponential, parsed_retry_after))
+
+
+async def _set_backend_active(backend_id: str) -> None:
+    async with _backend_health_lock:
+        existing = _backend_health_state.get(backend_id)
+        if existing is not None and existing.state == BackendHealthState.DISABLED:
+            return
+        _backend_health_state[backend_id] = BackendHealthRecord(
+            state=BackendHealthState.ACTIVE,
+            cooldown_until=0.0,
+        )
+
+
+async def _set_backend_cooldown(
+    backend_id: str,
+    *,
+    state: BackendHealthState,
+    cooldown_seconds: float,
+) -> None:
+    duration = max(0.0, cooldown_seconds)
+    async with _backend_health_lock:
+        _backend_health_state[backend_id] = BackendHealthRecord(
+            state=state,
+            cooldown_until=time.monotonic() + duration,
+        )
+
+
+async def _snapshot_backend_health(backend_ids: list[str]) -> dict[str, BackendHealthSnapshot]:
+    now = time.monotonic()
+    snapshots: dict[str, BackendHealthSnapshot] = {}
+    async with _backend_health_lock:
+        for backend_id in backend_ids:
+            record = _backend_health_state.get(backend_id)
+            if record is None:
+                snapshots[backend_id] = BackendHealthSnapshot(BackendHealthState.ACTIVE, 0.0)
+                continue
+            if record.state in COOLDOWN_STATES and record.cooldown_until <= now:
+                record = BackendHealthRecord(state=BackendHealthState.ACTIVE, cooldown_until=0.0)
+                _backend_health_state[backend_id] = record
+            remaining = (
+                max(0.0, record.cooldown_until - now) if record.state in COOLDOWN_STATES else 0.0
+            )
+            snapshots[backend_id] = BackendHealthSnapshot(record.state, remaining)
+    return snapshots
+
+
+def _cooldown_exhausted_response(
+    candidates: list[str],
+    snapshots: dict[str, BackendHealthSnapshot],
+) -> JSONResponse | None:
+    if not candidates:
+        return None
+    candidate_states = [snapshots[backend_id] for backend_id in candidates]
+    if not candidate_states or any(
+        snapshot.state not in COOLDOWN_STATES for snapshot in candidate_states
+    ):
+        return None
+    status_code = (
+        HTTP_TOO_MANY_REQUESTS
+        if all(snapshot.state == BackendHealthState.QUOTA_COOLDOWN for snapshot in candidate_states)
+        else 503
     )
+    message = (
+        "All configured backends are in quota cooldown"
+        if status_code == HTTP_TOO_MANY_REQUESTS
+        else "All configured backends are in cooldown"
+    )
+    response = _api_error(status_code, message, "upstream_unavailable")
+    response.headers["retry-after"] = str(
+        max(0, math.ceil(min(snapshot.cooldown_remaining_seconds for snapshot in candidate_states)))
+    )
+    return response
+
+
+async def _select_candidate_backend(
+    settings: Any,
+    model: str,
+    *,
+    excluded: set[str] | None = None,
+) -> tuple[str | None, list[str], dict[str, BackendHealthSnapshot]]:
+    ranked_candidates = _ranked_model_backends(settings, model, excluded=excluded)
+    if not ranked_candidates:
+        return None, [], {}
+    snapshots = await _snapshot_backend_health(ranked_candidates)
+    active_candidates = [
+        backend_id
+        for backend_id in ranked_candidates
+        if snapshots[backend_id].state == BackendHealthState.ACTIVE
+    ]
+    if active_candidates:
+        return active_candidates[0], ranked_candidates, snapshots
+    if settings.protected_emergency_fallback and len(ranked_candidates) == 1:
+        fallback_candidate = ranked_candidates[0]
+        if snapshots[fallback_candidate].state in COOLDOWN_STATES:
+            return fallback_candidate, ranked_candidates, snapshots
+    return None, ranked_candidates, snapshots
+
+
+async def _execute_with_single_failover(
+    settings: Any,
+    model: str,
+    execute_backend: Callable[[str], Awaitable[BackendRequestResult]],
+) -> Response:
+    first_backend_id, first_candidates, first_snapshots = await _select_candidate_backend(
+        settings,
+        model,
+    )
+    if first_backend_id is None:
+        cooldown_response = _cooldown_exhausted_response(first_candidates, first_snapshots)
+        if cooldown_response is not None:
+            return cooldown_response
+        return _api_error(
+            503,
+            "No active backend available for the requested model",
+            "upstream_error",
+        )
+
+    first_result = await execute_backend(first_backend_id)
+    if not first_result.retryable_failure:
+        return first_result.response
+
+    second_backend_id, second_candidates, second_snapshots = await _select_candidate_backend(
+        settings,
+        model,
+        excluded={first_backend_id},
+    )
+    if second_backend_id is None:
+        cooldown_response = _cooldown_exhausted_response(second_candidates, second_snapshots)
+        if cooldown_response is not None:
+            return cooldown_response
+        return first_result.response
+
+    second_result = await execute_backend(second_backend_id)
+    return second_result.response
+
+
+async def _forward_non_streaming_with_retries(
+    *,
+    settings: Any,
+    backend_id: str,
+    operation: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+) -> BackendRequestResult:
+    max_attempts = max(1, settings.retry_attempts)
+    backend_client = get_backend_client()
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            upstream = await backend_client.request_backend(
+                backend_id,
+                operation,
+                headers=headers,
+                json=body,
+            )
+        except httpx.TransportError:
+            await _set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+            )
+            if attempt < max_attempts:
+                delay_seconds = _retry_delay_seconds(
+                    attempt_number=attempt,
+                    max_delay_seconds=settings.retry_max_delay_seconds,
+                    retry_after_header=None,
+                )
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+                continue
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to contact the configured backend",
+                    "upstream_error",
+                ),
+                retryable_failure=True,
+            )
+        except httpx.HTTPError:
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to contact the configured backend",
+                    "upstream_error",
+                ),
+                retryable_failure=False,
+            )
+
+        forwarded_body = (
+            upstream.content
+            if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
+            else upstream.content[:MAX_UPSTREAM_ERROR_BYTES]
+        )
+        upstream_response = _upstream_response(upstream, forwarded_body)
+        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
+            await _set_backend_active(backend_id)
+            return BackendRequestResult(response=upstream_response, retryable_failure=False)
+        if not _is_retryable_status(upstream.status_code):
+            return BackendRequestResult(response=upstream_response, retryable_failure=False)
+
+        cooldown_state = (
+            BackendHealthState.QUOTA_COOLDOWN
+            if upstream.status_code == HTTP_TOO_MANY_REQUESTS
+            else BackendHealthState.ERROR_COOLDOWN
+        )
+        retry_after_seconds = _parse_retry_after(
+            upstream.headers.get("retry-after"),
+            settings.retry_max_delay_seconds,
+        )
+        await _set_backend_cooldown(
+            backend_id,
+            state=cooldown_state,
+            cooldown_seconds=(
+                settings.retry_max_delay_seconds
+                if retry_after_seconds is None
+                else retry_after_seconds
+            ),
+        )
+        if attempt < max_attempts:
+            delay_seconds = _retry_delay_seconds(
+                attempt_number=attempt,
+                max_delay_seconds=settings.retry_max_delay_seconds,
+                retry_after_header=upstream.headers.get("retry-after"),
+            )
+            if delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+            continue
+        return BackendRequestResult(response=upstream_response, retryable_failure=True)
+
+    return BackendRequestResult(
+        response=_api_error(502, "Unable to contact the configured backend", "upstream_error"),
+        retryable_failure=True,
+    )
+
+
+async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
+    *,
+    settings: Any,
+    backend_id: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+) -> BackendRequestResult:
+    max_attempts = max(1, settings.retry_attempts)
+    backend_client = get_backend_client()
+
+    for attempt in range(1, max_attempts + 1):
+        context = backend_client.stream_backend(
+            backend_id,
+            "responses",
+            headers=headers,
+            json=body,
+        )
+        try:
+            upstream = await context.__aenter__()
+        except httpx.TransportError:
+            await context.__aexit__(None, None, None)
+            await _set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+            )
+            if attempt < max_attempts:
+                delay_seconds = _retry_delay_seconds(
+                    attempt_number=attempt,
+                    max_delay_seconds=settings.retry_max_delay_seconds,
+                    retry_after_header=None,
+                )
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+                continue
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to contact the configured backend",
+                    "upstream_error",
+                ),
+                retryable_failure=True,
+            )
+        except httpx.HTTPError:
+            await context.__aexit__(None, None, None)
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to contact the configured backend",
+                    "upstream_error",
+                ),
+                retryable_failure=False,
+            )
+
+        if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
+            error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
+            await context.__aexit__(None, None, None)
+            upstream_response = _upstream_response(upstream, error_body)
+            if not _is_retryable_status(upstream.status_code):
+                return BackendRequestResult(response=upstream_response, retryable_failure=False)
+
+            cooldown_state = (
+                BackendHealthState.QUOTA_COOLDOWN
+                if upstream.status_code == HTTP_TOO_MANY_REQUESTS
+                else BackendHealthState.ERROR_COOLDOWN
+            )
+            retry_after_seconds = _parse_retry_after(
+                upstream.headers.get("retry-after"),
+                settings.retry_max_delay_seconds,
+            )
+            await _set_backend_cooldown(
+                backend_id,
+                state=cooldown_state,
+                cooldown_seconds=(
+                    settings.retry_max_delay_seconds
+                    if retry_after_seconds is None
+                    else retry_after_seconds
+                ),
+            )
+            if attempt < max_attempts:
+                delay_seconds = _retry_delay_seconds(
+                    attempt_number=attempt,
+                    max_delay_seconds=settings.retry_max_delay_seconds,
+                    retry_after_header=upstream.headers.get("retry-after"),
+                )
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+                continue
+            return BackendRequestResult(response=upstream_response, retryable_failure=True)
+
+        chunks = upstream.aiter_raw()
+        try:
+            first_chunk = await anext(chunks)
+        except (StopAsyncIteration, httpx.TransportError):
+            await context.__aexit__(None, None, None)
+            await _set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+            )
+            if attempt < max_attempts:
+                delay_seconds = _retry_delay_seconds(
+                    attempt_number=attempt,
+                    max_delay_seconds=settings.retry_max_delay_seconds,
+                    retry_after_header=None,
+                )
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+                continue
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to read the configured backend stream",
+                    "upstream_error",
+                ),
+                retryable_failure=True,
+            )
+        except httpx.HTTPError:
+            await context.__aexit__(None, None, None)
+            return BackendRequestResult(
+                response=_api_error(
+                    502,
+                    "Unable to read the configured backend stream",
+                    "upstream_error",
+                ),
+                retryable_failure=False,
+            )
+
+        await _set_backend_active(backend_id)
+        return BackendRequestResult(
+            response=StreamingResponse(
+                _stream_response(chunks, first_chunk, context),
+                status_code=upstream.status_code,
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache"},
+            ),
+            retryable_failure=False,
+        )
+
+    return BackendRequestResult(
+        response=_api_error(502, "Unable to contact the configured backend", "upstream_error"),
+        retryable_failure=True,
+    )
+
+
+async def _reset_backend_health_state() -> None:
+    async with _backend_health_lock:
+        _backend_health_state.clear()
 
 
 def _api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
@@ -269,54 +740,39 @@ async def list_models() -> dict[str, Any]:
 
 
 @app.post("/openai/v1/responses", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)])
-async def create_response(request: Request) -> Response:  # noqa: PLR0911
+async def create_response(request: Request) -> Response:
     """Forward a non-streaming or streaming Responses request."""
     body = await _request_body(request, "responses")
     if isinstance(body, JSONResponse):
         return body
     settings = load_settings()
-    backend_id = _select_backend(settings, body["model"])
-    if backend_id is None:
+    if _select_backend(settings, body["model"]) is None:
         return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
-    backend_client = get_backend_client()
     headers = _forward_headers(request)
 
     if body.get("stream") is True:
-        context = backend_client.stream_backend(backend_id, "responses", headers=headers, json=body)
-        try:
-            upstream = await context.__aenter__()
-        except httpx.HTTPError:
-            await context.__aexit__(None, None, None)
-            return _api_error(502, "Unable to contact the configured backend", "upstream_error")
-        if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
-            error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
-            await context.__aexit__(None, None, None)
-            return _upstream_response(upstream, error_body)
-        chunks = upstream.aiter_raw()
-        try:
-            first_chunk = await anext(chunks)
-        except (StopAsyncIteration, httpx.HTTPError):
-            await context.__aexit__(None, None, None)
-            return _api_error(502, "Unable to read the configured backend stream", "upstream_error")
-        return StreamingResponse(
-            _stream_response(chunks, first_chunk, context),
-            status_code=upstream.status_code,
-            media_type="text/event-stream",
-            headers={"cache-control": "no-cache"},
+        return await _execute_with_single_failover(
+            settings,
+            body["model"],
+            lambda backend_id: _forward_streaming_with_retries(
+                settings=settings,
+                backend_id=backend_id,
+                headers=headers,
+                body=body,
+            ),
         )
 
-    try:
-        upstream = await backend_client.request_backend(
-            backend_id, "responses", headers=headers, json=body
-        )
-    except httpx.HTTPError:
-        return _api_error(502, "Unable to contact the configured backend", "upstream_error")
-    forwarded_body = (
-        upstream.content
-        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
-        else upstream.content[:MAX_UPSTREAM_ERROR_BYTES]
+    return await _execute_with_single_failover(
+        settings,
+        body["model"],
+        lambda backend_id: _forward_non_streaming_with_retries(
+            settings=settings,
+            backend_id=backend_id,
+            operation="responses",
+            headers=headers,
+            body=body,
+        ),
     )
-    return _upstream_response(upstream, forwarded_body)
 
 
 @app.post("/openai/v1/embeddings", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)])
@@ -326,21 +782,19 @@ async def create_embeddings(request: Request) -> Response:
     if isinstance(body, JSONResponse):
         return body
     settings = load_settings()
-    backend_id = _select_backend(settings, body["model"])
-    if backend_id is None:
+    if _select_backend(settings, body["model"]) is None:
         return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
-    try:
-        upstream = await get_backend_client().request_backend(
-            backend_id, "embeddings", headers=_forward_headers(request), json=body
-        )
-    except httpx.HTTPError:
-        return _api_error(502, "Unable to contact the configured backend", "upstream_error")
-    forwarded_body = (
-        upstream.content
-        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
-        else upstream.content[:MAX_UPSTREAM_ERROR_BYTES]
+    return await _execute_with_single_failover(
+        settings,
+        body["model"],
+        lambda backend_id: _forward_non_streaming_with_retries(
+            settings=settings,
+            backend_id=backend_id,
+            operation="embeddings",
+            headers=_forward_headers(request),
+            body=body,
+        ),
     )
-    return _upstream_response(upstream, forwarded_body)
 
 
 if __name__ == "__main__":

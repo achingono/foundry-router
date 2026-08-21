@@ -2,9 +2,9 @@
 
 ## Status: Partially implemented
 
-The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; Phase 02 forwards Responses and embeddings requests to a deterministic configured backend. Equal-weight candidates use the lexicographically smallest backend ID. Health-aware routing and failover remain Planned.
+The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
-Phase 02 uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api-version={api_version}` for the configured Azure OpenAI-compatible backend. The selected backend is the highest-weight candidate for the model, with backend ID used as the deterministic tie-breaker until the routing phase is implemented.
+The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api-version={api_version}` for the configured Azure OpenAI-compatible backend. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker.
 
 ## Endpoints
 
@@ -15,10 +15,10 @@ Phase 02 uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api-v
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
-| `GET /admin/status` | Required design target; authenticated routing and credit state |
+| `GET /admin/status` | Implemented; authenticated configuration and model/backends snapshot |
 | `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
 
-Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When the configured backend cannot be contacted, the router returns an upstream-style error and never reports success falsely. Health-aware backend selection and failover are Planned.
+Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When the configured backend cannot be contacted, the router returns an upstream-style error and never reports success falsely. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
 ## Authentication
 
@@ -241,13 +241,16 @@ data: [DONE]
 }
 ```
 
-**Response (429 Too Many Requests - All Backends Rate Limited)**
-```json
+**Response (429 Too Many Requests - All Candidate Backends In Quota Cooldown)**
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
 {
   "error": {
-    "message": "All backends for model 'gpt-5.4' are rate limited. Please retry later.",
-    "type": "rate_limit_exceeded",
-    "retry_after": 60
+    "message": "All configured backends are in quota cooldown",
+    "type": "upstream_unavailable"
   }
 }
 ```
