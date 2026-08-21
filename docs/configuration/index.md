@@ -1,8 +1,8 @@
 # Configuration
 
-## Status: Design Target
+## Status: Partially implemented
 
-Configuration is externalized. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses.
+Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Routing and credit settings are currently schema-only and are not runtime behavior.
 
 ## Backend and Model Pools
 
@@ -23,7 +23,7 @@ The initial logical model set is `gpt-5.6-luna`, `gpt-5.4`, `gpt-5.4-mini`, `gpt
 
 ## Core Settings
 
-Configure client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, and whether protected backends may be emergency fallbacks. The effective reserve is the greater of the dollar and percentage thresholds; a dynamic reserve may also account for recent request cost and peak-window cost.
+The implementation validates client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, and whether protected backends may be emergency fallbacks. Pricing values are local estimates; zero is valid for an uncharged dimension. The effective reserve and dynamic reserve behavior remain Planned.
 
 ## Authoritative Data
 

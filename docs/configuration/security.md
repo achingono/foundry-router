@@ -1,8 +1,8 @@
 # Security
 
-## Status: Design Target
+## Status: Partially implemented
 
-The proxy must not be an unrestricted public relay. Public traffic uses HTTPS, client requests require authentication, and `/admin/status` requires authentication. Backend URLs are trusted configuration only; user input must not create arbitrary outbound destinations or an SSRF path.
+The proxy must not be an unrestricted public relay. Client requests require authentication, and `/admin/status` requires separate authentication. The implemented backend client accepts only configured HTTPS origins and base paths, disables redirects, and strips sensitive headers. User input must not create arbitrary outbound destinations or an SSRF path. Public listener TLS and network controls remain deployment responsibilities.
 
 ## Secret Handling
 

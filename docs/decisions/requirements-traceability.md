@@ -22,3 +22,13 @@ The original monolithic requirements document was split into the following desti
 | 47–48 | [AGENTS.md](../../AGENTS.md), [development](../development/index.md), [testing](../development/testing.md) |
 
 The rewritten documents preserve the safety-critical requirements: credit versus quota separation, per-backend cycles, reserves, concurrency reservations, bounded failover, no retry after streaming begins, configured-backend-only egress, stale-cost handling, and explicit implementation-status labeling.
+
+## Implemented Hardening Traceability
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Strict configuration shape and secret validation | `src/foundry_router/config/` | `tests/unit/test_config.py` |
+| Configured HTTPS origin/base-path egress only | `src/foundry_router/backends/` | `tests/unit/test_backends.py` |
+| Redacted failure logging and request context cleanup | `src/foundry_router/logging/`, `src/foundry_router/main.py` | `tests/unit/test_logging.py`, `tests/unit/test_main.py` |
+| Reproducible package and image smoke path | `README.md`, `pyproject.toml`, `Dockerfile`, CI workflow | Phase 01 Hardening evidence |
+| Combined test coverage gate | `.github/workflows/ci.yml` | CI coverage command |
