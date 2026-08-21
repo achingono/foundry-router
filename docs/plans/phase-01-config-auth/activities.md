@@ -3,7 +3,7 @@
 ## Step-By-Step Activities
 
 1. **Scaffold Python project structure**
-   - Create `pyproject.toml` with: Python 3.12+, FastAPI, httpx, pydantic, pydantic-settings, python-dotenv, structlog, pytest, pytest-asyncio, httpx-mock, ruff, mypy
+   - Create `pyproject.toml` with: Python 3.12+, FastAPI, httpx, pydantic, pydantic-settings, python-dotenv, structlog, pytest, pytest-asyncio, respx, ruff, mypy
    - Create `src/foundry_router/` package with submodules: `config`, `auth`, `logging`, `main`
    - Create `tests/` with `unit/`, `integration/`, `fixtures/`
    - Create `.github/workflows/ci.yml`

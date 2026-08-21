@@ -27,7 +27,7 @@ We will use:
 - Automatic API documentation at `/docs` and `/redoc`
 - Excellent type hint support with mypy/pyright
 - Small dependency footprint compared to frameworks like Starlette + extras
-- Strong ecosystem for testing (pytest-asyncio, httpx-mock)
+- Strong ecosystem for testing (pytest-asyncio, respx)
 
 ### Negative
 - Python GIL limits CPU-bound parallelism (not an issue for I/O-bound proxy)
