@@ -1,10 +1,10 @@
 # Foundry Router Documentation
 
-Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding plus health-aware retry/cooldown/failover implemented and credit-cycle/cost-aware scheduling Planned.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding, health-aware retry/cooldown/failover, and credit-cycle/cost-aware scheduling Implemented, and infrastructure, distributed state, and automated deployment Planned.
 
 ## Repository Status
 
-The repository is **Partially implemented**. Configuration, authentication, health checks, model listing, backend request safety, Responses/embeddings forwarding, and health-aware retry/cooldown/failover are implemented. Credit accounting, infrastructure, and deployment remain Planned. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
+The repository is **Partially implemented**. Configuration, authentication, health checks, model listing, backend request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, and credit-aware scheduling are **Implemented**. Modular decomposition, cost reconciliation, distributed state stores, metrics, and cloud infrastructure remain **Planned**. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
 
 ## Start Here
 
@@ -36,6 +36,11 @@ The repository is **Partially implemented**. Configuration, authentication, heal
 - [Documentation baseline plan](plans/documentation-baseline/index.md)
 - [Phase 03 routing plan](plans/phase-03-routing/index.md)
 - [Phase 03 routing hardening plan](plans/phase-03-hardening/index.md)
+- [Phase 04 credit scheduling plan](plans/phase-04-credit-scheduling/index.md)
+- [Phase 04 credit hardening plan](plans/phase-04-hardening/index.md)
+- [Phase 05 modular routing & cost reconciliation plan](plans/phase-05-routing-reconciliation/index.md)
+- [Phase 06 state store abstractions & metrics plan](plans/phase-06-metrics-diagnostics/index.md)
+- [Phase 07 infrastructure & operations plan](plans/phase-07-infrastructure-operations/index.md)
 
 ## Reading Convention
 

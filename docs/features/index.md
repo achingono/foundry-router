@@ -8,16 +8,19 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 
 - OpenAI Responses API with transparent streaming. **Implemented**
 - Embeddings and logical model discovery. **Implemented**
-- Two or more configurable Foundry backends, extensible without code changes. **Partially implemented**
-- Per-model pools, weighted routing, health tracking, bounded retry, and failover. **Partially implemented**
+- Two or more configurable Foundry backends, extensible without code changes. **Implemented**
+- Per-model pools, weighted routing, health tracking, bounded retry, and failover. **Implemented**
 - 429 and transient 5xx cooldown behavior. **Implemented**
-- Credit-aware routing with safety reserves and cycle awareness. **Partially implemented**
+- Credit-aware routing with safety reserves and cycle awareness. **Implemented**
+- Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
+- Structured explainable routing decision logging. **Implemented**
 - Persistent or externally reconciled usage/cost state. **Planned**
+- Abstract state store protocols for multi-replica Redis support. **Planned**
 - Liveness/readiness, structured logs, and useful metrics. **Partially implemented**
 - Secure credentials, IaC, automated deployment, local mocked-backend development, and tests. **Partially implemented**
 
 ## Optional and Future Capabilities
 
-Managed identity, Azure Cost Management reconciliation, authenticated administrative status, model aliases, graceful stale-cost degradation, custom domains, Application Insights, Prometheus metrics, dashboards, per-model policies, dynamic weights, simulation mode, and additional regions are optional or future scope. They must not make the initial proxy unnecessarily large.
+Managed identity, Azure Cost Management reconciliation, authenticated live administrative status diagnostics, model aliases, graceful stale-cost degradation, custom domains, Application Insights, Prometheus metrics, dashboards, per-model policies, dynamic weights, simulation mode, and additional regions are optional or future scope. They must not make the initial proxy unnecessarily large.
 
 See [routing and scheduling](routing.md) for the safety-critical policy.
