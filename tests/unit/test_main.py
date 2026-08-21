@@ -740,6 +740,12 @@ class TestOpenAIEndpoints:
                 request_id="req-cancel",
                 backend_id="backend_a",
                 cooldown_seconds=10.0,
+                model="gpt-4",
+                pricing={
+                    "gpt-4": type(
+                        "PricingStub", (), {"input_per_million": 10.0, "output_per_million": 30.0}
+                    )()
+                },
             )
             assert await anext(stream)
             pending = asyncio.create_task(anext(stream))
@@ -1058,6 +1064,194 @@ class TestOpenAIEndpoints:
         assert route_b.calls[0].request.headers["api-key"] == "key-b"
         assert "authorization" not in route_a.calls[0].request.headers
         assert "authorization" not in route_b.calls[0].request.headers
+
+    @respx.mock
+    def test_non_2xx_response_releases_reservation_without_charge(self, monkeypatch) -> None:
+        single_backend_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key-123"]',
+            admin_api_keys_json='["admin-key-789"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
+            retry_attempts=1,
+            retry_max_delay_seconds=0.01,
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: single_backend_settings)
+        monkeypatch.setattr("foundry_router.auth.load_settings", lambda: single_backend_settings)
+        monkeypatch.setattr(
+            "foundry_router.backends.load_settings", lambda: single_backend_settings
+        )
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: single_backend_settings)
+
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(400, json={"error": {"message": "bad request"}}))
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello"},
+        )
+
+        assert response.status_code == 400
+        from foundry_router.main import _credit_store
+
+        assessment = asyncio.run(
+            _credit_store.assess(
+                "backend_a",
+                0.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(200.0)
+
+    def test_cancelled_first_backend_releases_credit_reservation(self) -> None:
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "a", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client"]',
+            admin_api_keys_json='["admin"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0}',
+            retry_attempts=1,
+            retry_max_delay_seconds=0.01,
+        )
+
+        async def execute(_backend_id: str) -> BackendRequestResult:
+            raise asyncio.CancelledError
+
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(
+                _execute_with_single_failover(
+                    settings,
+                    "gpt-4",
+                    operation="responses",
+                    body={"model": "gpt-4", "input": "hello"},
+                    request_id="req-cancelled-first",
+                    execute_backend=execute,
+                )
+            )
+
+        from foundry_router.main import _credit_store
+
+        assessment = asyncio.run(
+            _credit_store.assess(
+                "backend_a",
+                0.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(200.0)
+
+    def test_second_backend_exception_releases_credit_reservation(self) -> None:
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "a", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://b.openai.azure.com", "credential": "b", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.9}}}',
+            client_api_keys_json='["client"]',
+            admin_api_keys_json='["admin"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1, "backend_b": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0, "backend_b": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0, "backend_b": 200.0}',
+            retry_attempts=1,
+            retry_max_delay_seconds=0.01,
+        )
+        calls: list[str] = []
+
+        async def execute(backend_id: str) -> BackendRequestResult:
+            calls.append(backend_id)
+            if backend_id == "backend_a":
+                return BackendRequestResult(Response(503), retryable_failure=True)
+            raise RuntimeError("secondary backend failure")
+
+        with pytest.raises(RuntimeError, match="secondary backend failure"):
+            asyncio.run(
+                _execute_with_single_failover(
+                    settings,
+                    "gpt-4",
+                    operation="responses",
+                    body={"model": "gpt-4", "input": "hello"},
+                    request_id="req-second-exception",
+                    execute_backend=execute,
+                )
+            )
+        assert calls == ["backend_a", "backend_b"]
+
+        from foundry_router.main import _credit_store
+
+        assessment = asyncio.run(
+            _credit_store.assess(
+                "backend_a",
+                0.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(200.0)
+
+    def test_stream_response_uses_terminal_usage_to_finalize_charge(self, monkeypatch) -> None:
+        finalize_calls: list[dict[str, float | bool | str | None]] = []
+
+        async def capture_finalize(
+            request_id: str,
+            *,
+            charge_reserved: bool,
+            charged_cost_usd: float | None,
+        ) -> None:
+            finalize_calls.append(
+                {
+                    "request_id": request_id,
+                    "charge_reserved": charge_reserved,
+                    "charged_cost_usd": charged_cost_usd,
+                }
+            )
+
+        monkeypatch.setattr("foundry_router.main._credit_store.finalize_request", capture_finalize)
+
+        class Context:
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        async def chunks():
+            yield (
+                b'data: {"type":"response.completed","usage":{"input_tokens":10,'
+                b'"output_tokens":5}}\n\n'
+            )
+            yield b"data: [DONE]\\n\\n"
+
+        async def consume_stream() -> None:
+            stream = _stream_response(
+                chunks(),
+                b'data: {"id":"one"}\n\n',
+                Context(),
+                request_id="req-stream-usage",
+                backend_id="backend_a",
+                cooldown_seconds=10.0,
+                model="gpt-4",
+                pricing={
+                    "gpt-4": type(
+                        "PricingStub",
+                        (),
+                        {"input_per_million": 10.0, "output_per_million": 30.0},
+                    )(),
+                },
+            )
+            async for _ in stream:
+                pass
+
+        asyncio.run(consume_stream())
+        assert len(finalize_calls) == 1
+        assert finalize_calls[0]["request_id"] == "req-stream-usage"
+        assert finalize_calls[0]["charge_reserved"] is True
+        assert finalize_calls[0]["charged_cost_usd"] == pytest.approx(0.00025)
 
 
 class TestCorrelationId:

@@ -141,9 +141,7 @@ def estimate_request_cost(
     else:
         return None
 
-    estimated_cost = (
-        (input_tokens * input_price) + (output_tokens * output_price)
-    ) / 1_000_000
+    estimated_cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
     if not _valid_non_negative_finite(estimated_cost):
         return None
     return RequestEstimate(
@@ -153,7 +151,9 @@ def estimate_request_cost(
     )
 
 
-def estimate_response_usage_cost(response: Any, model: str, pricing: dict[str, Any]) -> float | None:
+def estimate_response_usage_cost(
+    response: Any, model: str, pricing: dict[str, Any]
+) -> float | None:
     """Extract usage fields from non-streaming JSON responses when available."""
     model_pricing = pricing.get(model)
     if model_pricing is None:
@@ -284,7 +284,9 @@ class InMemoryCreditStore:
                 cycle_start_day = settings.backend_cycle_start_day.get(backend_id)
                 if allowance is None or remaining is None or cycle_start_day is None:
                     continue
-                if not _valid_non_negative_finite(allowance) or not _valid_non_negative_finite(remaining):
+                if not _valid_non_negative_finite(allowance) or not _valid_non_negative_finite(
+                    remaining
+                ):
                     continue
                 existing = self._snapshots.get(backend_id)
                 if existing is None:
@@ -320,7 +322,13 @@ class InMemoryCreditStore:
                     cycle_allowance_usd=0.0,
                 )
             self._rollover_if_needed(snapshot, now)
-            return self._assessment(snapshot, estimated_request_cost_usd, min_credit_reserve_usd, min_credit_reserve_percent, now)
+            return self._assessment(
+                snapshot,
+                estimated_request_cost_usd,
+                min_credit_reserve_usd,
+                min_credit_reserve_percent,
+                now,
+            )
 
     async def try_assign_reservation(
         self,
@@ -469,9 +477,13 @@ def score_credit_assessment(
     cycle_allowance_usd: float,
 ) -> float:
     """Compute ADR-006 composite score for candidate ranking."""
-    availability = 1.0 if state == CreditState.USABLE else (0.5 if state == CreditState.CONSERVATION else 0.0)
+    availability = (
+        1.0 if state == CreditState.USABLE else (0.5 if state == CreditState.CONSERVATION else 0.0)
+    )
     quota_health = 1.0 if is_health_active else 0.0
-    credit_health = min(1.0, available_credit_usd / max(estimated_request_cost_usd, MIN_SCORE_DENOMINATOR))
+    credit_health = min(
+        1.0, available_credit_usd / max(estimated_request_cost_usd, MIN_SCORE_DENOMINATOR)
+    )
     cycle_urgency = max(
         0.0,
         min(1.0, projected_unused_credit_usd / max(cycle_allowance_usd, MIN_SCORE_DENOMINATOR)),

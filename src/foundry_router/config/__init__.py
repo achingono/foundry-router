@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from functools import lru_cache
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
@@ -358,6 +359,7 @@ class Settings(BaseSettings):
         return hostnames
 
 
+@lru_cache(maxsize=1)
 def load_settings() -> Settings:
-    """Load and validate application settings."""
+    """Load and validate application settings from a cached singleton."""
     return Settings()
