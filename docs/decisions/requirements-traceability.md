@@ -52,3 +52,4 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Cooldown-aware backend filtering and single failover to next candidate | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Exhausted-cooldown response (`429`/`503`) with minimum remaining `Retry-After` | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Streaming contract preservation: retry/failover only before first chunk; post-start failures emitted as SSE error events | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Safe upstream response-header propagation and stream context cleanup | `src/foundry_router/main.py` | `tests/unit/test_main.py` |

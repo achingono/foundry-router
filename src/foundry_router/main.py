@@ -34,6 +34,9 @@ HTTP_OK = 200
 HTTP_SUCCESS_LIMIT = 300
 HTTP_TOO_MANY_REQUESTS = 429
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+SAFE_UPSTREAM_RESPONSE_HEADERS = frozenset({"cache-control", "retry-after"})
+MAX_EMPTY_PRE_OUTPUT_CHUNKS = 16
+PRE_OUTPUT_TIMEOUT_SECONDS = 60.0
 
 
 class BackendHealthState(StrEnum):
@@ -144,6 +147,9 @@ async def _set_backend_cooldown(
 ) -> None:
     duration = max(0.0, cooldown_seconds)
     async with _backend_health_lock:
+        existing = _backend_health_state.get(backend_id)
+        if existing is not None and existing.state == BackendHealthState.DISABLED:
+            return
         _backend_health_state[backend_id] = BackendHealthRecord(
             state=state,
             cooldown_until=time.monotonic() + duration,
@@ -221,7 +227,14 @@ async def _select_candidate_backend(
     return None, ranked_candidates, snapshots
 
 
-async def _execute_with_single_failover(
+async def _all_candidates_cooldown_response(settings: Any, model: str) -> JSONResponse | None:
+    backend_id, candidates, snapshots = await _select_candidate_backend(settings, model)
+    if backend_id is not None:
+        return None
+    return _cooldown_exhausted_response(candidates, snapshots)
+
+
+async def _execute_with_single_failover(  # noqa: PLR0911
     settings: Any,
     model: str,
     execute_backend: Callable[[str], Awaitable[BackendRequestResult]],
@@ -250,12 +263,19 @@ async def _execute_with_single_failover(
         excluded={first_backend_id},
     )
     if second_backend_id is None:
+        all_cooldown_response = await _all_candidates_cooldown_response(settings, model)
+        if all_cooldown_response is not None:
+            return all_cooldown_response
         cooldown_response = _cooldown_exhausted_response(second_candidates, second_snapshots)
         if cooldown_response is not None:
             return cooldown_response
         return first_result.response
 
     second_result = await execute_backend(second_backend_id)
+    if second_result.retryable_failure:
+        all_cooldown_response = await _all_candidates_cooldown_response(settings, model)
+        if all_cooldown_response is not None:
+            return all_cooldown_response
     return second_result.response
 
 
@@ -358,7 +378,7 @@ async def _forward_non_streaming_with_retries(
     )
 
 
-async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
+async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
     *,
     settings: Any,
     backend_id: str,
@@ -378,7 +398,6 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
         try:
             upstream = await context.__aenter__()
         except httpx.TransportError:
-            await context.__aexit__(None, None, None)
             await _set_backend_cooldown(
                 backend_id,
                 state=BackendHealthState.ERROR_COOLDOWN,
@@ -402,7 +421,6 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
                 retryable_failure=True,
             )
         except httpx.HTTPError:
-            await context.__aexit__(None, None, None)
             return BackendRequestResult(
                 response=_api_error(
                     502,
@@ -413,8 +431,33 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
             )
 
         if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
-            error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
-            await context.__aexit__(None, None, None)
+            try:
+                error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
+            except httpx.TransportError:
+                await _set_backend_cooldown(
+                    backend_id,
+                    state=BackendHealthState.ERROR_COOLDOWN,
+                    cooldown_seconds=settings.retry_max_delay_seconds,
+                )
+                return BackendRequestResult(
+                    response=_api_error(
+                        502,
+                        "Unable to read the configured backend error response",
+                        "upstream_error",
+                    ),
+                    retryable_failure=True,
+                )
+            except httpx.HTTPError:
+                return BackendRequestResult(
+                    response=_api_error(
+                        502,
+                        "Unable to read the configured backend error response",
+                        "upstream_error",
+                    ),
+                    retryable_failure=False,
+                )
+            finally:
+                await context.__aexit__(None, None, None)
             upstream_response = _upstream_response(upstream, error_body)
             if not _is_retryable_status(upstream.status_code):
                 return BackendRequestResult(response=upstream_response, retryable_failure=False)
@@ -450,8 +493,15 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
 
         chunks = upstream.aiter_raw()
         try:
-            first_chunk = await anext(chunks)
-        except (StopAsyncIteration, httpx.TransportError):
+            async with asyncio.timeout(PRE_OUTPUT_TIMEOUT_SECONDS):
+                first_chunk = b""
+                for _ in range(MAX_EMPTY_PRE_OUTPUT_CHUNKS):
+                    first_chunk = await anext(chunks)
+                    if first_chunk:
+                        break
+                if not first_chunk:
+                    raise httpx.ReadError("Backend emitted too many empty pre-output chunks")
+        except (StopAsyncIteration, TimeoutError, httpx.TransportError):
             await context.__aexit__(None, None, None)
             await _set_backend_cooldown(
                 backend_id,
@@ -489,7 +539,13 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912
         await _set_backend_active(backend_id)
         return BackendRequestResult(
             response=StreamingResponse(
-                _stream_response(chunks, first_chunk, context),
+                _stream_response(
+                    chunks,
+                    first_chunk,
+                    context,
+                    backend_id=backend_id,
+                    cooldown_seconds=settings.retry_max_delay_seconds,
+                ),
                 status_code=upstream.status_code,
                 media_type="text/event-stream",
                 headers={"cache-control": "no-cache"},
@@ -558,8 +614,16 @@ def _forward_headers(request: Request) -> dict[str, str]:
 
 def _upstream_response(response: httpx.Response, body: bytes) -> Response:
     content_type = response.headers.get("content-type", "application/json")
+    headers = {
+        name: value
+        for name, value in response.headers.items()
+        if name.lower() in SAFE_UPSTREAM_RESPONSE_HEADERS
+    }
     return Response(
-        content=body, status_code=response.status_code, media_type=content_type.split(";", 1)[0]
+        content=body,
+        status_code=response.status_code,
+        media_type=content_type.split(";", 1)[0],
+        headers=headers,
     )
 
 
@@ -567,12 +631,20 @@ async def _stream_response(
     chunks: AsyncIterator[bytes],
     first_chunk: bytes,
     context: Any,
+    *,
+    backend_id: str,
+    cooldown_seconds: float,
 ) -> AsyncIterator[bytes]:
     try:
         yield first_chunk
         async for chunk in chunks:
             yield chunk
     except httpx.HTTPError:
+        await _set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=cooldown_seconds,
+        )
         yield b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
     finally:
         await context.__aexit__(None, None, None)

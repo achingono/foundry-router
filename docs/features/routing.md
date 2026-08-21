@@ -1,6 +1,6 @@
 # Routing and Scheduling
 
-## Status: Design Target
+## Status: Partially implemented
 
 For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, evaluate quota and credit, evaluate cycle urgency, score candidates, select the highest score, forward, account for usage, update state, and return the response. Equal scores use weighted round-robin.
 

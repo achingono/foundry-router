@@ -383,6 +383,8 @@ Common error types:
 - Each event boundary is preserved
 - Errors occurring after streaming begins are forwarded as SSE events
 - No retry or failover after meaningful streaming data has been sent
+- Empty pre-output chunks are bounded by the router's pre-first-byte timeout and empty-chunk budget
+- Stream cleanup runs on successful completion, upstream failure, status-body read failure, and cancellation
 - `Retry-After` headers from upstream are honored within configured maximum delay
 
 ## Headers
@@ -413,6 +415,10 @@ Common error types:
 | --- | --- |
 | `x-request-id` | Correlation ID for tracing |
 | `WWW-Authenticate` | On 401: `Bearer realm="foundry-router"` |
+| `Retry-After` | Returned for retryable upstream or exhausted-cooldown responses when available |
+| `Cache-Control` | Returned when supplied by the upstream response or required for streaming |
+
+Only `Retry-After` and `Cache-Control` are eligible for propagation from upstream responses. The router does not forward cookies, authorization, content-length, hop-by-hop, proxy, backend tracing, or other backend-specific response headers.
 
 ### Forwarded Headers (Router → Backend)
 
