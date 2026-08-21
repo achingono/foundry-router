@@ -223,6 +223,48 @@ class TestCreditStore:
         )
         assert insufficient.state == CreditState.INSUFFICIENT_CAPACITY
 
+    def test_apply_reconciled_remaining_updates_known_backends_only(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        updated = asyncio.run(
+            store.apply_reconciled_remaining(
+                {
+                    "backend_a": 40.0,
+                    "unknown_backend": 10.0,
+                }
+            )
+        )
+        assert updated == 1
+        assessment = asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(40.0)
+
+    def test_apply_reconciled_remaining_clamps_to_cycle_allowance(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        updated = asyncio.run(store.apply_reconciled_remaining({"backend_a": 500.0}))
+        assert updated == 1
+
+        assessment = asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(100.0)
+
 
 class TestScoring:
     def test_scoring_prefers_active_usable_with_headroom(self) -> None:

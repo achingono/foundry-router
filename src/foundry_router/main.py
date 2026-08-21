@@ -32,6 +32,11 @@ from foundry_router.credit import (
     score_credit_assessment,
 )
 from foundry_router.logging import setup_logging
+from foundry_router.reconciliation import (
+    ReconciliationLoop,
+    ReconciliationProvider,
+    StaticSettingsReconciliationProvider,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -81,6 +86,8 @@ class BackendRequestResult:
 _backend_health_state: dict[str, BackendHealthRecord] = {}
 _backend_health_lock = asyncio.Lock()
 _credit_store = InMemoryCreditStore()
+_reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
+_reconciliation_loop: ReconciliationLoop | None = None
 
 
 @dataclass(frozen=True)
@@ -854,6 +861,19 @@ async def _reset_credit_state() -> None:
     await _credit_store.reset()
 
 
+async def _reset_reconciliation_state() -> None:
+    global _reconciliation_loop  # noqa: PLW0603
+    if _reconciliation_loop is not None:
+        await _reconciliation_loop.stop()
+    _reconciliation_loop = None
+
+
+def set_reconciliation_provider(provider: ReconciliationProvider) -> None:
+    """Override reconciliation provider (primarily for tests and local adapters)."""
+    global _reconciliation_provider  # noqa: PLW0603
+    _reconciliation_provider = provider
+
+
 async def _finalize_non_streaming_credit(
     *,
     request_id: str,
@@ -1021,11 +1041,20 @@ async def lifespan(_app: FastAPI) -> Any:
     # Initialize backend client
     get_backend_client()
     await _credit_store.sync_from_settings(settings)
+    global _reconciliation_loop  # noqa: PLW0603
+    _reconciliation_loop = ReconciliationLoop(
+        provider=_reconciliation_provider,
+        credit_store=_credit_store,
+        settings=settings,
+        logger=logger,
+    )
+    await _reconciliation_loop.start()
 
     yield
 
     # Shutdown
     logger.info("foundry_router_shutting_down")
+    await _reset_reconciliation_state()
     await close_backend_client()
     await _reset_credit_state()
 
@@ -1152,6 +1181,18 @@ async def admin_status(_request: Request) -> dict[str, Any]:
             "retry_max_delay_seconds": settings.retry_max_delay_seconds,
             "protected_emergency_fallback": settings.protected_emergency_fallback,
         },
+        "reconciliation": (
+            _reconciliation_loop.status_snapshot()
+            if _reconciliation_loop is not None
+            else {
+                "last_attempt_utc": None,
+                "last_success_utc": None,
+                "last_error": None,
+                "last_updated_backends": 0,
+                "consecutive_failures": 0,
+                "stale": False,
+            }
+        ),
     }
 
 

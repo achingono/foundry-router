@@ -116,6 +116,14 @@ class Settings(BaseSettings):
         default=10,
         validation_alias="FOUNDRY_RECONCILIATION_INTERVAL_MINUTES",
     )
+    reconciliation_overrides_usd_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON",
+        description=(
+            "Optional JSON object mapping backend IDs to authoritative-or-mocked "
+            "remaining USD values for reconciliation"
+        ),
+    )
 
     # Credit reserves
     min_credit_reserve_usd: Annotated[float, Field(ge=0, allow_inf_nan=False)] = Field(
@@ -189,6 +197,7 @@ class Settings(BaseSettings):
         default_factory=dict,
         exclude=True,
     )
+    reconciliation_overrides_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
 
     @model_validator(mode="after")
     def parse_json_fields(self) -> Settings:
@@ -347,6 +356,29 @@ class Settings(BaseSettings):
                     "must be a finite non-negative number"
                 )
             self.backend_initial_estimated_remaining_usd[backend_id] = amount_float
+
+        # Parse optional reconciliation overrides (for local-authoritative sync adapters)
+        reconciliation_data = load_object(
+            self.reconciliation_overrides_usd_json,
+            "FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON",
+        )
+        for backend_id, amount in reconciliation_data.items():
+            if backend_id not in self.backends:
+                raise ValueError(
+                    f"Reconciliation override references unknown backend '{backend_id}'"
+                )
+            if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                raise TypeError(
+                    f"Reconciliation override for '{backend_id}' "
+                    "must be a finite non-negative number"
+                )
+            amount_float = float(amount)
+            if not math.isfinite(amount_float) or amount_float < 0:
+                raise ValueError(
+                    f"Reconciliation override for '{backend_id}' "
+                    "must be a finite non-negative number"
+                )
+            self.reconciliation_overrides_usd[backend_id] = amount_float
 
         return self
 

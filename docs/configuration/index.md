@@ -23,12 +23,13 @@ The initial logical model set is `gpt-5.6-luna`, `gpt-5.4`, `gpt-5.4-mini`, `gpt
 
 ## Core Settings
 
-The implementation validates client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, backend API version, and whether protected backends may be emergency fallbacks. Phase 04 also validates optional per-backend local estimate inputs:
+The implementation validates client authentication, reconciliation interval, minimum credit reserve in dollars and percent, retry attempts and maximum delay, logging level, pricing, per-backend cycle start day, backend API version, and whether protected backends may be emergency fallbacks. It also validates optional per-backend local estimate and reconciliation inputs:
 
 - `FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON`
 - `FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON`
+- `FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON` (optional mock/adapter input for authoritative remaining values)
 
-Pricing values and local credit balances are estimates; zero is valid for an uncharged dimension. Missing local credit estimates make a backend ineligible for credit-aware routing rather than defaulting to unlimited capacity. Authoritative reconciliation remains Planned.
+Pricing values and local credit balances are estimates; zero is valid for an uncharged dimension. Missing local credit estimates make a backend ineligible for credit-aware routing rather than defaulting to unlimited capacity. Reconciliation is Partially implemented through a periodic background loop that can apply externally supplied remaining-credit snapshots while preserving local fail-safe behavior.
 
 ## Authoritative Data
 
