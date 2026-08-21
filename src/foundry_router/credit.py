@@ -8,7 +8,7 @@ import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Protocol
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 CHARS_PER_TOKEN_DIVISOR = 3
@@ -52,6 +52,73 @@ class CreditAssessment:
     projected_unused_credit_usd: float
     estimated_request_cost_usd: float
     cycle_allowance_usd: float
+
+
+@dataclass(frozen=True)
+class BackendCreditLiveSnapshot:
+    """Live per-backend credit diagnostics for admin and metrics surfaces."""
+
+    state: CreditState
+    available_credit_usd: float
+    reserved_inflight_usd: float
+    estimated_remaining_usd: float
+    cycle_allowance_usd: float
+    current_cycle_start_utc: datetime
+    next_reset_utc: datetime
+    active_reservations: int
+
+
+class CreditStore(Protocol):
+    """Abstract credit-store interface for swappable state backends."""
+
+    async def sync_from_settings(self, settings: Any) -> None: ...
+
+    async def assess(
+        self,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+    ) -> CreditAssessment: ...
+
+    async def try_assign_reservation(
+        self,
+        request_id: str,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+    ) -> bool: ...
+
+    async def finalize_request(
+        self,
+        request_id: str,
+        *,
+        charge_reserved: bool,
+        charged_cost_usd: float | None,
+    ) -> None: ...
+
+    async def reset(self) -> None: ...
+
+    async def apply_reconciled_remaining(
+        self,
+        authoritative_remaining_usd: dict[str, float],
+        *,
+        now_utc: datetime | None = None,
+    ) -> int: ...
+
+    async def live_snapshot(
+        self,
+        backend_ids: list[str],
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+    ) -> dict[str, BackendCreditLiveSnapshot]: ...
 
 
 @dataclass
@@ -423,6 +490,49 @@ class InMemoryCreditStore:
                 snapshot.estimated_remaining_usd = min(snapshot.cycle_allowance_usd, amount_float)
                 updated += 1
         return updated
+
+    async def live_snapshot(
+        self,
+        backend_ids: list[str],
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+    ) -> dict[str, BackendCreditLiveSnapshot]:
+        """Return live per-backend credit diagnostics for known snapshots."""
+        now = now_utc or datetime.now(UTC)
+        snapshots: dict[str, BackendCreditLiveSnapshot] = {}
+        async with self._lock:
+            reservation_counts: dict[str, int] = {}
+            for reservation in self._reservations.values():
+                reservation_counts[reservation.backend_id] = (
+                    reservation_counts.get(reservation.backend_id, 0) + 1
+                )
+
+            for backend_id in backend_ids:
+                snapshot = self._snapshots.get(backend_id)
+                if snapshot is None:
+                    continue
+                self._rollover_if_needed(snapshot, now)
+                cycle = calculate_cycle_window(now, snapshot.cycle_start_day)
+                assessment = self._assessment(
+                    snapshot,
+                    0.0,
+                    min_credit_reserve_usd,
+                    min_credit_reserve_percent,
+                    now,
+                )
+                snapshots[backend_id] = BackendCreditLiveSnapshot(
+                    state=assessment.state,
+                    available_credit_usd=assessment.available_credit_usd,
+                    reserved_inflight_usd=snapshot.reserved_inflight_usd,
+                    estimated_remaining_usd=snapshot.estimated_remaining_usd,
+                    cycle_allowance_usd=snapshot.cycle_allowance_usd,
+                    current_cycle_start_utc=cycle.current_cycle_start_utc,
+                    next_reset_utc=cycle.next_reset_utc,
+                    active_reservations=reservation_counts.get(backend_id, 0),
+                )
+        return snapshots
 
     def _release_locked(
         self,

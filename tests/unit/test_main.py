@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from foundry_router.config import Settings
+from foundry_router.credit import CreditState
 from foundry_router.main import (
     BackendHealthRecord,
     BackendHealthState,
@@ -23,6 +24,7 @@ from foundry_router.main import (
     _parse_retry_after,
     _reset_backend_health_state,
     _reset_credit_state,
+    _reset_metrics_state,
     _retry_delay_seconds,
     _set_backend_active,
     _set_backend_cooldown,
@@ -60,9 +62,11 @@ def setup_settings(monkeypatch):
     monkeypatch.setattr("foundry_router.main.asyncio.sleep", no_sleep)
     asyncio.run(_reset_backend_health_state())
     asyncio.run(_reset_credit_state())
+    asyncio.run(_reset_metrics_state())
     yield test_settings
     asyncio.run(_reset_backend_health_state())
     asyncio.run(_reset_credit_state())
+    asyncio.run(_reset_metrics_state())
 
 
 class TestHealthEndpoints:
@@ -132,6 +136,84 @@ class TestAdminEndpoint:
     def test_admin_status_rejects_client_key(self) -> None:
         response: Response = client.get("/admin/status", headers={"x-admin-key": "client-key-123"})
         assert response.status_code == 401
+
+    def test_admin_status_includes_live_diagnostics(self) -> None:
+        asyncio.run(
+            _set_backend_cooldown(
+                "backend_a",
+                state=BackendHealthState.QUOTA_COOLDOWN,
+                cooldown_seconds=2,
+            )
+        )
+        response = client.get("/admin/status", headers={"x-admin-key": "admin-key-789"})
+        assert response.status_code == 200
+        live = response.json()["backends"]["backend_a"]["live"]
+        assert live["health_state"] == BackendHealthState.QUOTA_COOLDOWN
+        assert live["cooldown_remaining_seconds"] is not None
+        assert live["credit_state"] in {
+            CreditState.USABLE,
+            CreditState.CONSERVATION,
+            CreditState.PROTECTED,
+            CreditState.INSUFFICIENT_CAPACITY,
+        }
+        assert live["available_credit_usd"] is not None
+        assert live["next_reset_utc"] is not None
+
+
+class TestMetricsEndpoint:
+    def test_metrics_endpoint_requires_admin_auth(self) -> None:
+        response = client.get("/metrics")
+        assert response.status_code == 401
+
+    @respx.mock
+    def test_metrics_endpoint_exposes_prometheus_series(self) -> None:
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
+
+        request_response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "hello"},
+        )
+        assert request_response.status_code == 200
+
+        metrics_response = client.get("/metrics", headers={"x-admin-key": "admin-key-789"})
+        assert metrics_response.status_code == 200
+        body = metrics_response.text
+        assert "foundry_router_requests_total" in body
+        assert 'model="gpt-4"' in body
+        assert 'backend="backend_a"' in body
+        assert "foundry_router_latency_seconds_bucket" in body
+        assert "foundry_router_estimated_cost_usd_total" in body
+        assert "foundry_router_backend_health_state" in body
+        assert "foundry_router_credit_available_usd" in body
+
+    @respx.mock
+    def test_metrics_cost_uses_finalized_usage_values(self) -> None:
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            return_value=Response(
+                200,
+                json={"id": "response-test", "usage": {"input_tokens": 10, "output_tokens": 5}},
+            )
+        )
+
+        request_response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "hello", "max_output_tokens": 1024},
+        )
+        assert request_response.status_code == 200
+
+        metrics_response = client.get("/metrics", headers={"x-admin-key": "admin-key-789"})
+        assert metrics_response.status_code == 200
+        assert (
+            'foundry_router_estimated_cost_usd_total{model="gpt-4",backend="backend_a"} 0.000250000'
+        ) in metrics_response.text
 
 
 class TestOpenAIEndpoints:
@@ -746,6 +828,7 @@ class TestOpenAIEndpoints:
                         "PricingStub", (), {"input_per_million": 10.0, "output_per_million": 30.0}
                     )()
                 },
+                status_code=200,
             )
             assert await anext(stream)
             pending = asyncio.create_task(anext(stream))
@@ -1008,6 +1091,80 @@ class TestOpenAIEndpoints:
         assert follow_up.status_code == 200
         assert follow_up_route.call_count == 1
 
+    def test_stream_response_records_failure_metric_on_midstream_error(self, monkeypatch) -> None:
+        observed: list[dict[str, object]] = []
+
+        async def capture_observe_request(
+            *,
+            model: str,
+            backend: str,
+            status_code: int,
+            latency_seconds: float,
+            estimated_cost_usd: float | None,
+        ) -> None:
+            observed.append(
+                {
+                    "model": model,
+                    "backend": backend,
+                    "status_code": status_code,
+                    "latency_seconds": latency_seconds,
+                    "estimated_cost_usd": estimated_cost_usd,
+                }
+            )
+
+        async def capture_finalize_request(
+            request_id: str,
+            *,
+            charge_reserved: bool,
+            charged_cost_usd: float | None,
+        ) -> None:
+            _ = (request_id, charge_reserved, charged_cost_usd)
+
+        monkeypatch.setattr(
+            "foundry_router.main._metrics_store.observe_request",
+            capture_observe_request,
+        )
+        monkeypatch.setattr(
+            "foundry_router.main._credit_store.finalize_request",
+            capture_finalize_request,
+        )
+
+        class Context:
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        async def broken_chunks():
+            yield b'data: {"id":"chunk-one"}\n\n'
+            raise httpx.ReadError("stream failed")
+
+        async def run_stream() -> bytes:
+            payload = b""
+            stream = _stream_response(
+                broken_chunks(),
+                b'data: {"id":"first"}\n\n',
+                Context(),
+                request_id="req-stream-failure-metric",
+                backend_id="backend_a",
+                cooldown_seconds=10.0,
+                model="gpt-4",
+                pricing={
+                    "gpt-4": type(
+                        "PricingStub",
+                        (),
+                        {"input_per_million": 10.0, "output_per_million": 30.0},
+                    )(),
+                },
+                status_code=200,
+            )
+            async for chunk in stream:
+                payload += chunk
+            return payload
+
+        stream_payload = asyncio.run(run_stream())
+        assert b'"type":"upstream_error"' in stream_payload
+        assert len(observed) == 1
+        assert observed[0]["status_code"] == 502
+
     @respx.mock
     def test_empty_responses_stream_returns_upstream_error(self, monkeypatch) -> None:
         single_backend_settings = Settings(
@@ -1243,6 +1400,7 @@ class TestOpenAIEndpoints:
                         {"input_per_million": 10.0, "output_per_million": 30.0},
                     )(),
                 },
+                status_code=200,
             )
             async for _ in stream:
                 pass

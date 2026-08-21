@@ -265,6 +265,34 @@ class TestCreditStore:
         )
         assert assessment.available_credit_usd == pytest.approx(100.0)
 
+    def test_live_snapshot_includes_reservations_and_cycle_bounds(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        asyncio.run(
+            store.try_assign_reservation(
+                "req-live",
+                "backend_a",
+                5.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        live = asyncio.run(
+            store.live_snapshot(
+                ["backend_a", "unknown_backend"],
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+                now_utc=datetime(2026, 6, 10, tzinfo=UTC),
+            )
+        )
+
+        assert "unknown_backend" not in live
+        assert live["backend_a"].active_reservations == 1
+        assert live["backend_a"].reserved_inflight_usd == pytest.approx(5.0)
+        assert live["backend_a"].next_reset_utc > live["backend_a"].current_cycle_start_utc
+
 
 class TestScoring:
     def test_scoring_prefers_active_usable_with_headroom(self) -> None:

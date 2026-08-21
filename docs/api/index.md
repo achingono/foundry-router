@@ -15,14 +15,15 @@ The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
-| `GET /admin/status` | Implemented; authenticated configuration/model snapshots with reconciliation diagnostics |
+| `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics |
+| `GET /metrics` | Partially implemented; Prometheus text-format runtime metrics |
 | `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
 
 Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
 ## Authentication
 
-All `/openai/v1/*` endpoints require client authentication. The `/admin/status` endpoint requires separate admin authentication.
+All `/openai/v1/*` endpoints require client authentication. The `/admin/status` and `/metrics` endpoints require separate admin authentication.
 
 ### Client Authentication
 
@@ -313,7 +314,18 @@ x-admin-key: admin-key-789
       "endpoint": "https://foundry-a.openai.azure.com",
       "region": "eastus",
       "deployment": "gpt-4",
-      "cycle_start_day": 1
+      "cycle_start_day": 1,
+      "live": {
+        "health_state": "ACTIVE",
+        "cooldown_remaining_seconds": 0.0,
+        "credit_state": "USABLE",
+        "available_credit_usd": 180.0,
+        "reserved_inflight_usd": 0.0,
+        "estimated_remaining_usd": 190.0,
+        "active_reservations": 0,
+        "current_cycle_start_utc": "2026-08-01T00:00:00+00:00",
+        "next_reset_utc": "2026-09-01T00:00:00+00:00"
+      }
     },
     "sub_b": {
       "endpoint": "https://foundry-b.openai.azure.com",
@@ -353,6 +365,24 @@ x-admin-key: admin-key-789
     "stale": false
   }
 }
+```
+
+### GET /metrics
+
+**Request**
+```http
+GET /metrics HTTP/1.1
+Host: router.example.com
+```
+
+**Response (200 OK, text/plain)**
+```text
+# HELP foundry_router_requests_total Total HTTP requests processed by model/backend/status
+# TYPE foundry_router_requests_total counter
+foundry_router_requests_total{model="gpt-4",backend="backend_a",status="200"} 12
+# HELP foundry_router_credit_available_usd Live estimated spendable credit by backend
+# TYPE foundry_router_credit_available_usd gauge
+foundry_router_credit_available_usd{backend="backend_a"} 124.250000000
 ```
 
 **Response (401 Unauthorized)**
@@ -415,7 +445,7 @@ Common error types:
 | `x-admin-key` | Yes* | Admin API key |
 | `Authorization` | Yes* | Bearer token (alternative to x-admin-key) |
 
-*One required for `/admin/status`
+*One required for `/admin/status` and `/metrics`
 
 ### Response Headers (Router → Client)
 

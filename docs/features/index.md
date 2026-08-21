@@ -15,12 +15,12 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
 - Structured explainable routing decision logging. **Implemented**
 - Persistent or externally reconciled usage/cost state. **Planned**
-- Abstract state store protocols for multi-replica Redis support. **Planned**
+- Abstract state store protocols for multi-replica Redis support. **Partially implemented**
 - Liveness/readiness, structured logs, and useful metrics. **Partially implemented**
 - Secure credentials, IaC, automated deployment, local mocked-backend development, and tests. **Partially implemented**
 
 ## Optional and Future Capabilities
 
-Managed identity, Azure Cost Management reconciliation, authenticated live administrative status diagnostics, model aliases, graceful stale-cost degradation, custom domains, Application Insights, Prometheus metrics, dashboards, per-model policies, dynamic weights, simulation mode, and additional regions are optional or future scope. They must not make the initial proxy unnecessarily large.
+Managed identity, Azure Cost Management reconciliation, model aliases, graceful stale-cost degradation, custom domains, Application Insights dashboards, per-model policies, dynamic weights, simulation mode, and additional regions are optional or future scope. They must not make the initial proxy unnecessarily large.
 
 See [routing and scheduling](routing.md) for the safety-critical policy.
