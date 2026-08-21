@@ -51,6 +51,12 @@ This repository contains a partial foundational implementation. Configuration va
 9. Validate relative documentation links and review the final diff for unsupported present-tense claims or secrets.
 10. Update the requirements traceability and operational documentation when the implementation changes the design.
 
+## Local Tooling
+
+- The repository virtual environment is `.venv/` and includes the development dependencies.
+- Do not conclude that pytest or another development tool is unavailable based on the global shell `PATH`.
+- Run tests through the repository environment, preferably with `.venv/bin/python -m pytest` (or activate it with `source .venv/bin/activate` first).
+
 ## Implementation Priorities
 
 Implement in this order unless a plan justifies another sequence:
