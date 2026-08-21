@@ -58,8 +58,38 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 | Requirement | Implementation | Evidence |
 | --- | --- | --- |
-| Local per-request cost estimation for Responses and embeddings with pricing fail-closed behavior | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
-| UTC cycle-window handling and local backend estimate initialization | `src/foundry_router/credit.py`, `src/foundry_router/config/__init__.py` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |
-| In-memory request reservation lifecycle with release on terminal paths | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Local per-request cost estimation for Responses and embeddings with pricing fail-closed behavior | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
+| UTC cycle-window handling and local backend estimate initialization | `src/foundry_router/credit.py`, `src/foundry_router/config/__init__.py` | `tests/unit/test_config.py`, `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
+| In-memory request reservation lifecycle with guaranteed release via `try...finally` | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
+| Non-2xx response zero-charge release (releasing reservation without debiting backend) | `src/foundry_router/main.py` | `tests/unit/test_main.py` (`test_non_2xx_response_releases_reservation_without_charge`) |
+| Streaming terminal SSE `usage` parsing for exact cost finalization | `src/foundry_router/main.py` | `tests/unit/test_main.py` (`test_stream_response_uses_terminal_usage_to_finalize_charge`) |
 | Safe-capacity rejection without backend egress (`insufficient_credit_capacity`) | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
-| Credit-aware candidate scoring layered after health/cooldown filtering | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Credit-aware candidate scoring layered after health/cooldown filtering | `src/foundry_router/credit.py`, `src/foundry_router/main.py` | `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
+| Explainable routing structured decision logging (`routing_decision` event) | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Dedicated unit test suite with >= 90% coverage for `credit.py` | `tests/unit/test_credit.py` | `tests/unit/test_credit.py` (91.07% module coverage) |
+
+## Phase 05 Modular Routing & Cost Reconciliation Traceability (Planned)
+
+| Requirement | Target Package | Plan Reference |
+| --- | --- | --- |
+| Modular decomposition of `main.py` into decoupled domain packages | `src/foundry_router/{health,routing,forwarding,api}/` | `docs/plans/phase-05-routing-reconciliation/` |
+| Background periodic billing reconciliation loop (`reconciliation_interval_minutes`) | `src/foundry_router/reconciliation/` | `docs/plans/phase-05-routing-reconciliation/` |
+| Graceful stale-cost fallback and non-blocking background adjustments | `src/foundry_router/reconciliation/` | `docs/plans/phase-05-routing-reconciliation/` |
+
+## Phase 06 Distributed State & Observability Traceability (Planned)
+
+| Requirement | Target Package | Plan Reference |
+| --- | --- | --- |
+| `CreditStore` and `HealthStore` abstract base class / Protocol interfaces | `src/foundry_router/credit/`, `src/foundry_router/health/` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Distributed Redis state store adapter using atomic Lua scripts | `src/foundry_router/state/redis.py` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | `src/foundry_router/api/admin.py` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Prometheus `/metrics` and OpenTelemetry exporter | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/` |
+
+## Phase 07 Infrastructure, Connection Tuning & Operations Traceability (Planned)
+
+| Requirement | Target Package | Plan Reference |
+| --- | --- | --- |
+| Bicep Infrastructure as Code for Azure Container Apps & Key Vault | `infra/` | `docs/plans/phase-07-infrastructure-operations/` |
+| Outbound HTTP connection pool limits (`httpx.Limits`) and HTTP/2 multiplexing | `src/foundry_router/backends/` | `docs/plans/phase-07-infrastructure-operations/` |
+| Lifespan graceful shutdown reservation and stream drain handler (`SIGTERM`) | `src/foundry_router/main.py` | `docs/plans/phase-07-infrastructure-operations/` |
+| Automated CI/CD deployment pipeline and operational smoke test suite | `.github/workflows/deploy.yml`, `scripts/operations/` | `docs/plans/phase-07-infrastructure-operations/` |
