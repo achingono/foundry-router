@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests
+tests/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local development
+.env
+.env.local
+.env.*.local
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/

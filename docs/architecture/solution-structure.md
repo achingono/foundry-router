@@ -1,6 +1,6 @@
 # Solution Structure
 
-## Current Repository
+## Current Repository (Partially implemented)
 
 ```text
 foundry-router/
@@ -17,10 +17,14 @@ foundry-router/
 │   ├── operations/
 │   ├── plans/
 │   └── templates/
-└── LICENSE
+├── src/foundry_router/
+├── tests/
+├── .github/workflows/ci.yml
+├── Dockerfile
+└── pyproject.toml
 ```
 
-No `src/`, `app/`, `tests/`, `infra/`, `.github/workflows/`, `Dockerfile`, or package manifest currently exists.
+`infra/` and the routing, credit, and forwarding subsystems do not yet exist. Responses and embeddings routes are authenticated stubs returning 501.
 
 ## Target Structure
 
