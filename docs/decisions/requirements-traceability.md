@@ -42,3 +42,13 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Deployment URL/API-version construction and backend credential isolation | `src/foundry_router/config/`, `src/foundry_router/backends/` | `tests/unit/test_main.py`, `tests/unit/test_backends.py` |
 | Streaming pass-through without retry/failover, including pre-output failure handling | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Required deployments, deterministic tie-breaking, strict embeddings input, and correlation propagation | `src/foundry_router/config/`, `src/foundry_router/main.py` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |
+
+## Phase 03 Routing Traceability
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Retryable failure classification (429/5xx/transport), bounded retries, and exponential backoff with `Retry-After` parsing | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Backend health state tracking (`ACTIVE`, `QUOTA_COOLDOWN`, `ERROR_COOLDOWN`, `DISABLED`) with `asyncio.Lock` protection | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Cooldown-aware backend filtering and single failover to next candidate | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Exhausted-cooldown response (`429`/`503`) with minimum remaining `Retry-After` | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Streaming contract preservation: retry/failover only before first chunk; post-start failures emitted as SSE error events | `src/foundry_router/main.py` | `tests/unit/test_main.py` |

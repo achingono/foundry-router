@@ -2,7 +2,7 @@
 
 ## Status: Partially implemented
 
-Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Routing and credit settings are currently schema-only and are not runtime behavior.
+Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Retry/cooldown/failover settings are runtime behavior; credit settings remain schema-only.
 
 ## Backend and Model Pools
 

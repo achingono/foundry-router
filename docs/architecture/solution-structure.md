@@ -24,7 +24,7 @@ foundry-router/
 └── pyproject.toml
 ```
 
-`infra/` and the health-aware routing and credit subsystems do not yet exist. Responses and embeddings forwarding is implemented in the API/backend boundaries; retries, failover, and scheduling remain Planned.
+`infra/` and the credit subsystem do not yet exist. Responses and embeddings forwarding plus health-aware retry/cooldown/failover are implemented in the API/backend boundaries; credit-aware scheduling remains Planned.
 
 ## Target Structure
 
