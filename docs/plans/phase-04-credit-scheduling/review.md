@@ -120,9 +120,7 @@
   ) -> None:
       is_success = HTTP_OK <= response.status_code < HTTP_SUCCESS_LIMIT
       charged_cost = (
-          estimate_response_usage_cost(response, model, settings.pricing)
-          if is_success
-          else 0.0
+          estimate_response_usage_cost(response, model, settings.pricing) if is_success else 0.0
       )
       await _credit_store.finalize_request(
           request_id,
