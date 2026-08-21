@@ -34,6 +34,8 @@ The repository is **Partially implemented**. Configuration, authentication, heal
 - [Requirements traceability](decisions/requirements-traceability.md)
 - [Planning templates](templates/)
 - [Documentation baseline plan](plans/documentation-baseline/index.md)
+- [Phase 03 routing plan](plans/phase-03-routing/index.md)
+- [Phase 03 routing hardening plan](plans/phase-03-hardening/index.md)
 
 ## Reading Convention
 

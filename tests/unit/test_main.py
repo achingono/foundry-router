@@ -14,10 +14,19 @@ from httpx import Response
 
 from foundry_router.config import Settings
 from foundry_router.main import (
+    BackendHealthRecord,
     BackendHealthState,
+    BackendRequestResult,
+    _execute_with_single_failover,
+    _forward_non_streaming_with_retries,
+    _forward_streaming_with_retries,
     _parse_retry_after,
     _reset_backend_health_state,
+    _retry_delay_seconds,
+    _set_backend_active,
     _set_backend_cooldown,
+    _snapshot_backend_health,
+    _stream_response,
     app,
     global_exception_handler,
 )
@@ -139,7 +148,18 @@ class TestOpenAIEndpoints:
         route = respx.post(
             "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
             params={"api-version": "2025-04-01-preview"},
-        ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
+        ).mock(
+            return_value=Response(
+                200,
+                json={"id": "response-test", "output": []},
+                headers={
+                    "cache-control": "no-store",
+                    "retry-after": "3",
+                    "set-cookie": "backend-secret=hidden",
+                    "x-backend-trace": "private",
+                },
+            )
+        )
         response = client.post(
             "/openai/v1/responses",
             headers={"api-key": "client-key-123"},
@@ -150,6 +170,10 @@ class TestOpenAIEndpoints:
         assert route.called
         assert route.calls[0].request.headers["api-key"] == "key-a"
         assert "authorization" not in route.calls[0].request.headers
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["retry-after"] == "3"
+        assert "set-cookie" not in response.headers
+        assert "x-backend-trace" not in response.headers
 
     @respx.mock
     def test_responses_forward_correlation_id(self) -> None:
@@ -256,7 +280,30 @@ class TestOpenAIEndpoints:
         )
 
         assert response.status_code == 503
+        assert response.headers["retry-after"] == "1"
         assert route_a.call_count == 2
+
+    @respx.mock
+    def test_retry_exhaustion_after_failover_returns_cooldown_response(self) -> None:
+        route_a = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(503, json={"error": "busy-a"}))
+        route_b = respx.post(
+            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(503, json={"error": "busy-b"}))
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "hello"},
+        )
+
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == "1"
+        assert route_a.call_count == 2
+        assert route_b.call_count == 2
 
     @respx.mock
     def test_transport_failure_fails_over_to_next_backend(self) -> None:
@@ -385,6 +432,90 @@ class TestOpenAIEndpoints:
     def test_retry_after_is_clamped(self) -> None:
         assert _parse_retry_after("300", 30.0) == 30.0
 
+    def test_retry_delay_schedule_is_bounded_and_honors_retry_after(self) -> None:
+        assert (
+            _retry_delay_seconds(
+                attempt_number=1,
+                max_delay_seconds=30.0,
+                retry_after_header=None,
+            )
+            == 1.0
+        )
+        assert (
+            _retry_delay_seconds(
+                attempt_number=2,
+                max_delay_seconds=30.0,
+                retry_after_header=None,
+            )
+            == 2.0
+        )
+        assert (
+            _retry_delay_seconds(
+                attempt_number=10,
+                max_delay_seconds=3.0,
+                retry_after_header=None,
+            )
+            == 3.0
+        )
+        assert (
+            _retry_delay_seconds(
+                attempt_number=1,
+                max_delay_seconds=30.0,
+                retry_after_header="5",
+            )
+            == 5.0
+        )
+        assert (
+            _retry_delay_seconds(
+                attempt_number=2,
+                max_delay_seconds=3.0,
+                retry_after_header="300",
+            )
+            == 3.0
+        )
+        assert (
+            _retry_delay_seconds(
+                attempt_number=1,
+                max_delay_seconds=30.0,
+                retry_after_header="invalid",
+            )
+            == 1.0
+        )
+
+    def test_retry_loop_sleeps_between_attempts_not_after_final_attempt(self, monkeypatch) -> None:
+        sleeps: list[float] = []
+
+        async def capture_sleep(seconds: float) -> None:
+            sleeps.append(seconds)
+
+        monkeypatch.setattr("foundry_router.main.asyncio.sleep", capture_sleep)
+
+        class FakeBackendClient:
+            calls = 0
+
+            async def request_backend(self, *_args, **_kwargs):
+                self.calls += 1
+                return Response(503, json={"error": "busy"})
+
+        backend_client = FakeBackendClient()
+        monkeypatch.setattr("foundry_router.main.get_backend_client", lambda: backend_client)
+        result = asyncio.run(
+            _forward_non_streaming_with_retries(
+                settings=type(
+                    "SettingsStub",
+                    (),
+                    {"retry_attempts": 2, "retry_max_delay_seconds": 30.0},
+                )(),
+                backend_id="backend_a",
+                operation="responses",
+                headers={},
+                body={"model": "gpt-4"},
+            )
+        )
+        assert result.retryable_failure is True
+        assert backend_client.calls == 2
+        assert sleeps == [1.0]
+
     def test_health_state_updates_are_concurrency_safe(self) -> None:
         async def run_concurrently() -> None:
             await asyncio.gather(
@@ -408,6 +539,195 @@ class TestOpenAIEndpoints:
             json={"model": "gpt-4", "input": "hello"},
         )
         assert response.status_code in {429, 503}
+
+    def test_same_backend_concurrent_updates_preserve_disabled_state(self) -> None:
+        async def run_concurrently() -> None:
+            await _set_backend_cooldown(
+                "backend_a",
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=10,
+            )
+            await asyncio.gather(
+                _set_backend_cooldown(
+                    "backend_a",
+                    state=BackendHealthState.QUOTA_COOLDOWN,
+                    cooldown_seconds=1,
+                ),
+                _set_backend_active("backend_a"),
+            )
+
+        asyncio.run(run_concurrently())
+        snapshots = asyncio.run(_snapshot_backend_health(["backend_a"]))
+        assert snapshots["backend_a"].state in {
+            BackendHealthState.ACTIVE,
+            BackendHealthState.QUOTA_COOLDOWN,
+        }
+
+        async def disable_then_update() -> None:
+            from foundry_router.main import _backend_health_lock, _backend_health_state
+
+            async with _backend_health_lock:
+                _backend_health_state["backend_a"] = BackendHealthRecord(
+                    state=BackendHealthState.DISABLED,
+                )
+            await asyncio.gather(
+                _set_backend_active("backend_a"),
+                _set_backend_cooldown(
+                    "backend_a",
+                    state=BackendHealthState.ERROR_COOLDOWN,
+                    cooldown_seconds=10,
+                ),
+            )
+
+        asyncio.run(disable_then_update())
+        snapshots = asyncio.run(_snapshot_backend_health(["backend_a"]))
+        assert snapshots["backend_a"].state == BackendHealthState.DISABLED
+
+    def test_single_failover_does_not_attempt_third_backend(self) -> None:
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "a", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://b.openai.azure.com", "credential": "b", "deployment": "gpt-4"}, "backend_c": {"endpoint": "https://c.openai.azure.com", "credential": "c", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.9, "backend_c": 0.8}}}',
+            client_api_keys_json='["client"]',
+            admin_api_keys_json='["admin"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+            retry_attempts=2,
+            retry_max_delay_seconds=10.0,
+        )
+        calls: list[str] = []
+
+        async def execute(backend_id: str) -> BackendRequestResult:
+            calls.append(backend_id)
+            await _set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=10,
+            )
+            return BackendRequestResult(Response(503), retryable_failure=True)
+
+        result = asyncio.run(_execute_with_single_failover(settings, "gpt-4", execute))
+        assert result.status_code == 503
+        assert calls == ["backend_a", "backend_b"]
+
+    def test_pre_output_empty_chunks_are_bounded(self, monkeypatch) -> None:
+        class SlowEmptyStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                while True:
+                    yield b""
+                    await asyncio.Event().wait()
+
+            async def aclose(self) -> None:
+                return None
+
+        class Context:
+            async def __aenter__(self):
+                return Response(
+                    200,
+                    headers={"content-type": "text/event-stream"},
+                    stream=SlowEmptyStream(),
+                )
+
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        class BackendClient:
+            def stream_backend(self, *_args, **_kwargs):
+                return Context()
+
+        monkeypatch.setattr("foundry_router.main.PRE_OUTPUT_TIMEOUT_SECONDS", 0.01)
+
+        def get_backend_client() -> BackendClient:
+            return BackendClient()
+
+        monkeypatch.setattr("foundry_router.main.get_backend_client", get_backend_client)
+        result = asyncio.run(
+            _forward_streaming_with_retries(
+                settings=type(
+                    "SettingsStub", (), {"retry_attempts": 1, "retry_max_delay_seconds": 1.0}
+                )(),
+                backend_id="backend_a",
+                headers={},
+                body={"model": "gpt-4", "stream": True},
+            )
+        )
+        assert result.retryable_failure is True
+        assert result.response.status_code == 502
+
+    def test_stream_error_body_read_closes_context(self, monkeypatch) -> None:
+        class BrokenErrorBody(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                raise httpx.ReadError("error body failed")
+                yield b""
+
+            async def aclose(self) -> None:
+                return None
+
+        class Context:
+            exits = 0
+
+            async def __aenter__(self):
+                return Response(503, stream=BrokenErrorBody())
+
+            async def __aexit__(self, *_args) -> None:
+                self.exits += 1
+
+        context = Context()
+
+        class BackendClient:
+            def stream_backend(self, *_args, **_kwargs):
+                return context
+
+        def get_backend_client() -> BackendClient:
+            return BackendClient()
+
+        monkeypatch.setattr("foundry_router.main.get_backend_client", get_backend_client)
+        result = asyncio.run(
+            _forward_streaming_with_retries(
+                settings=type(
+                    "SettingsStub", (), {"retry_attempts": 1, "retry_max_delay_seconds": 1.0}
+                )(),
+                backend_id="backend_a",
+                headers={},
+                body={"model": "gpt-4", "stream": True},
+            )
+        )
+        assert result.retryable_failure is True
+        assert result.response.status_code == 502
+        assert context.exits == 1
+        snapshots = asyncio.run(_snapshot_backend_health(["backend_a"]))
+        assert snapshots["backend_a"].state == BackendHealthState.ERROR_COOLDOWN
+
+    def test_stream_generator_closes_context_when_cancelled(self) -> None:
+        class Context:
+            exits = 0
+
+            async def __aexit__(self, *_args) -> None:
+                self.exits += 1
+
+        async def chunks():
+            yield b'data: {"id":"one"}\n\n'
+            await asyncio.Event().wait()
+
+        context = Context()
+
+        async def exercise() -> None:
+            stream = _stream_response(
+                chunks(),
+                b'data: {"id":"one"}\n\n',
+                context,
+                backend_id="backend_a",
+                cooldown_seconds=10.0,
+            )
+            assert await anext(stream)
+            pending = asyncio.create_task(anext(stream))
+            await asyncio.sleep(0)
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            await stream.aclose()
+
+        asyncio.run(exercise())
+        assert context.exits == 1
 
     @respx.mock
     def test_unknown_model_does_not_contact_backend(self) -> None:
@@ -502,6 +822,48 @@ class TestOpenAIEndpoints:
         assert route_b.call_count == 1
 
     @respx.mock
+    def test_stream_empty_chunk_is_not_meaningful_output(self) -> None:
+        class EmptyThenErrorStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b""
+                raise httpx.ReadError("stream failed before output")
+
+            async def aclose(self) -> None:
+                return None
+
+        route_a = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            side_effect=lambda _request: Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=EmptyThenErrorStream(),
+            )
+        )
+        route_b = respx.post(
+            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            return_value=Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=b'data: {"id":"from-b"}\n\ndata: [DONE]\n\n',
+            )
+        )
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello", "stream": True},
+        )
+
+        assert response.status_code == 200
+        assert b"from-b" in response.content
+        assert route_a.call_count == 2
+        assert route_b.call_count == 1
+
+    @respx.mock
     def test_stream_failure_after_first_chunk_emits_sse_error_without_failover(self) -> None:
         class BrokenStream(httpx.AsyncByteStream):
             async def __aiter__(self):
@@ -540,6 +902,19 @@ class TestOpenAIEndpoints:
         assert route_a.call_count == 1
         assert route_b.call_count == 0
 
+        follow_up_route = respx.post(
+            "https://b.openai.azure.com/openai/deployments/gpt-4/embeddings",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"object": "list", "data": []}))
+
+        follow_up = client.post(
+            "/openai/v1/embeddings",
+            headers={"api-key": "client-key-123"},
+            json={"model": "text-embedding-3-large", "input": "Hello"},
+        )
+        assert follow_up.status_code == 200
+        assert follow_up_route.call_count == 1
+
     @respx.mock
     def test_empty_responses_stream_returns_upstream_error(self, monkeypatch) -> None:
         single_backend_settings = Settings(
@@ -568,8 +943,9 @@ class TestOpenAIEndpoints:
             headers={"api-key": "client-key-123"},
             json={"model": "gpt-4", "input": "Hello", "stream": True},
         )
-        assert response.status_code == 502
-        assert response.json()["error"]["type"] == "upstream_error"
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == "1"
+        assert response.json()["error"]["type"] == "upstream_unavailable"
 
     @respx.mock
     def test_failover_uses_backend_specific_credentials(self) -> None:
