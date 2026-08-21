@@ -5,6 +5,6 @@
 | Item | Reference | Notes |
 | --- | --- | --- |
 | Plan review | `docs/plans/phase-06-metrics-diagnostics/index.md` | State store & observability design review |
-| Implementation | `src/foundry_router/state/`, `src/foundry_router/metrics/` | State protocols, Redis adapter, and metrics |
-| Focused tests | `tests/unit/test_state.py`, `tests/unit/test_metrics.py` | Store atomicity and metrics format tests |
-| Full verification | `pytest -m "not docker" --cov=src/foundry_router` | Multi-worker and integration verification |
+| Implementation (partial) | `src/foundry_router/credit.py`, `src/foundry_router/main.py`, `src/foundry_router/metrics/__init__.py` | `CreditStore` protocol, live `/admin/status` diagnostics, and Prometheus `/metrics` exporter |
+| Focused tests | `tests/unit/test_credit.py`, `tests/unit/test_main.py` | Credit live snapshot, admin diagnostics, and metrics format assertions |
+| Full verification | `.venv/bin/python -m pytest` | Full repository test suite completed after Phase 06 partial implementation |

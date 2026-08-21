@@ -15,20 +15,24 @@ The router emits structured `routing_decision` logs on every candidate selection
 - `estimated_request_cost_usd`: Conservative request reservation amount
 - `candidates`: List of evaluated candidate backends with `health_state`, `cooldown_remaining_seconds`, `credit_state`, `available_credit_usd`, `projected_unused_credit_usd`, and composite `score`.
 
-## Live Administrative Diagnostics (Implemented / Planned Phase 06)
+## Live Administrative Diagnostics (Partially implemented)
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
-- **Live diagnostics (Phase 06 target)**: Exposes real-time ephemeral health states, remaining cooldown seconds, available credit, in-flight reservations, and cycle reset timestamps without disclosing secrets.
+- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, and cycle boundary timestamps without disclosing secrets.
+- **Remaining scope**: Distributed shared state (`Redis*Store`) and cross-replica diagnostics are still planned.
 
-## Prometheus & OpenTelemetry Metrics (Planned Phase 06)
+## Prometheus & OpenTelemetry Metrics (Partially implemented)
 
-Expose standard Prometheus-compatible `/metrics`:
+The router exposes a Prometheus-compatible `/metrics` endpoint for in-process metrics:
 - `foundry_router_requests_total{model, backend, status}`: Request outcome counter.
 - `foundry_router_latency_seconds{model, backend}`: Latency and time-to-first-token (TTFT) histogram.
-- `foundry_router_estimated_spend_usd_total{model, backend}`: Cumulative estimated spend.
+- `foundry_router_estimated_cost_usd_total{model, backend}`: Cumulative estimated request-cost.
 - `foundry_router_backend_health_state{backend}`: Current backend health state gauge.
 - `foundry_router_credit_available_usd{backend}`: Current spendable balance gauge.
+- `/metrics` uses admin authentication (`x-admin-key` or Bearer admin token).
+
+OpenTelemetry exporters and cross-process aggregation are still planned.
 
 ## Operator Checks
 

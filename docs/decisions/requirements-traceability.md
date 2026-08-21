@@ -76,14 +76,15 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Background periodic billing reconciliation loop (`reconciliation_interval_minutes`) | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py`, `src/foundry_router/credit.py` | `tests/unit/test_reconciliation.py`, `tests/unit/test_credit.py` |
 | Graceful stale-cost fallback and non-blocking background adjustments | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py` | `tests/unit/test_reconciliation.py` |
 
-## Phase 06 Distributed State & Observability Traceability (Planned)
+## Phase 06 Distributed State & Observability Traceability (Partially implemented)
 
-| Requirement | Target Package | Plan Reference |
-| --- | --- | --- |
-| `CreditStore` and `HealthStore` abstract base class / Protocol interfaces | `src/foundry_router/credit/`, `src/foundry_router/health/` | `docs/plans/phase-06-metrics-diagnostics/` |
-| Distributed Redis state store adapter using atomic Lua scripts | `src/foundry_router/state/redis.py` | `docs/plans/phase-06-metrics-diagnostics/` |
-| Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | `src/foundry_router/api/admin.py` | `docs/plans/phase-06-metrics-diagnostics/` |
-| Prometheus `/metrics` and OpenTelemetry exporter | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| `CreditStore` protocol interface with swappable implementation boundary | Partially implemented | `src/foundry_router/credit.py` | `tests/unit/test_credit.py` |
+| Distributed Redis state store adapter using atomic Lua scripts | Planned | `src/foundry_router/state/redis.py` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | Implemented | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Prometheus `/metrics` exporter | Partially implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| OpenTelemetry export pipeline | Planned | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/` |
 
 ## Phase 07 Infrastructure, Connection Tuning & Operations Traceability (Planned)
 

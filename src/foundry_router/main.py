@@ -25,13 +25,16 @@ from foundry_router.auth import verify_admin_auth, verify_client_auth
 from foundry_router.backends import close_backend_client, get_backend_client
 from foundry_router.config import load_settings
 from foundry_router.credit import (
+    BackendCreditLiveSnapshot,
     CreditState,
+    CreditStore,
     InMemoryCreditStore,
     estimate_request_cost,
     estimate_response_usage_cost,
     score_credit_assessment,
 )
 from foundry_router.logging import setup_logging
+from foundry_router.metrics import InMemoryMetricsStore
 from foundry_router.reconciliation import (
     ReconciliationLoop,
     ReconciliationProvider,
@@ -85,9 +88,10 @@ class BackendRequestResult:
 
 _backend_health_state: dict[str, BackendHealthRecord] = {}
 _backend_health_lock = asyncio.Lock()
-_credit_store = InMemoryCreditStore()
+_credit_store: CreditStore = InMemoryCreditStore()
 _reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
 _reconciliation_loop: ReconciliationLoop | None = None
+_metrics_store = InMemoryMetricsStore()
 
 
 @dataclass(frozen=True)
@@ -429,6 +433,25 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
     request_id: str,
     execute_backend: Callable[[str], Awaitable[BackendRequestResult]],
 ) -> Response:
+    started_at = time.monotonic()
+
+    async def _record_and_return(
+        response: Response,
+        *,
+        backend_id: str | None,
+        actual_cost_usd: float | None = None,
+    ) -> Response:
+        if isinstance(response, StreamingResponse):
+            return response
+        await _metrics_store.observe_request(
+            model=model,
+            backend=backend_id or "none",
+            status_code=response.status_code,
+            latency_seconds=max(0.0, time.monotonic() - started_at),
+            estimated_cost_usd=actual_cost_usd,
+        )
+        return response
+
     first_selection = await _select_candidate_backend(
         settings,
         model,
@@ -442,17 +465,23 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
             first_selection.snapshots,
         )
         if cooldown_response is not None:
-            return cooldown_response
+            return await _record_and_return(cooldown_response, backend_id=None)
         if first_selection.insufficient_credit_capacity:
-            return _api_error(
-                503,
-                "No backend has sufficient estimated credit capacity",
-                "insufficient_credit_capacity",
+            return await _record_and_return(
+                _api_error(
+                    503,
+                    "No backend has sufficient estimated credit capacity",
+                    "insufficient_credit_capacity",
+                ),
+                backend_id=None,
             )
-        return _api_error(
-            503,
-            "No active backend available for the requested model",
-            "upstream_error",
+        return await _record_and_return(
+            _api_error(
+                503,
+                "No active backend available for the requested model",
+                "upstream_error",
+            ),
+            backend_id=None,
         )
 
     first_backend_id = first_selection.backend_id
@@ -462,16 +491,20 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
 
         if not first_result.retryable_failure:
             if not isinstance(first_result.response, StreamingResponse):
-                await _finalize_non_streaming_credit(
+                finalized_cost = await _finalize_non_streaming_credit(
                     request_id=request_id,
                     model=model,
                     settings=settings,
                     response=first_result.response,
                 )
                 reservation_closed_or_transferred = True
-            else:
-                reservation_closed_or_transferred = True
-            return first_result.response
+                return await _record_and_return(
+                    first_result.response,
+                    backend_id=first_backend_id,
+                    actual_cost_usd=finalized_cost,
+                )
+            reservation_closed_or_transferred = True
+            return await _record_and_return(first_result.response, backend_id=first_backend_id)
 
         second_selection = await _select_candidate_backend(
             settings,
@@ -494,10 +527,13 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
                     response=first_result.response,
                 )
                 reservation_closed_or_transferred = True
-                return _api_error(
-                    503,
-                    "No backend has sufficient estimated credit capacity",
-                    "insufficient_credit_capacity",
+                return await _record_and_return(
+                    _api_error(
+                        503,
+                        "No backend has sufficient estimated credit capacity",
+                        "insufficient_credit_capacity",
+                    ),
+                    backend_id=first_backend_id,
                 )
             all_cooldown_response = await _all_candidates_cooldown_response(
                 settings,
@@ -514,7 +550,7 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
                     response=first_result.response,
                 )
                 reservation_closed_or_transferred = True
-                return all_cooldown_response
+                return await _record_and_return(all_cooldown_response, backend_id=first_backend_id)
             cooldown_response = _cooldown_exhausted_response(
                 second_selection.candidates,
                 second_selection.snapshots,
@@ -527,27 +563,48 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
                     response=first_result.response,
                 )
                 reservation_closed_or_transferred = True
-                return cooldown_response
-            await _finalize_non_streaming_credit(
+                return await _record_and_return(cooldown_response, backend_id=first_backend_id)
+            finalized_cost = await _finalize_non_streaming_credit(
                 request_id=request_id,
                 model=model,
                 settings=settings,
                 response=first_result.response,
             )
             reservation_closed_or_transferred = True
-            return first_result.response
+            return await _record_and_return(
+                first_result.response,
+                backend_id=first_backend_id,
+                actual_cost_usd=finalized_cost,
+            )
 
         second_result = await execute_backend(second_backend_id)
         if not isinstance(second_result.response, StreamingResponse):
-            await _finalize_non_streaming_credit(
+            finalized_cost = await _finalize_non_streaming_credit(
                 request_id=request_id,
                 model=model,
                 settings=settings,
                 response=second_result.response,
             )
             reservation_closed_or_transferred = True
-        else:
-            reservation_closed_or_transferred = True
+            if second_result.retryable_failure:
+                all_cooldown_response = await _all_candidates_cooldown_response(
+                    settings,
+                    model,
+                    operation=operation,
+                    body=body,
+                    request_id=request_id,
+                )
+                if all_cooldown_response is not None:
+                    return await _record_and_return(
+                        all_cooldown_response,
+                        backend_id=second_backend_id,
+                    )
+            return await _record_and_return(
+                second_result.response,
+                backend_id=second_backend_id,
+                actual_cost_usd=finalized_cost,
+            )
+        reservation_closed_or_transferred = True
         if second_result.retryable_failure:
             all_cooldown_response = await _all_candidates_cooldown_response(
                 settings,
@@ -557,8 +614,8 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
                 request_id=request_id,
             )
             if all_cooldown_response is not None:
-                return all_cooldown_response
-        return second_result.response
+                return await _record_and_return(all_cooldown_response, backend_id=second_backend_id)
+        return await _record_and_return(second_result.response, backend_id=second_backend_id)
     finally:
         if not reservation_closed_or_transferred:
             await _credit_store.finalize_request(
@@ -838,6 +895,7 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
                     cooldown_seconds=settings.retry_max_delay_seconds,
                     model=body.get("model", ""),
                     pricing=settings.pricing,
+                    status_code=upstream.status_code,
                 ),
                 status_code=upstream.status_code,
                 media_type="text/event-stream",
@@ -861,6 +919,10 @@ async def _reset_credit_state() -> None:
     await _credit_store.reset()
 
 
+async def _reset_metrics_state() -> None:
+    await _metrics_store.reset()
+
+
 async def _reset_reconciliation_state() -> None:
     global _reconciliation_loop  # noqa: PLW0603
     if _reconciliation_loop is not None:
@@ -880,16 +942,17 @@ async def _finalize_non_streaming_credit(
     model: str,
     settings: Any,
     response: Response,
-) -> None:
+) -> float | None:
     is_success = HTTP_OK <= response.status_code < HTTP_SUCCESS_LIMIT
     charged_cost = (
-        estimate_response_usage_cost(response, model, settings.pricing) if is_success else 0.0
+        estimate_response_usage_cost(response, model, settings.pricing) if is_success else None
     )
     await _credit_store.finalize_request(
         request_id,
         charge_reserved=is_success,
         charged_cost_usd=charged_cost,
     )
+    return charged_cost
 
 
 def _api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
@@ -965,8 +1028,11 @@ async def _stream_response(  # noqa: PLR0913
     cooldown_seconds: float,
     model: str,
     pricing: dict[str, Any],
+    status_code: int,
 ) -> AsyncIterator[bytes]:
+    started_at = time.monotonic()
     charged_cost: float | None = None
+    metric_status_code = status_code
     pending_event_bytes = b""
 
     def process_event_payload(payload: bytes) -> None:
@@ -1014,6 +1080,7 @@ async def _stream_response(  # noqa: PLR0913
             state=BackendHealthState.ERROR_COOLDOWN,
             cooldown_seconds=cooldown_seconds,
         )
+        metric_status_code = 502
         yield b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
     finally:
         await context.__aexit__(None, None, None)
@@ -1021,6 +1088,13 @@ async def _stream_response(  # noqa: PLR0913
             request_id,
             charge_reserved=True,
             charged_cost_usd=charged_cost,
+        )
+        await _metrics_store.observe_request(
+            model=model,
+            backend=backend_id,
+            status_code=metric_status_code,
+            latency_seconds=max(0.0, time.monotonic() - started_at),
+            estimated_cost_usd=charged_cost,
         )
 
 
@@ -1057,6 +1131,7 @@ async def lifespan(_app: FastAPI) -> Any:
     await _reset_reconciliation_state()
     await close_backend_client()
     await _reset_credit_state()
+    await _reset_metrics_state()
 
 
 app = FastAPI(
@@ -1142,7 +1217,45 @@ async def readiness() -> Response:
     )
 
 
-def _admin_backend_status(name: str, config: Any, settings: Any) -> dict[str, Any]:
+def _admin_backend_status(
+    name: str,
+    config: Any,
+    settings: Any,
+    *,
+    health_snapshot: BackendHealthSnapshot | None,
+    credit_snapshot: BackendCreditLiveSnapshot | None,
+) -> dict[str, Any]:
+    live_status = {
+        "health_state": health_snapshot.state if health_snapshot is not None else None,
+        "cooldown_remaining_seconds": (
+            round(health_snapshot.cooldown_remaining_seconds, 3)
+            if health_snapshot is not None
+            else None
+        ),
+        "credit_state": credit_snapshot.state if credit_snapshot is not None else None,
+        "available_credit_usd": (
+            round(credit_snapshot.available_credit_usd, 6) if credit_snapshot is not None else None
+        ),
+        "reserved_inflight_usd": (
+            round(credit_snapshot.reserved_inflight_usd, 6) if credit_snapshot is not None else None
+        ),
+        "estimated_remaining_usd": (
+            round(credit_snapshot.estimated_remaining_usd, 6)
+            if credit_snapshot is not None
+            else None
+        ),
+        "active_reservations": (
+            credit_snapshot.active_reservations if credit_snapshot is not None else None
+        ),
+        "current_cycle_start_utc": (
+            credit_snapshot.current_cycle_start_utc.isoformat()
+            if credit_snapshot is not None
+            else None
+        ),
+        "next_reset_utc": (
+            credit_snapshot.next_reset_utc.isoformat() if credit_snapshot is not None else None
+        ),
+    }
     return {
         "endpoint": str(config.endpoint),
         "region": config.region,
@@ -1152,6 +1265,7 @@ def _admin_backend_status(name: str, config: Any, settings: Any) -> dict[str, An
         "initial_estimated_remaining_usd": settings.backend_initial_estimated_remaining_usd.get(
             name
         ),
+        "live": live_status,
     }
 
 
@@ -1160,11 +1274,25 @@ def _admin_backend_status(name: str, config: Any, settings: Any) -> dict[str, An
 async def admin_status(_request: Request) -> dict[str, Any]:
     """Administrative status endpoint - requires admin authentication."""
     settings = load_settings()
+    backend_ids = list(settings.backends.keys())
+    health_snapshots = await _snapshot_backend_health(backend_ids)
+    await _credit_store.sync_from_settings(settings)
+    credit_snapshots = await _credit_store.live_snapshot(
+        backend_ids,
+        min_credit_reserve_usd=settings.min_credit_reserve_usd,
+        min_credit_reserve_percent=settings.min_credit_reserve_percent,
+    )
 
     return {
         "version": "0.1.0",
         "backends": {
-            name: _admin_backend_status(name, config, settings)
+            name: _admin_backend_status(
+                name,
+                config,
+                settings,
+                health_snapshot=health_snapshots.get(name),
+                credit_snapshot=credit_snapshots.get(name),
+            )
             for name, config in settings.backends.items()
         },
         "models": {
@@ -1194,6 +1322,31 @@ async def admin_status(_request: Request) -> dict[str, Any]:
             }
         ),
     }
+
+
+@app.get("/metrics", tags=["Observability"], dependencies=[Depends(verify_admin_auth)])
+async def metrics() -> Response:
+    """Prometheus-compatible runtime metrics."""
+    settings = load_settings()
+    backend_ids = list(settings.backends.keys())
+    health_snapshots = await _snapshot_backend_health(backend_ids)
+    await _credit_store.sync_from_settings(settings)
+    credit_snapshots = await _credit_store.live_snapshot(
+        backend_ids,
+        min_credit_reserve_usd=settings.min_credit_reserve_usd,
+        min_credit_reserve_percent=settings.min_credit_reserve_percent,
+    )
+    payload = await _metrics_store.render_prometheus(
+        backend_health_states={
+            backend_id: health_snapshot.state
+            for backend_id, health_snapshot in health_snapshots.items()
+        },
+        backend_available_credit_usd={
+            backend_id: credit_snapshot.available_credit_usd
+            for backend_id, credit_snapshot in credit_snapshots.items()
+        },
+    )
+    return Response(content=payload, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 # OpenAI-compatible endpoints (require client authentication)

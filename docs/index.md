@@ -1,10 +1,10 @@
 # Foundry Router Documentation
 
-Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding, health-aware retry/cooldown/failover, and credit-cycle/cost-aware scheduling Implemented, and infrastructure, distributed state, and automated deployment Planned.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding, health-aware retry/cooldown/failover, and credit-cycle/cost-aware scheduling **Implemented**. Live admin diagnostics and Prometheus metrics are **Partially implemented**. Distributed state, cloud infrastructure, and automated deployment remain **Planned**.
 
 ## Repository Status
 
-The repository is **Partially implemented**. Configuration, authentication, health checks, model listing, backend request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, and credit-aware scheduling are **Implemented**. Cost reconciliation loop scaffolding and stale-fallback diagnostics are **Partially implemented**. Modular decomposition, distributed state stores, metrics, and cloud infrastructure remain **Planned**. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
+The repository is **Partially implemented**. Configuration, authentication, health checks, model listing, backend request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, and credit-aware scheduling are **Implemented**. Cost reconciliation scaffolding, live admin diagnostics, and Prometheus metric export are **Partially implemented**. Modular decomposition, distributed state stores (Redis), and cloud infrastructure remain **Planned**. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
 
 ## Start Here
 
