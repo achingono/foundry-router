@@ -4,7 +4,7 @@ Contributor and coding-agent instructions for Foundry Router.
 
 ## Repository Status
 
-This repository contains a partial foundational implementation. Configuration validation, authentication, health checks, model listing, structured logging, backend request safety, packaging, and CI definitions are present; forwarding, routing, credit management, and infrastructure remain planned. Do not describe planned behavior as implemented, invent Azure resource IDs, or assume that a documented endpoint is runnable. Use the status labels `Implemented`, `Partially implemented`, `Planned`, and `Design target` consistently.
+This repository contains a partial foundational implementation. Configuration validation, authentication, health checks, model listing, structured logging, backend request safety, packaging, CI definitions, and non-streaming/streaming Responses and embeddings forwarding are present; health-aware routing, retries, cooldowns, credit management, and infrastructure remain planned. Do not describe planned behavior as implemented, invent Azure resource IDs, or assume that a documented endpoint is runnable. Use the status labels `Implemented`, `Partially implemented`, `Planned`, and `Design target` consistently.
 
 ## Canonical References
 

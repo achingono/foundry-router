@@ -1,14 +1,14 @@
 # Runtime Features
 
-## Status: Planned
+## Status: Partially implemented
 
 The router is more than a load balancer. It is a model router, quota-aware failover layer, credit scheduler, and billing-cycle-aware capacity pool.
 
 ## Required Capabilities
 
-- OpenAI Responses API with transparent streaming.
-- Embeddings and logical model discovery.
-- Two or more configurable Foundry backends, extensible without code changes.
+- OpenAI Responses API with transparent streaming. **Implemented**
+- Embeddings and logical model discovery. **Implemented**
+- Two or more configurable Foundry backends, extensible without code changes. **Partially implemented**
 - Per-model pools, weighted routing, health tracking, bounded retry, and failover.
 - 429 and transient 5xx cooldown behavior.
 - Credit-aware routing with safety reserves and cycle awareness.

@@ -28,7 +28,17 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Requirement | Implementation | Evidence |
 | --- | --- | --- |
 | Strict configuration shape and secret validation | `src/foundry_router/config/` | `tests/unit/test_config.py` |
-| Configured HTTPS origin/base-path egress only | `src/foundry_router/backends/` | `tests/unit/test_backends.py` |
+| Configured per-backend HTTPS origin/base-path egress only | `src/foundry_router/backends/` | `tests/unit/test_backends.py` |
 | Redacted failure logging and request context cleanup | `src/foundry_router/logging/`, `src/foundry_router/main.py` | `tests/unit/test_logging.py`, `tests/unit/test_main.py` |
 | Reproducible package and image smoke path | `README.md`, `pyproject.toml`, `Dockerfile`, CI workflow | Phase 01 Hardening evidence |
 | Combined test coverage gate | `.github/workflows/ci.yml` | CI coverage command |
+
+## Phase 02 Forwarding Traceability
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Authenticated Responses and embeddings forwarding | `src/foundry_router/main.py`, `src/foundry_router/backends/` | `tests/unit/test_main.py` |
+| Unknown-model and malformed-request rejection before egress | `src/foundry_router/main.py` | `tests/unit/test_main.py`, `tests/integration/test_full_flow.py` |
+| Deployment URL/API-version construction and backend credential isolation | `src/foundry_router/config/`, `src/foundry_router/backends/` | `tests/unit/test_main.py`, `tests/unit/test_backends.py` |
+| Streaming pass-through without retry/failover, including pre-output failure handling | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Required deployments, deterministic tie-breaking, strict embeddings input, and correlation propagation | `src/foundry_router/config/`, `src/foundry_router/main.py` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |

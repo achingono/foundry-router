@@ -1,10 +1,10 @@
 # Foundry Router Documentation
 
-Foundry Router is a planned lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, while routing by availability, quota, health, estimated cost, credit-cycle timing, and safety reserves.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding implemented and availability, quota, health, estimated cost, credit-cycle timing, and safety-reserve routing Planned.
 
 ## Repository Status
 
-This repository currently contains the requirements and design baseline only. The router application, tests, infrastructure, CI workflows, container image, and deployable service have not been implemented yet. Statements such as “must,” “should,” and “will” in the documents below describe target behavior, not verified capabilities.
+The repository is **Partially implemented**. Configuration, authentication, health checks, model listing, backend request safety, and Responses/embeddings forwarding are implemented. Health-aware routing, retries, cooldowns, credit accounting, infrastructure, and deployment remain Planned. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
 
 ## Start Here
 

@@ -1,22 +1,24 @@
 # Public API
 
-## Status: Design Target
+## Status: Partially implemented
 
-The service will expose an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the router chooses the configured Foundry deployment and does not expose backend selection as a client concern.
+The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; Phase 02 forwards Responses and embeddings requests to a deterministic configured backend. Equal-weight candidates use the lexicographically smallest backend ID. Health-aware routing and failover remain Planned.
+
+Phase 02 uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api-version={api_version}` for the configured Azure OpenAI-compatible backend. The selected backend is the highest-weight candidate for the model, with backend ID used as the deterministic tie-breaker until the routing phase is implemented.
 
 ## Endpoints
 
 | Method and path | Requirement |
 | --- | --- |
-| `POST /openai/v1/responses` | Required; normal and streaming Responses API requests |
-| `POST /openai/v1/embeddings` | Required; embedding requests |
+| `POST /openai/v1/responses` | Implemented; normal and streaming forwarding |
+| `POST /openai/v1/embeddings` | Implemented; embedding forwarding |
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
 | `GET /admin/status` | Required design target; authenticated routing and credit state |
 | `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
 
-Malformed requests must return a clear 4xx without contacting Foundry. Unknown models must return an OpenAI-compatible model-not-found error. When no backend is safely usable, return a clear upstream-style error and never report success falsely.
+Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When the configured backend cannot be contacted, the router returns an upstream-style error and never reports success falsely. Health-aware backend selection and failover are Planned.
 
 ## Authentication
 
@@ -414,7 +416,8 @@ Common error types:
 Only safe headers are forwarded:
 - `Content-Type`
 - `Accept`
-- `User-Agent` (router's own)
+- `User-Agent`
+- `X-Request-Id` (router-validated correlation ID)
 - Custom headers not in sensitive list
 
 **Never forwarded:** `Authorization`, `api-key`, `x-api-key`, `Cookie`, `X-Forwarded-*`, `Forwarded`

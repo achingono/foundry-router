@@ -128,7 +128,7 @@ jobs:
         run: |
           trap 'docker rm -f test-container' EXIT
           docker run -d --name test-container -p 8000:8000 \
-            -e 'FOUNDRY_BACKENDS_JSON={"smoke":{"endpoint":"https://smoke.example.test","credential":"synthetic"}}' \
+            -e 'FOUNDRY_BACKENDS_JSON={"smoke":{"endpoint":"https://smoke.example.test","credential":"synthetic","deployment":"gpt-4"}}' \
             -e 'FOUNDRY_MODELS_JSON={"smoke-model":{"backends":{"smoke":1.0}}}' \
             -e 'FOUNDRY_CLIENT_API_KEYS_JSON=["synthetic-client"]' \
             -e 'FOUNDRY_ADMIN_API_KEYS_JSON=["synthetic-admin"]' \

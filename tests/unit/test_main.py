@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+import respx
 from fastapi import Request
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -46,7 +47,7 @@ class TestHealthEndpoints:
 
     def test_readiness_unhealthy_when_no_backends(self, monkeypatch) -> None:
         test_settings = Settings(
-            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key"}}',
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
             client_api_keys_json='["client-key"]',
             admin_api_keys_json='["admin-key"]',
@@ -59,6 +60,23 @@ class TestHealthEndpoints:
         response: Response = client.get("/health/ready")
         assert response.status_code == 503
         assert response.json()["ready"] is False
+
+    def test_readiness_unhealthy_when_deployment_missing(self, monkeypatch) -> None:
+        test_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+        )
+        test_settings.backends["backend_a"].deployment = None
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: test_settings)
+
+        response = client.get("/health/ready")
+
+        assert response.status_code == 503
+        assert response.json()["checks"]["deployments_configured"] is False
 
 
 class TestAdminEndpoint:
@@ -96,23 +114,129 @@ class TestOpenAIEndpoints:
         model_ids = {m["id"] for m in data["data"]}
         assert model_ids == {"gpt-4", "text-embedding-3-large"}
 
-    def test_responses_stub(self) -> None:
-        response: Response = client.post(
+    @respx.mock
+    def test_responses_forward(self) -> None:
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
+        response = client.post(
             "/openai/v1/responses",
             headers={"api-key": "client-key-123"},
             json={"model": "gpt-4", "input": "Hello"},
         )
-        assert response.status_code == 501
-        assert "not yet implemented" in response.json()["error"]["message"]
+        assert response.status_code == 200
+        assert response.json()["id"] == "response-test"
+        assert route.called
+        assert route.calls[0].request.headers["api-key"] == "key"
+        assert "authorization" not in route.calls[0].request.headers
 
-    def test_embeddings_stub(self) -> None:
-        response: Response = client.post(
+    @respx.mock
+    def test_responses_forward_correlation_id(self) -> None:
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123", "x-request-id": "request-123"},
+            json={"model": "gpt-4", "input": "Hello"},
+        )
+        assert response.status_code == 200
+        assert route.calls[0].request.headers["x-request-id"] == "request-123"
+
+    @respx.mock
+    def test_embeddings_forward(self) -> None:
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/embeddings",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, json={"object": "list", "data": []}))
+        response = client.post(
             "/openai/v1/embeddings",
             headers={"api-key": "client-key-123"},
             json={"model": "text-embedding-3-large", "input": "Hello"},
         )
-        assert response.status_code == 501
-        assert "not yet implemented" in response.json()["error"]["message"]
+        assert response.status_code == 200
+        assert response.json()["object"] == "list"
+        assert route.called
+
+    @respx.mock
+    def test_unknown_model_does_not_contact_backend(self) -> None:
+        route = respx.post("https://a.openai.azure.com/").mock(return_value=Response(200))
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "unknown", "input": "Hello"},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["type"] == "model_not_found"
+        assert not route.called
+
+    @respx.mock
+    def test_malformed_request_does_not_contact_backend(self) -> None:
+        route = respx.post("https://a.openai.azure.com/").mock(return_value=Response(200))
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"input": "Hello"},
+        )
+        assert response.status_code == 422
+        assert not route.called
+
+    @respx.mock
+    def test_invalid_embedding_items_do_not_contact_backend(self) -> None:
+        route = respx.post("https://a.openai.azure.com/").mock(return_value=Response(200))
+        response = client.post(
+            "/openai/v1/embeddings",
+            headers={"api-key": "client-key-123"},
+            json={"model": "text-embedding-3-large", "input": ["valid", 123]},
+        )
+        assert response.status_code == 422
+        assert not route.called
+
+    def test_equal_weight_selection_is_lexicographically_smallest(self) -> None:
+        from foundry_router.main import _select_backend
+
+        settings = type("SettingsStub", (), {})()
+        settings.models = {"gpt-4": type("PoolStub", (), {})()}
+        settings.models["gpt-4"].backends = {"backend_b": 1.0, "backend_a": 1.0}
+        assert _select_backend(settings, "gpt-4") == "backend_a"
+
+    @respx.mock
+    def test_responses_stream_is_passed_through(self) -> None:
+        route = respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            return_value=Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=b'data: {"id":"one"}\n\ndata: [DONE]\n\n',
+            )
+        )
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello", "stream": True},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert response.content == b'data: {"id":"one"}\n\ndata: [DONE]\n\n'
+        assert route.called
+
+    @respx.mock
+    def test_empty_responses_stream_returns_upstream_error(self) -> None:
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(200, headers={"content-type": "text/event-stream"}))
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello", "stream": True},
+        )
+        assert response.status_code == 502
+        assert response.json()["error"]["type"] == "upstream_error"
 
 
 class TestCorrelationId:

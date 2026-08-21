@@ -2,7 +2,7 @@
 
 ## Status: Partially implemented
 
-The proxy must not be an unrestricted public relay. Client requests require authentication, and `/admin/status` requires separate authentication. The implemented backend client accepts only configured HTTPS origins and base paths, disables redirects, and strips sensitive headers. User input must not create arbitrary outbound destinations or an SSRF path. Public listener TLS and network controls remain deployment responsibilities.
+The proxy must not be an unrestricted public relay. Client requests require authentication, and `/admin/status` requires separate authentication. The implemented backend client accepts only each configured backend's HTTPS origin and base path, disables redirects, injects only the selected backend credential, propagates the validated correlation ID, and strips sensitive headers. User input must not create arbitrary outbound destinations or an SSRF path. Public listener TLS and network controls remain deployment responsibilities.
 
 ## Secret Handling
 
