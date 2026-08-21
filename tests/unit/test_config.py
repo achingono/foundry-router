@@ -17,6 +17,13 @@ from foundry_router.config import (
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_cache() -> None:
+    load_settings.cache_clear()
+    yield
+    load_settings.cache_clear()
+
+
 class TestBackendConfig:
     def test_valid_backend(self) -> None:
         config = BackendConfig(

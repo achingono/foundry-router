@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 import time
@@ -243,6 +244,26 @@ async def _select_candidate_backend(  # noqa: PLR0913
         pricing=settings.pricing,
     )
     if estimate is None:
+        logger.info(
+            "routing_decision",
+            model=model,
+            operation=operation,
+            request_id=request_id,
+            selected_backend=None,
+            reason="estimate_unavailable",
+            estimated_request_cost_usd=None,
+            candidates=[
+                {
+                    "backend_id": backend_id,
+                    "health_state": snapshots[backend_id].state,
+                    "cooldown_remaining_seconds": round(
+                        snapshots[backend_id].cooldown_remaining_seconds,
+                        3,
+                    ),
+                }
+                for backend_id in ranked_candidates
+            ],
+        )
         return BackendSelectionResult(None, ranked_candidates, snapshots, True)
 
     health_eligible = [
@@ -260,9 +281,30 @@ async def _select_candidate_backend(  # noqa: PLR0913
             health_eligible = [fallback_candidate]
 
     if not health_eligible:
+        logger.info(
+            "routing_decision",
+            model=model,
+            operation=operation,
+            request_id=request_id,
+            selected_backend=None,
+            reason="all_candidates_in_cooldown_or_disabled",
+            estimated_request_cost_usd=estimate.estimated_cost_usd,
+            candidates=[
+                {
+                    "backend_id": backend_id,
+                    "health_state": snapshots[backend_id].state,
+                    "cooldown_remaining_seconds": round(
+                        snapshots[backend_id].cooldown_remaining_seconds,
+                        3,
+                    ),
+                }
+                for backend_id in ranked_candidates
+            ],
+        )
         return BackendSelectionResult(None, ranked_candidates, snapshots, False)
 
     scored_candidates: list[tuple[float, float, str]] = []
+    candidate_details: list[dict[str, Any]] = []
     has_credit_capacity = False
     for backend_id in health_eligible:
         assessment = await _credit_store.assess(
@@ -271,7 +313,21 @@ async def _select_candidate_backend(  # noqa: PLR0913
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
+        candidate_detail = {
+            "backend_id": backend_id,
+            "health_state": snapshots[backend_id].state,
+            "cooldown_remaining_seconds": round(
+                snapshots[backend_id].cooldown_remaining_seconds,
+                3,
+            ),
+            "credit_state": assessment.state,
+            "available_credit_usd": assessment.available_credit_usd,
+            "projected_unused_credit_usd": assessment.projected_unused_credit_usd,
+            "estimated_request_cost_usd": assessment.estimated_request_cost_usd,
+            "cycle_allowance_usd": assessment.cycle_allowance_usd,
+        }
         if assessment.state not in {CreditState.USABLE, CreditState.CONSERVATION}:
+            candidate_details.append(candidate_detail)
             continue
         has_credit_capacity = True
         score = score_credit_assessment(
@@ -283,9 +339,23 @@ async def _select_candidate_backend(  # noqa: PLR0913
             projected_unused_credit_usd=assessment.projected_unused_credit_usd,
             cycle_allowance_usd=assessment.cycle_allowance_usd,
         )
+        candidate_detail["score"] = score
         scored_candidates.append((score, settings.models[model].backends[backend_id], backend_id))
+        candidate_details.append(candidate_detail)
 
     if not scored_candidates:
+        logger.info(
+            "routing_decision",
+            model=model,
+            operation=operation,
+            request_id=request_id,
+            selected_backend=None,
+            reason=(
+                "insufficient_credit_capacity" if has_credit_capacity else "no_usable_credit_state"
+            ),
+            estimated_request_cost_usd=estimate.estimated_cost_usd,
+            candidates=candidate_details,
+        )
         return BackendSelectionResult(None, ranked_candidates, snapshots, not has_credit_capacity)
 
     scored_candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
@@ -298,8 +368,28 @@ async def _select_candidate_backend(  # noqa: PLR0913
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
         if reserved:
+            logger.info(
+                "routing_decision",
+                model=model,
+                operation=operation,
+                request_id=request_id,
+                selected_backend=backend_id,
+                reason="selected",
+                estimated_request_cost_usd=estimate.estimated_cost_usd,
+                candidates=candidate_details,
+            )
             return BackendSelectionResult(backend_id, ranked_candidates, snapshots, False)
 
+    logger.info(
+        "routing_decision",
+        model=model,
+        operation=operation,
+        request_id=request_id,
+        selected_backend=None,
+        reason="reservation_race_lost",
+        estimated_request_cost_usd=estimate.estimated_cost_usd,
+        candidates=candidate_details,
+    )
     return BackendSelectionResult(None, ranked_candidates, snapshots, True)
 
 
@@ -359,105 +449,116 @@ async def _execute_with_single_failover(  # noqa: PLR0911, PLR0912, PLR0913
         )
 
     first_backend_id = first_selection.backend_id
+    reservation_closed_or_transferred = False
     try:
         first_result = await execute_backend(first_backend_id)
-    except Exception:
-        await _credit_store.finalize_request(
-            request_id,
-            charge_reserved=False,
-            charged_cost_usd=None,
-        )
-        raise
 
-    if not first_result.retryable_failure:
-        if not isinstance(first_result.response, StreamingResponse):
-            await _finalize_non_streaming_credit(
-                request_id=request_id,
-                model=model,
-                settings=settings,
-                response=first_result.response,
-            )
-        return first_result.response
+        if not first_result.retryable_failure:
+            if not isinstance(first_result.response, StreamingResponse):
+                await _finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=first_result.response,
+                )
+                reservation_closed_or_transferred = True
+            else:
+                reservation_closed_or_transferred = True
+            return first_result.response
 
-    second_selection = await _select_candidate_backend(
-        settings,
-        model,
-        operation=operation,
-        body=body,
-        request_id=request_id,
-        excluded={first_backend_id},
-    )
-    second_backend_id = second_selection.backend_id
-    if second_backend_id is None:
-        if (
-            first_result.response.status_code >= HTTP_SERVER_ERROR_MIN
-            and second_selection.insufficient_credit_capacity
-        ):
-            await _finalize_non_streaming_credit(
-                request_id=request_id,
-                model=model,
-                settings=settings,
-                response=first_result.response,
-            )
-            return _api_error(
-                503,
-                "No backend has sufficient estimated credit capacity",
-                "insufficient_credit_capacity",
-            )
-        all_cooldown_response = await _all_candidates_cooldown_response(
+        second_selection = await _select_candidate_backend(
             settings,
             model,
             operation=operation,
             body=body,
             request_id=request_id,
+            excluded={first_backend_id},
         )
-        if all_cooldown_response is not None:
+        second_backend_id = second_selection.backend_id
+        if second_backend_id is None:
+            if (
+                first_result.response.status_code >= HTTP_SERVER_ERROR_MIN
+                and second_selection.insufficient_credit_capacity
+            ):
+                await _finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=first_result.response,
+                )
+                reservation_closed_or_transferred = True
+                return _api_error(
+                    503,
+                    "No backend has sufficient estimated credit capacity",
+                    "insufficient_credit_capacity",
+                )
+            all_cooldown_response = await _all_candidates_cooldown_response(
+                settings,
+                model,
+                operation=operation,
+                body=body,
+                request_id=request_id,
+            )
+            if all_cooldown_response is not None:
+                await _finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=first_result.response,
+                )
+                reservation_closed_or_transferred = True
+                return all_cooldown_response
+            cooldown_response = _cooldown_exhausted_response(
+                second_selection.candidates,
+                second_selection.snapshots,
+            )
+            if cooldown_response is not None:
+                await _finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=first_result.response,
+                )
+                reservation_closed_or_transferred = True
+                return cooldown_response
             await _finalize_non_streaming_credit(
                 request_id=request_id,
                 model=model,
                 settings=settings,
                 response=first_result.response,
             )
-            return all_cooldown_response
-        cooldown_response = _cooldown_exhausted_response(
-            second_selection.candidates,
-            second_selection.snapshots,
-        )
-        if cooldown_response is not None:
-            await _finalize_non_streaming_credit(
-                request_id=request_id,
-                model=model,
-                settings=settings,
-                response=first_result.response,
-            )
-            return cooldown_response
-        await _finalize_non_streaming_credit(
-            request_id=request_id,
-            model=model,
-            settings=settings,
-            response=first_result.response,
-        )
-        return first_result.response
+            reservation_closed_or_transferred = True
+            return first_result.response
 
-    second_result = await execute_backend(second_backend_id)
-    if not isinstance(second_result.response, StreamingResponse):
-        await _finalize_non_streaming_credit(
-            request_id=request_id,
-            model=model,
-            settings=settings,
-            response=second_result.response,
-        )
-    if second_result.retryable_failure:
-        all_cooldown_response = await _all_candidates_cooldown_response(
-            settings,
-            model,
-            operation=operation,
-            body=body,
-            request_id=request_id,
-        )
-        if all_cooldown_response is not None:
-            return all_cooldown_response
-    return second_result.response
+        second_result = await execute_backend(second_backend_id)
+        if not isinstance(second_result.response, StreamingResponse):
+            await _finalize_non_streaming_credit(
+                request_id=request_id,
+                model=model,
+                settings=settings,
+                response=second_result.response,
+            )
+            reservation_closed_or_transferred = True
+        else:
+            reservation_closed_or_transferred = True
+        if second_result.retryable_failure:
+            all_cooldown_response = await _all_candidates_cooldown_response(
+                settings,
+                model,
+                operation=operation,
+                body=body,
+                request_id=request_id,
+            )
+            if all_cooldown_response is not None:
+                return all_cooldown_response
+        return second_result.response
+    finally:
+        if not reservation_closed_or_transferred:
+            await _credit_store.finalize_request(
+                request_id,
+                charge_reserved=False,
+                charged_cost_usd=None,
+            )
 
 
 async def _forward_non_streaming_with_retries(
@@ -728,6 +829,8 @@ async def _forward_streaming_with_retries(  # noqa: PLR0911, PLR0912, PLR0915
                     request_id=request_id,
                     backend_id=backend_id,
                     cooldown_seconds=settings.retry_max_delay_seconds,
+                    model=body.get("model", ""),
+                    pricing=settings.pricing,
                 ),
                 status_code=upstream.status_code,
                 media_type="text/event-stream",
@@ -758,10 +861,13 @@ async def _finalize_non_streaming_credit(
     settings: Any,
     response: Response,
 ) -> None:
-    charged_cost = estimate_response_usage_cost(response, model, settings.pricing)
+    is_success = HTTP_OK <= response.status_code < HTTP_SUCCESS_LIMIT
+    charged_cost = (
+        estimate_response_usage_cost(response, model, settings.pricing) if is_success else 0.0
+    )
     await _credit_store.finalize_request(
         request_id,
-        charge_reserved=True,
+        charge_reserved=is_success,
         charged_cost_usd=charged_cost,
     )
 
@@ -837,11 +943,51 @@ async def _stream_response(  # noqa: PLR0913
     request_id: str,
     backend_id: str,
     cooldown_seconds: float,
+    model: str,
+    pricing: dict[str, Any],
 ) -> AsyncIterator[bytes]:
+    charged_cost: float | None = None
+    pending_event_bytes = b""
+
+    def process_event_payload(payload: bytes) -> None:
+        nonlocal charged_cost
+        lines = payload.splitlines()
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith(b"data:"):
+                continue
+            data_field = line[5:].lstrip()
+            if not data_field or data_field == b"[DONE]":
+                continue
+            try:
+                parsed = json.loads(data_field.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            usage = parsed.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            usage_response = Response(
+                content=json.dumps({"usage": usage}).encode("utf-8"),
+                media_type="application/json",
+            )
+            estimated_cost = estimate_response_usage_cost(usage_response, model, pricing)
+            if estimated_cost is not None:
+                charged_cost = estimated_cost
+
     try:
         yield first_chunk
+        pending_event_bytes += first_chunk
+        while b"\n\n" in pending_event_bytes:
+            event_payload, pending_event_bytes = pending_event_bytes.split(b"\n\n", 1)
+            process_event_payload(event_payload)
         async for chunk in chunks:
             yield chunk
+            pending_event_bytes += chunk
+            while b"\n\n" in pending_event_bytes:
+                event_payload, pending_event_bytes = pending_event_bytes.split(b"\n\n", 1)
+                process_event_payload(event_payload)
     except httpx.HTTPError:
         await _set_backend_cooldown(
             backend_id,
@@ -854,7 +1000,7 @@ async def _stream_response(  # noqa: PLR0913
         await _credit_store.finalize_request(
             request_id,
             charge_reserved=True,
-            charged_cost_usd=None,
+            charged_cost_usd=charged_cost,
         )
 
 
@@ -1036,7 +1182,7 @@ async def create_response(request: Request) -> Response:
     if isinstance(body, JSONResponse):
         return body
     settings = load_settings()
-    if _select_backend(settings, body["model"]) is None:
+    if body["model"] not in settings.models:
         return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
     headers = _forward_headers(request)
 
@@ -1079,7 +1225,7 @@ async def create_embeddings(request: Request) -> Response:
     if isinstance(body, JSONResponse):
         return body
     settings = load_settings()
-    if _select_backend(settings, body["model"]) is None:
+    if body["model"] not in settings.models:
         return _api_error(404, f"Model '{body['model']}' not found", "model_not_found")
     return await _execute_with_single_failover(
         settings,
