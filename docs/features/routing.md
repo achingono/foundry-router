@@ -1,6 +1,6 @@
 # Routing and Scheduling
 
-## Status: Implemented (Core & Credit Scheduling) / Planned (Reconciliation & Distributed Stores)
+## Status: Implemented (Core, Credit Scheduling, Reconciliation) / Planned (Distributed Stores)
 
 For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 

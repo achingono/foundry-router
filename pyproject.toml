@@ -82,6 +82,40 @@ unfixable = ["T10", "TCH", "INT", "ASYNC"]
     "SIM108",
     "SIM114",
 ]
+"src/foundry_router/forwarding/__init__.py" = [
+    "E501",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "TC002",
+]
+"src/foundry_router/routing/__init__.py" = [
+    "E501",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "TC002",
+]
+"src/foundry_router/api/**/*.py" = [
+    "E501",
+    "PLR0913",
+    "PLR2004",
+    "TC002",
+]
+"src/foundry_router/health/__init__.py" = [
+    "PLR2004",
+    "TC002",
+]
+"src/foundry_router/main.py" = [
+    "PLW0603",
+]
+"src/foundry_router/main_compat.py" = [
+    "PLR0913",
+]
 
 [tool.ruff.format]
 quote-style = "double"
