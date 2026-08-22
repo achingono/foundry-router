@@ -115,6 +115,23 @@ class TestHealthEndpoints:
         assert response.status_code == 503
         assert response.json()["checks"]["deployments_configured"] is False
 
+    def test_lifespan_cleans_up_health_store(self) -> None:
+        from foundry_router.main import _health_store, _set_backend_cooldown, lifespan
+
+        asyncio.run(
+            _set_backend_cooldown(
+                "backend_a", state=BackendHealthState.ERROR_COOLDOWN, cooldown_seconds=60.0
+            )
+        )
+        assert len(_health_store.state) > 0
+
+        async def run_lifespan() -> None:
+            async with lifespan(app):
+                pass
+
+        asyncio.run(run_lifespan())
+        assert len(_health_store.state) == 0
+
 
 class TestAdminEndpoint:
     def test_admin_status_requires_auth(self) -> None:
@@ -710,6 +727,61 @@ class TestOpenAIEndpoints:
         )
         assert result.status_code == 503
         assert calls == ["backend_a", "backend_b"]
+
+    def test_single_failover_does_not_leak_reservation_to_third_backend(self) -> None:
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "a", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://b.openai.azure.com", "credential": "b", "deployment": "gpt-4"}, "backend_c": {"endpoint": "https://c.openai.azure.com", "credential": "c", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.9, "backend_c": 0.8}}}',
+            client_api_keys_json='["client"]',
+            admin_api_keys_json='["admin"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1, "backend_b": 1, "backend_c": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
+            retry_attempts=1,
+            retry_max_delay_seconds=10.0,
+        )
+        calls: list[str] = []
+
+        from foundry_router.main import _credit_store
+
+        asyncio.run(_credit_store.sync_from_settings(settings))
+        before = asyncio.run(
+            _credit_store.assess(
+                "backend_c",
+                0.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+
+        async def execute(backend_id: str) -> BackendRequestResult:
+            calls.append(backend_id)
+            return BackendRequestResult(Response(503), retryable_failure=True)
+
+        result = asyncio.run(
+            _execute_with_single_failover(
+                settings,
+                "gpt-4",
+                operation="responses",
+                body={"model": "gpt-4", "input": "hello"},
+                request_id="req-no-third-reservation-leak",
+                execute_backend=execute,
+            )
+        )
+
+        after = asyncio.run(
+            _credit_store.assess(
+                "backend_c",
+                0.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+
+        assert result.status_code == 503
+        assert calls == ["backend_a", "backend_b"]
+        assert after.available_credit_usd == pytest.approx(before.available_credit_usd)
 
     def test_pre_output_empty_chunks_are_bounded(self, monkeypatch) -> None:
         class SlowEmptyStream(httpx.AsyncByteStream):
@@ -1410,6 +1482,210 @@ class TestOpenAIEndpoints:
         assert finalize_calls[0]["request_id"] == "req-stream-usage"
         assert finalize_calls[0]["charge_reserved"] is True
         assert finalize_calls[0]["charged_cost_usd"] == pytest.approx(0.00025)
+
+    def test_stream_response_parses_crlf_and_trailing_usage_payload(self, monkeypatch) -> None:
+        finalize_calls: list[dict[str, float | bool | str | None]] = []
+
+        async def capture_finalize(
+            request_id: str,
+            *,
+            charge_reserved: bool,
+            charged_cost_usd: float | None,
+        ) -> None:
+            finalize_calls.append(
+                {
+                    "request_id": request_id,
+                    "charge_reserved": charge_reserved,
+                    "charged_cost_usd": charged_cost_usd,
+                }
+            )
+
+        monkeypatch.setattr("foundry_router.main._credit_store.finalize_request", capture_finalize)
+
+        class Context:
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        async def crlf_chunks():
+            yield (b'data: {"type":"response.delta","delta":"hello"}\r\n\r\n')
+            # Trailing event without terminal newline sequence
+            yield (
+                b'data: {"type":"response.completed","usage":{"input_tokens":20,"output_tokens":10}}'
+            )
+
+        async def consume_stream() -> None:
+            stream = _stream_response(
+                crlf_chunks(),
+                b'data: {"id":"start"}\r\n\r\n',
+                Context(),
+                request_id="req-stream-crlf",
+                backend_id="backend_a",
+                cooldown_seconds=10.0,
+                model="gpt-4",
+                pricing={
+                    "gpt-4": type(
+                        "PricingStub",
+                        (),
+                        {"input_per_million": 10.0, "output_per_million": 30.0},
+                    )(),
+                },
+                status_code=200,
+            )
+            async for _ in stream:
+                pass
+
+        asyncio.run(consume_stream())
+        assert len(finalize_calls) == 1
+        assert finalize_calls[0]["request_id"] == "req-stream-crlf"
+        assert finalize_calls[0]["charge_reserved"] is True
+        assert finalize_calls[0]["charged_cost_usd"] == pytest.approx(0.0005)
+
+    def test_failover_cooldown_check_does_not_reserve_or_leak_credit_on_tertiary_backend(
+        self, monkeypatch
+    ) -> None:
+        three_backend_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "region": "eastus", "deployment": "gpt-4"}, "backend_b": {"endpoint": "https://b.openai.azure.com", "credential": "key-b", "region": "westus", "deployment": "gpt-4"}, "backend_c": {"endpoint": "https://c.openai.azure.com", "credential": "key-c", "region": "centralus", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0, "backend_b": 0.8, "backend_c": 0.5}}}',
+            client_api_keys_json='["client-key-123"]',
+            admin_api_keys_json='["admin-key-789"]',
+            pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+            backend_cycle_start_day_json='{"backend_a": 1, "backend_b": 1, "backend_c": 1}',
+            backend_cycle_allowance_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
+            backend_initial_estimated_remaining_usd_json='{"backend_a": 200.0, "backend_b": 200.0, "backend_c": 200.0}',
+            retry_attempts=1,
+            retry_max_delay_seconds=0.01,
+        )
+
+        async def mock_execute_backend(backend_id: str) -> BackendRequestResult:
+            if backend_id == "backend_a":
+                return BackendRequestResult(
+                    response=Response(502, json={"error": "a failed"}),
+                    retryable_failure=True,
+                )
+            if backend_id == "backend_b":
+                return BackendRequestResult(
+                    response=Response(502, json={"error": "b failed"}),
+                    retryable_failure=True,
+                )
+            raise AssertionError(f"Third backend '{backend_id}' should never be dispatched")
+
+        response = asyncio.run(
+            _execute_with_single_failover(
+                three_backend_settings,
+                "gpt-4",
+                operation="responses",
+                body={"model": "gpt-4", "input": "test prompt"},
+                request_id="req-three-backends-cooldown",
+                execute_backend=mock_execute_backend,
+            )
+        )
+
+        assert response.status_code == 502
+        # Verify backend_c has zero reservations and 0 inflight reserved amount
+        from foundry_router.main import _credit_store
+
+        snapshot = asyncio.run(
+            _credit_store.live_snapshot(
+                ["backend_c"],
+                min_credit_reserve_usd=10.0,
+                min_credit_reserve_percent=5.0,
+            )
+        )
+        assert snapshot["backend_c"].active_reservations == 0
+        assert snapshot["backend_c"].reserved_inflight_usd == 0.0
+
+    def test_stream_failure_does_not_charge_worst_case_reservation(self, monkeypatch) -> None:
+        finalize_calls: list[dict[str, float | bool | str | None]] = []
+
+        async def capture_finalize(
+            request_id: str,
+            *,
+            charge_reserved: bool,
+            charged_cost_usd: float | None,
+        ) -> None:
+            finalize_calls.append(
+                {
+                    "request_id": request_id,
+                    "charge_reserved": charge_reserved,
+                    "charged_cost_usd": charged_cost_usd,
+                }
+            )
+
+        monkeypatch.setattr("foundry_router.main._credit_store.finalize_request", capture_finalize)
+
+        class Context:
+            async def __aexit__(self, *_args) -> None:
+                return None
+
+        async def failing_chunks():
+            yield b'data: {"id":"start"}\n\n'
+            raise httpx.ReadError("abrupt upstream disconnect")
+
+        async def consume_stream() -> None:
+            stream = _stream_response(
+                failing_chunks(),
+                b'data: {"id":"start"}\n\n',
+                Context(),
+                request_id="req-stream-fail",
+                backend_id="backend_a",
+                cooldown_seconds=10.0,
+                model="gpt-4",
+                pricing={
+                    "gpt-4": type(
+                        "PricingStub",
+                        (),
+                        {"input_per_million": 10.0, "output_per_million": 30.0},
+                    )(),
+                },
+                status_code=200,
+            )
+            async for _ in stream:
+                pass
+
+        asyncio.run(consume_stream())
+        assert len(finalize_calls) == 1
+        assert finalize_calls[0]["request_id"] == "req-stream-fail"
+        assert finalize_calls[0]["charge_reserved"] is False
+        assert finalize_calls[0]["charged_cost_usd"] is None
+
+    @respx.mock
+    def test_failover_observes_first_backend_failure_metric(self) -> None:
+        from foundry_router.main import _metrics_store
+
+        asyncio.run(_metrics_store.reset())
+
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=Response(502, json={"error": "a-failed"}))
+        respx.post(
+            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            return_value=Response(
+                200, json={"id": "b-succeeded", "usage": {"input_tokens": 10, "output_tokens": 5}}
+            )
+        )
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "hello"},
+        )
+        assert response.status_code == 200
+        rendered = asyncio.run(
+            _metrics_store.render_prometheus(
+                backend_health_states={}, backend_available_credit_usd={}
+            )
+        )
+        assert (
+            'foundry_router_requests_total{model="gpt-4",backend="backend_a",status="502"} 1'
+            in rendered
+        )
+        assert (
+            'foundry_router_requests_total{model="gpt-4",backend="backend_b",status="200"} 1'
+            in rendered
+        )
 
 
 class TestCorrelationId:

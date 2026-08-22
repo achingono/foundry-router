@@ -299,6 +299,8 @@ def _walk_text_chars(value: Any) -> int:
         return 0
     if isinstance(value, str):
         return len(value)
+    if isinstance(value, (int, float, bool)):
+        return 0
     if isinstance(value, (bytes, bytearray, memoryview)):
         return -1
     if isinstance(value, list):
@@ -317,7 +319,7 @@ def _walk_text_chars(value: Any) -> int:
                 return -1
             total += chars
         return total
-    return 0
+    return -1
 
 
 def _chars_to_tokens(text: str) -> int:

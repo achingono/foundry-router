@@ -93,6 +93,8 @@ class TestRequestCostEstimation:
         chars = credit._walk_text_chars({"a": ["ab", {"b": "cde"}]})
         assert chars == 5
         assert credit._walk_text_chars({"bad": b"bytes"}) == -1
+        assert credit._walk_text_chars({"num": 123, "flag": True}) == 0
+        assert credit._walk_text_chars({"obj": object()}) == -1
 
 
 class TestResponseUsageEstimation:

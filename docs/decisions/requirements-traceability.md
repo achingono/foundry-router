@@ -68,11 +68,11 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Explainable routing structured decision logging (`routing_decision` event) | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Dedicated unit test suite with >= 90% coverage for `credit.py` | `tests/unit/test_credit.py` | `tests/unit/test_credit.py` (91.07% module coverage) |
 
-## Phase 05 Modular Routing & Cost Reconciliation Traceability (Partially implemented)
+## Phase 05 Modular Routing & Cost Reconciliation Traceability (Implemented)
 
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- |
-| Modular decomposition of `main.py` into decoupled domain packages | Planned | `src/foundry_router/{health,routing,forwarding,api}/` | `docs/plans/phase-05-routing-reconciliation/` |
+| Modular decomposition of `main.py` into decoupled domain packages | Implemented | `src/foundry_router/{health,routing,forwarding,api}/`, `src/foundry_router/main.py` | `tests/unit/test_main.py`, `docs/plans/phase-05-routing-reconciliation/` |
 | Background periodic billing reconciliation loop (`reconciliation_interval_minutes`) | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py`, `src/foundry_router/credit.py` | `tests/unit/test_reconciliation.py`, `tests/unit/test_credit.py` |
 | Graceful stale-cost fallback and non-blocking background adjustments | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py` | `tests/unit/test_reconciliation.py` |
 

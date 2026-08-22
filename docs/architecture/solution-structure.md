@@ -18,10 +18,16 @@ foundry-router/
 │   ├── plans/
 │   └── templates/
 ├── src/foundry_router/
+│   ├── api/
 │   ├── auth/
 │   ├── backends/
 │   ├── config/
+│   ├── forwarding/
+│   ├── health/
 │   ├── logging/
+│   ├── metrics/
+│   ├── reconciliation/
+│   ├── routing/
 │   ├── credit.py
 │   └── main.py
 ├── tests/
@@ -32,7 +38,7 @@ foundry-router/
 └── pyproject.toml
 ```
 
-Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, and credit-aware scheduling are implemented. Decomposition into domain modules, distributed state store adapters, metrics, and `infra/` IaC definitions are Planned for Phases 05–07.
+Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, and Phase 05 modular decomposition are implemented. Distributed state store adapters and `infra/` IaC definitions remain Planned for Phases 06-07.
 
 ## Target Structure
 
