@@ -28,7 +28,7 @@ Implement the first safe credit-aware scheduling layer for configured backend po
 
 ### Out of Scope
 - Azure Cost Management or other authoritative usage/cost reconciliation.
-- Azure Table Storage, Redis, or any other distributed state store.
+- Azure Table Storage shared state; Redis is an optional later cache under ADR-005.
 - Multi-replica credit correctness or enabling `max_replicas > 1`.
 - Metrics dashboards, Application Insights, infrastructure, or deployment changes.
 - Dynamic pricing discovery, model aliases, chat completions, or new public endpoints.

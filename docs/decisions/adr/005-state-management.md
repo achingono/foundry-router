@@ -19,26 +19,28 @@ Azure Container Apps Consumption plan allows scaling from 0 to N replicas (initi
 - Document that scaling beyond 1 is not supported
 
 ### Phase 2 (Multi-Replica: External Shared State)
-Before enabling `max_replicas > 1`, implement shared state using **Azure Table Storage** (or Azure Blob Storage with append-only logs):
+Before enabling `max_replicas > 1`, implement authoritative shared state using **Azure Table Storage**:
 
 | State Type | Storage | Consistency Model |
 | --- | --- | --- |
-| Credit balances / cycle calculations | Azure Table (partition: backend_id) | Strong (conditional writes with ETags) |
-| Inflight reservations | Azure Table (partition: request_id) | Strong (atomic reserve/release) |
+| Credit balances / cycle calculations | Azure Table (partition: backend_id; balance row) | Strong (conditional writes with ETags) |
+| Inflight reservations | Azure Table (partition: backend_id; request ID row key) | Strong (same-partition transactional batch with the balance row) |
 | Backend health / cooldowns | Azure Table (partition: backend_id) | Eventual (last-write-wins with timestamp) |
 | Cost reconciliation results | Azure Table (partition: backend_id) | Eventual (periodic writes) |
 
 **Implementation approach**:
 - Repository pattern with `StateStore` interface (in-memory for tests, Azure Table for prod)
-- Optimistic concurrency with ETags for credit operations
+- Store a backend's balance and every reservation in the same `backend_id` partition. Use ETag-guarded transactional batches to atomically update the balance and create, settle, or release the reservation.
+- Make reservation state idempotent and recover expired unfinished reservations through bounded reconciliation; do not use a replica-local fallback for authoritative credit operations.
 - Local in-memory cache with TTL (e.g., 30s) to reduce storage calls
 - Background reconciliation job writes authoritative Azure Cost Management data
 
 ### Phase 3 (Optional: Redis for Hot State)
 If latency becomes an issue, add **Azure Cache for Redis** for:
-- Inflight reservations (sub-millisecond reserve/release)
-- Backend health/cooldowns (fast reads)
-- Credit balances as cache with Table as source of truth
+- Read-through caching of health/cooldown snapshots and reservation metadata
+- Cached credit-balance reads with Azure Table Storage as the source of truth
+
+Redis must not own reservation creation, release, settlement, or the authoritative credit balance. Those writes remain Azure Table Storage same-partition transactions.
 
 ## Consequences
 
@@ -46,6 +48,7 @@ If latency becomes an issue, add **Azure Cache for Redis** for:
 - Phase 1 delivers value immediately without distributed systems complexity
 - Clear migration path with explicit phases
 - Azure Table Storage is cheap, serverless, and strongly consistent
+- Same-partition transaction layout prevents shared-credit oversubscription without cross-partition coordination
 - Repository pattern keeps business logic storage-agnostic
 
 ### Negative

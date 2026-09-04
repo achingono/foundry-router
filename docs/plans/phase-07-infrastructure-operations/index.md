@@ -15,10 +15,10 @@ Establish production Infrastructure as Code (Bicep / Terraform) for Azure Contai
 
 ### In Scope
 - Infrastructure as Code (Bicep / Terraform):
-  - Azure Container Apps (ACA) Consumption profile (0.25 vCPU, 0.5 GiB, min 0, max 2+ replicas).
+   - Azure Container Apps (ACA) Consumption profile (0.25 vCPU, 0.5 GiB, min 0, max 1 replica until Phase 06 shared-state verification; max 2 replicas afterward).
   - Azure Key Vault for client/admin API keys and backend credentials.
   - Managed Identity with least-privilege RBAC.
-  - Optional Azure Cache for Redis for distributed state.
+   - Optional Azure Cache for Redis hot-state cache only after a concrete latency requirement and separate approval; Azure Table Storage remains the authoritative distributed state store.
 - HTTP Client Connection Pool & Keep-Alive Tuning:
   - Configurable `httpx.Limits` (max connections, keep-alive limits, keep-alive expiry).
   - HTTP/2 multiplexing enablement for Azure OpenAI backends.

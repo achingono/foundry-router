@@ -23,7 +23,7 @@ Harden the credit estimation, reservation lifecycle, and streaming cost reconcil
 
 ### Out of Scope
 - External Azure Cost Management billing synchronization (scheduled for Phase 05).
-- Redis or distributed state persistence (scheduled for Phase 06).
+- Azure Table Storage shared state (scheduled for Phase 06); Redis is an optional future hot-state optimization under ADR-005.
 - Infrastructure deployment (scheduled for Phase 07).
 
 ## Entry Criteria

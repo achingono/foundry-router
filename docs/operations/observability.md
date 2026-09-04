@@ -20,7 +20,7 @@ The router emits structured `routing_decision` logs on every candidate selection
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
 - **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, and cycle boundary timestamps without disclosing secrets.
-- **Remaining scope**: Distributed shared state (`Redis*Store`) and cross-replica diagnostics are still planned.
+- **Remaining scope**: Azure Table Storage shared-state adapters and cross-replica diagnostics are still planned. Redis is an optional future hot-state cache and requires separate approval.
 
 ## Prometheus & OpenTelemetry Metrics (Partially implemented)
 

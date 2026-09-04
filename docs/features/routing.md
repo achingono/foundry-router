@@ -61,4 +61,4 @@ Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. 
 
 ## State Store Abstractions (Phases 5–6)
 
-Single-instance deployments use an in-memory credit and health store (`InMemoryCreditStore`, `_backend_health_state`). Future scale-out (`max_replicas > 1`) adopts abstract `CreditStore` and `HealthStore` protocols backed by atomic Redis Lua operations for shared multi-replica reservations.
+Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`. `CreditStore` is partially implemented; `HealthStore` and the injected-client Azure Table health boundary are implemented. Before future scale-out (`max_replicas > 1`), both protocols will be backed by Azure Table Storage: same-backend-partition transactional batches protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis is an optional later cache and cannot replace the authoritative store.
