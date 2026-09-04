@@ -15,7 +15,7 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
 - Structured explainable routing decision logging. **Implemented**
 - Persistent or externally reconciled usage/cost state. **Planned**
-- Abstract state store protocols for multi-replica Redis support. **Partially implemented**
+- `CreditStore`, `HealthStore`, and the injected-client Azure Table health boundary for multi-replica support. **Partially implemented**; authoritative Azure Table credit transactions and SDK integration are **Planned**.
 - Liveness/readiness, structured logs, and useful metrics. **Partially implemented**
 - Secure credentials, IaC, automated deployment, local mocked-backend development, and tests. **Partially implemented**
 

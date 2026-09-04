@@ -7,7 +7,7 @@ import math
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from fastapi.responses import JSONResponse
 
@@ -37,6 +37,27 @@ class BackendHealthRecord:
 class BackendHealthSnapshot:
     state: BackendHealthState
     cooldown_remaining_seconds: float
+
+
+@runtime_checkable
+class HealthStore(Protocol):
+    """Storage boundary for backend health and cooldown state."""
+
+    async def set_backend_active(self, backend_id: str) -> None: ...
+
+    async def set_backend_cooldown(
+        self,
+        backend_id: str,
+        *,
+        state: BackendHealthState,
+        cooldown_seconds: float,
+    ) -> None: ...
+
+    async def snapshot_backend_health(
+        self, backend_ids: list[str]
+    ) -> dict[str, BackendHealthSnapshot]: ...
+
+    async def reset(self) -> None: ...
 
 
 class InMemoryHealthStore:

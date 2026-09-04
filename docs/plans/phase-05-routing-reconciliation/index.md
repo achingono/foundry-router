@@ -26,7 +26,7 @@ Decompose monolithic `src/foundry_router/main.py` into dedicated architectural d
 - Unit and integration tests preserving 100% regression compatibility across all existing test suites.
 
 ### Out of Scope
-- Distributed Redis state storage (scheduled for Phase 06).
+- Azure Table Storage shared state (scheduled for Phase 06); Redis is an optional future hot-state optimization under ADR-005.
 - Public cloud infrastructure provisioning (scheduled for Phase 07).
 
 ## Entry Criteria

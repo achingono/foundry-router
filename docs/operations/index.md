@@ -6,7 +6,7 @@ Use IaC for a resource group, Container Apps environment and app, registry, mana
 
 ## Initial Container App
 
-Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, minimum replicas 0, and maximum replicas 2. Scale-to-zero startup latency is expected. Do not add always-on infrastructure, API Management, Front Door, Kubernetes, Redis, SQL, or other services without a concrete requirement.
+Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, and minimum replicas 0. Until the Phase 06 Azure Table Storage adapter is implemented and verified, maximum replicas must remain 1; it may increase to 2 afterward. Scale-to-zero startup latency is expected. Do not add always-on infrastructure, API Management, Front Door, Kubernetes, Redis, SQL, or other services without a concrete requirement.
 
 ## Reconciliation
 

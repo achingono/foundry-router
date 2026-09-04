@@ -4,7 +4,7 @@
 
 | ID | Risk | Impact | Mitigation | Status |
 |---|---|---|---|---|
-| R1 | Cooldown state lost on replica restart (stateless design) | May route to a backend that was just cooled | Keep cooldown durations short; rely on upstream to re-emit 429/5xx; add Redis-backed state in Phase 4 | Open |
+| R1 | Cooldown state lost on replica restart (stateless design) | May route to a backend that was just cooled | Keep cooldown durations short; rely on upstream to re-emit 429/5xx; add Azure Table Storage health snapshots in Phase 06 | Open |
 | R2 | Retry-After header parsing (seconds vs HTTP-date) | Incorrect delay if header format varies | Implement robust parser supporting both integer seconds and HTTP-date formats with clamping between 0 and `retry_max_delay_seconds` | Open |
 | R3 | Failover livelock or race conditions under concurrent requests | Inconsistent health state across tasks | Protect all health and cooldown state reads/writes with an `asyncio.Lock` | Open |
 | R4 | Exhausted cooldown behavior when all backends cooled | Unclear client response status or missing retry guidance | Return `503` (or `429` for quota) with `Retry-After` set to the minimum remaining cooldown time among candidates | Open |

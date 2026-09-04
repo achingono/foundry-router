@@ -57,7 +57,7 @@ foundry-router/
 │   ├── logging/              # Redacted structured JSON logging
 │   ├── metrics/              # Prometheus / OpenTelemetry telemetry
 │   ├── reconciliation/       # Background billing cost reconciliation
-│   ├── state/                # State protocols & Redis distributed store
+│   ├── state/                # State protocols & planned Azure Table Storage adapter
 │   └── main.py               # Lightweight lifespan & application entrypoint
 ├── tests/
 │   ├── unit/                 # Domain-specific unit test suites
@@ -65,7 +65,7 @@ foundry-router/
 │   └── fixtures/             # Mock upstream responses and SSE streams
 ├── infra/
 │   ├── main.bicep            # Azure Container Apps environment & app
-│   └── modules/              # Key Vault, Log Analytics, Redis modules
+│   └── modules/              # Key Vault, Log Analytics, Storage modules
 ├── .github/workflows/
 ├── Dockerfile
 └── pyproject.toml

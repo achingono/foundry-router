@@ -81,7 +81,9 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
 | `CreditStore` protocol interface with swappable implementation boundary | Partially implemented | `src/foundry_router/credit.py` | `tests/unit/test_credit.py` |
-| Distributed Redis state store adapter using atomic Lua scripts | Planned | `src/foundry_router/state/redis.py` | `docs/plans/phase-06-metrics-diagnostics/` |
+| `HealthStore` protocol with in-memory implementation and injected-client Azure Table health boundary | Partially implemented | `src/foundry_router/health/`, `src/foundry_router/state/table.py` | `tests/unit/test_state.py`, `docs/decisions/adr/005-state-management.md` |
+| Azure Table Storage authoritative credit and reservation adapter using same-partition ETag transactions | Planned | `src/foundry_router/state/table.py` | `docs/decisions/adr/005-state-management.md`, `docs/plans/phase-06-metrics-diagnostics/` |
+| Optional Redis hot-state cache after a concrete latency requirement and separate approval | Planned | Future scope | `docs/decisions/adr/005-state-management.md` |
 | Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | Implemented | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Prometheus `/metrics` exporter | Partially implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | OpenTelemetry export pipeline | Planned | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/` |
