@@ -29,6 +29,13 @@ The implementation validates client authentication, reconciliation interval, min
 - `FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON`
 - `FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON` (optional mock/adapter input for authoritative remaining values)
 
+It also validates two request-intake and reservation-lifecycle bounds introduced in Phase 08:
+
+- `FOUNDRY_MAX_REQUEST_BODY_BYTES` (default 2,097,152 bytes / 2 MiB): maximum accepted request body size, enforced before JSON parsing for `/openai/v1/responses` and `/openai/v1/embeddings`.
+- `FOUNDRY_RESERVATION_MAX_AGE_SECONDS` (default 900 seconds): maximum age of an inflight credit reservation before the bounded reaper reclaims it without charging the backend.
+
+`GET /health/ready` reports whether every backend referenced by a model pool has complete credit configuration and every configured model has a pricing entry, surfacing incomplete configuration without failing config load outright.
+
 Pricing values and local credit balances are estimates; zero is valid for an uncharged dimension. Missing local credit estimates make a backend ineligible for credit-aware routing rather than defaulting to unlimited capacity. Reconciliation is Partially implemented through a periodic background loop that can apply externally supplied remaining-credit snapshots while preserving local fail-safe behavior.
 
 ## Authoritative Data

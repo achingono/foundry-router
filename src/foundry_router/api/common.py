@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import Request, Response
@@ -17,11 +18,33 @@ def api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
     )
 
 
-async def request_body(request: Request, endpoint: str) -> dict[str, Any] | JSONResponse:  # noqa: PLR0911
+async def request_body(  # noqa: PLR0911, PLR0912
+    request: Request, endpoint: str, *, max_body_bytes: int
+) -> dict[str, Any] | JSONResponse:
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         return api_error(415, "Content-Type must be application/json", "invalid_request")
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError:
+            return api_error(400, "Invalid Content-Length header", "invalid_request")
+        if declared_length > max_body_bytes:
+            return api_error(
+                413, "Request body exceeds the maximum allowed size", "invalid_request"
+            )
+
+    raw_body = bytearray()
+    async for chunk in request.stream():
+        raw_body.extend(chunk)
+        if len(raw_body) > max_body_bytes:
+            return api_error(
+                413, "Request body exceeds the maximum allowed size", "invalid_request"
+            )
+
     try:
-        body = await request.json()
+        body = json.loads(bytes(raw_body))
     except ValueError:
         return api_error(400, "Request body must contain valid JSON", "invalid_request")
     if not isinstance(body, dict):

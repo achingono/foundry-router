@@ -160,6 +160,8 @@ async def add_correlation_id(request: Request, call_next: Any) -> Response:
         else str(uuid.uuid4())
     )
     request.state.correlation_id = correlation_id
+    # Server-owned identity for credit reservation/finalization; never derived from client input.
+    request.state.request_key = str(uuid.uuid4())
     structlog.contextvars.bind_contextvars(request_id=correlation_id)
     try:
         response: Response = await call_next(request)

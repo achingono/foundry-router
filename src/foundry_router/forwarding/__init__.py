@@ -52,7 +52,7 @@ def parse_retry_after(raw_value: str | None, max_delay_seconds: float) -> float 
     if not value:
         return None
     parsed_seconds: float | None = None
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         parsed_seconds = float(value)
     else:
         try:
@@ -115,6 +115,8 @@ async def stream_response(
 
     def process_event_payload(payload: bytes) -> None:
         nonlocal charged_cost
+        if b"usage" not in payload:
+            return
         lines = payload.splitlines()
         for raw_line in lines:
             line = raw_line.strip()

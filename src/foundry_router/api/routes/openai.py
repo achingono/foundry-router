@@ -61,10 +61,12 @@ def build_router(
         "/openai/v1/responses", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)]
     )
     async def create_response(request: Request) -> Response:
-        body = await request_body(request, "responses")
+        settings = load_settings_fn()
+        body = await request_body(
+            request, "responses", max_body_bytes=settings.max_request_body_bytes
+        )
         if isinstance(body, JSONResponse):
             return body
-        settings = load_settings_fn()
         if body["model"] not in settings.models:
             return api_error(404, f"Model '{body['model']}' not found", "model_not_found")
         headers = forward_headers(request)
@@ -75,11 +77,11 @@ def build_router(
                 body["model"],
                 operation="responses",
                 body=body,
-                request_id=request.state.correlation_id,
+                request_id=request.state.request_key,
                 execute_backend=lambda backend_id: forward_streaming_with_retries(
                     settings=settings,
                     backend_id=backend_id,
-                    request_id=request.state.correlation_id,
+                    request_id=request.state.request_key,
                     headers=headers,
                     body=body,
                     get_backend_client=get_backend_client_fn,
@@ -106,7 +108,7 @@ def build_router(
             body["model"],
             operation="responses",
             body=body,
-            request_id=request.state.correlation_id,
+            request_id=request.state.request_key,
             execute_backend=lambda backend_id: forward_non_streaming_with_retries(
                 settings=settings,
                 backend_id=backend_id,
@@ -134,10 +136,12 @@ def build_router(
         "/openai/v1/embeddings", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)]
     )
     async def create_embeddings(request: Request) -> Response:
-        body = await request_body(request, "embeddings")
+        settings = load_settings_fn()
+        body = await request_body(
+            request, "embeddings", max_body_bytes=settings.max_request_body_bytes
+        )
         if isinstance(body, JSONResponse):
             return body
-        settings = load_settings_fn()
         if body["model"] not in settings.models:
             return api_error(404, f"Model '{body['model']}' not found", "model_not_found")
         return await execute_with_single_failover(
@@ -145,7 +149,7 @@ def build_router(
             body["model"],
             operation="embeddings",
             body=body,
-            request_id=request.state.correlation_id,
+            request_id=request.state.request_key,
             execute_backend=lambda backend_id: forward_non_streaming_with_retries(
                 settings=settings,
                 backend_id=backend_id,

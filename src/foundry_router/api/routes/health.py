@@ -18,6 +18,18 @@ def build_router(*, load_settings_fn: Any) -> APIRouter:
     @router.get("/health/ready")
     async def readiness() -> Response:
         settings = load_settings_fn()
+        routable_backend_ids = {
+            backend_id for pool in settings.models.values() for backend_id in pool.backends
+        }
+        backend_credit_config_complete = all(
+            backend_id in settings.backend_cycle_start_day
+            and backend_id in settings.backend_cycle_allowance_usd
+            and backend_id in settings.backend_initial_estimated_remaining_usd
+            for backend_id in routable_backend_ids
+        )
+        model_pricing_complete = all(
+            model_name in settings.pricing for model_name in settings.models
+        )
         checks = {
             "config_valid": True,
             "backends_configured": len(settings.backends) > 0,
@@ -26,6 +38,8 @@ def build_router(*, load_settings_fn: Any) -> APIRouter:
             "models_configured": len(settings.models) > 0,
             "client_auth_configured": len(settings.client_api_keys) > 0,
             "admin_auth_configured": len(settings.admin_api_keys) > 0,
+            "backend_credit_config_complete": backend_credit_config_complete,
+            "model_pricing_complete": model_pricing_complete,
         }
         ready = all(checks.values())
         return JSONResponse(

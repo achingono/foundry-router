@@ -20,7 +20,7 @@
 - Additional admin/status diagnostics for oldest-reservation age if inexpensive.
 
 ## Output Quality Checklist
-- [ ] All mandatory outputs produced
-- [ ] All outputs reviewed before gate
-- [ ] Evidence log updated with output references
-- [ ] Documentation uses only `Implemented`/`Partially implemented`/`Planned`/`Design target` labels accurately
+- [x] All mandatory outputs produced
+- [x] All outputs reviewed before gate
+- [x] Evidence log updated with output references
+- [x] Documentation uses only `Implemented`/`Partially implemented`/`Planned`/`Design target` labels accurately

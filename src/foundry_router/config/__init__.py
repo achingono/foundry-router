@@ -145,6 +145,23 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_RETRY_MAX_DELAY_SECONDS",
     )
 
+    # Request intake bounds
+    max_request_body_bytes: Annotated[int, Field(ge=1024, le=100_000_000)] = Field(
+        default=2_097_152,
+        validation_alias="FOUNDRY_MAX_REQUEST_BODY_BYTES",
+        description="Maximum accepted request body size in bytes, enforced before JSON parsing",
+    )
+
+    # Reservation lifecycle safety
+    reservation_max_age_seconds: Annotated[float, Field(gt=0, allow_inf_nan=False)] = Field(
+        default=900.0,
+        validation_alias="FOUNDRY_RESERVATION_MAX_AGE_SECONDS",
+        description=(
+            "Maximum age of an inflight credit reservation before it is reclaimed by the "
+            "reaper, aligned to the backend client timeout plus margin"
+        ),
+    )
+
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO",
