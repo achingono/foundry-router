@@ -1,0 +1,200 @@
+name: Phase 07 - Deploy Foundry Router
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  validate-bicep:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Build Bicep template
+        run: az bicep build --file infra/main.bicep
+
+      - name: Validate Bicep template
+        run: |
+          az deployment group validate \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters.staging.json \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: validate-bicep
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Azure CLI
+        run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_STAGING }}
+
+      - name: Deploy to staging
+        run: |
+          az deployment group create \
+            --name foundry-router-staging-$(date +%s) \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_STAGING }} \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters.staging.json \
+            --parameters containerImageUri=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}
+
+  smoke-test-staging:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_STAGING }}
+
+      - name: Get FQDN
+        id: fqdn
+        run: |
+          FQDN=$(az deployment group show \
+            --name foundry-router-staging-* \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_STAGING }} \
+            --query 'properties.outputs.containerAppFqdn.value' -o tsv)
+          echo "app_url=https://$FQDN" >> $GITHUB_OUTPUT
+
+      - name: Wait for app to be ready
+        run: |
+          ./scripts/operations/smoke-test.sh \
+            --url "${{ steps.fqdn.outputs.app_url }}" \
+            --max-retries 30 \
+            --retry-delay 10
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: validate-bicep
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Azure CLI
+        run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PRODUCTION }}
+
+      - name: Deploy to production
+        run: |
+          az deployment group create \
+            --name foundry-router-prod-$(date +%s) \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
+            --template-file infra/main.bicep \
+            --parameters infra/parameters.prod.json \
+            --parameters containerImageUri=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}
+
+  smoke-test-production:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_PRODUCTION }}
+
+      - name: Get FQDN
+        id: fqdn
+        run: |
+          FQDN=$(az deployment group show \
+            --name foundry-router-prod-* \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
+            --query 'properties.outputs.containerAppFqdn.value' -o tsv)
+          echo "app_url=https://$FQDN" >> $GITHUB_OUTPUT
+
+      - name: Run smoke tests
+        run: |
+          ./scripts/operations/smoke-test.sh \
+            --url "${{ steps.fqdn.outputs.app_url }}" \
+            --admin-key "${{ secrets.ADMIN_API_KEY_PRODUCTION }}"

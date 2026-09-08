@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "environment": {
+      "value": "production"
+    },
+    "appName": {
+      "value": "foundry-router"
+    },
+    "containerImageUri": {
+      "value": "foundry-router:latest"
+    },
+    "containerPort": {
+      "value": 8000
+    },
+    "minReplicas": {
+      "value": 1
+    },
+    "maxReplicas": {
+      "value": 2
+    },
+    "tags": {
+      "value": {
+        "environment": "production",
+        "project": "foundry-router",
+        "phase": "07",
+        "managedBy": "bicep"
+      }
+    }
+  }
+}

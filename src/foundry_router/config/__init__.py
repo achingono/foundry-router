@@ -145,6 +145,35 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_RETRY_MAX_DELAY_SECONDS",
     )
 
+    # HTTP connection pool (Phase 07)
+    http_max_connections: Annotated[int, Field(ge=1, le=1000)] = Field(
+        default=100,
+        validation_alias="FOUNDRY_HTTP_MAX_CONNECTIONS",
+        description="Maximum total HTTP connections in the pool for all backends",
+    )
+    http_max_keepalive_connections: Annotated[int, Field(ge=1, le=1000)] = Field(
+        default=20,
+        validation_alias="FOUNDRY_HTTP_MAX_KEEPALIVE_CONNECTIONS",
+        description="Maximum HTTP keep-alive connections per endpoint",
+    )
+    http_keepalive_expiry_seconds: Annotated[float, Field(gt=0, allow_inf_nan=False)] = Field(
+        default=30.0,
+        validation_alias="FOUNDRY_HTTP_KEEPALIVE_EXPIRY_SECONDS",
+        description="How long to keep idle HTTP connections alive",
+    )
+    http2_enabled: bool = Field(
+        default=False,
+        validation_alias="FOUNDRY_HTTP2_ENABLED",
+        description="Enable HTTP/2 multiplexing for backend requests (requires h2 package)",
+    )
+
+    # Graceful shutdown (Phase 07)
+    graceful_shutdown_timeout_seconds: Annotated[float, Field(gt=0, allow_inf_nan=False)] = Field(
+        default=30.0,
+        validation_alias="FOUNDRY_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS",
+        description="Maximum time to wait for in-flight requests to complete during shutdown",
+    )
+
     # Request intake bounds
     max_request_body_bytes: Annotated[int, Field(ge=1024, le=100_000_000)] = Field(
         default=2_097_152,
