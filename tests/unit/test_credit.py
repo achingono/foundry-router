@@ -96,6 +96,16 @@ class TestRequestCostEstimation:
         assert credit._walk_text_chars({"num": 123, "flag": True}) == 0
         assert credit._walk_text_chars({"obj": object()}) == -1
 
+    def test_walk_text_chars_bounds_recursion_depth(self) -> None:
+        nested: object = "leaf"
+        for _ in range(credit.MAX_TEXT_WALK_DEPTH + 5):
+            nested = [nested]
+        assert credit._walk_text_chars(nested) == -1
+
+    def test_walk_text_chars_bounds_total_char_count(self) -> None:
+        oversized = ["x" * (credit.MAX_TEXT_WALK_CHARS // 2 + 1) for _ in range(3)]
+        assert credit._walk_text_chars(oversized) == -1
+
 
 class TestResponseUsageEstimation:
     def test_extracts_prompt_completion_tokens(self) -> None:
@@ -294,6 +304,117 @@ class TestCreditStore:
         assert live["backend_a"].active_reservations == 1
         assert live["backend_a"].reserved_inflight_usd == pytest.approx(5.0)
         assert live["backend_a"].next_reset_utc > live["backend_a"].current_cycle_start_utc
+        assert live["backend_a"].oldest_reservation_age_seconds is not None
+        assert live["backend_a"].oldest_reservation_age_seconds >= 0.0
+
+    def test_orphaned_reservation_older_than_max_age_is_reclaimed(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        asyncio.run(
+            store.try_assign_reservation(
+                "req-orphan",
+                "backend_a",
+                10.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        # Simulate an orphaned reservation created well in the past.
+        store._reservations["req-orphan"].created_at_monotonic -= 1000.0
+
+        assessment = asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+                reservation_max_age_seconds=60.0,
+            )
+        )
+        assert "req-orphan" not in store._reservations
+        assert assessment.available_credit_usd == pytest.approx(80.0)
+
+    def test_fresh_reservation_is_untouched_by_reaper(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        asyncio.run(
+            store.try_assign_reservation(
+                "req-fresh",
+                "backend_a",
+                10.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+
+        asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+                reservation_max_age_seconds=60.0,
+            )
+        )
+        assert "req-fresh" in store._reservations
+
+    def test_long_running_stream_reservation_not_reaped_when_within_max_age(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        asyncio.run(
+            store.try_assign_reservation(
+                "req-long-stream",
+                "backend_a",
+                10.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        # Still well within the configured max age despite running a while.
+        store._reservations["req-long-stream"].created_at_monotonic -= 30.0
+
+        asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+                reservation_max_age_seconds=60.0,
+            )
+        )
+        assert "req-long-stream" in store._reservations
+
+    def test_reaper_disabled_by_default_infinite_max_age(self) -> None:
+        store = InMemoryCreditStore()
+        settings = _settings_stub()
+
+        asyncio.run(store.sync_from_settings(settings))
+        asyncio.run(
+            store.try_assign_reservation(
+                "req-no-expiry",
+                "backend_a",
+                10.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        store._reservations["req-no-expiry"].created_at_monotonic -= 1_000_000.0
+
+        asyncio.run(
+            store.assess(
+                "backend_a",
+                1.0,
+                min_credit_reserve_usd=0.0,
+                min_credit_reserve_percent=0.0,
+            )
+        )
+        assert "req-no-expiry" in store._reservations
 
 
 class TestScoring:

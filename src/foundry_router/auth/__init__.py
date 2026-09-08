@@ -49,10 +49,13 @@ async def verify_client_auth(
             "Missing authentication: provide 'api-key' header or 'Authorization: Bearer <key>'"
         )
 
-    # Constant-time comparison against valid keys
+    # Constant-time comparison against valid keys, evaluated without early return
+    matched = False
     for valid_key in settings.client_api_keys:
         if hmac.compare_digest(provided_key, valid_key):
-            return provided_key
+            matched = True
+    if matched:
+        return provided_key
 
     raise AuthError("Invalid client API key")
 
@@ -86,10 +89,13 @@ async def verify_admin_auth(
             "'Authorization: Bearer <key>'"
         )
 
-    # Constant-time comparison against valid admin keys
+    # Constant-time comparison against valid admin keys, evaluated without early return
+    matched = False
     for valid_key in settings.admin_api_keys:
         if hmac.compare_digest(provided_key, valid_key):
-            return provided_key
+            matched = True
+    if matched:
+        return provided_key
 
     raise AuthError("Invalid admin API key")
 

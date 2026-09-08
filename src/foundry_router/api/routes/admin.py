@@ -39,6 +39,12 @@ def _admin_backend_status(
         "active_reservations": (
             credit_snapshot.active_reservations if credit_snapshot is not None else None
         ),
+        "oldest_reservation_age_seconds": (
+            round(credit_snapshot.oldest_reservation_age_seconds, 3)
+            if credit_snapshot is not None
+            and credit_snapshot.oldest_reservation_age_seconds is not None
+            else None
+        ),
         "current_cycle_start_utc": (
             credit_snapshot.current_cycle_start_utc.isoformat()
             if credit_snapshot is not None

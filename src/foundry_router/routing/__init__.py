@@ -141,6 +141,7 @@ async def select_candidate_backend(
             estimate.estimated_cost_usd,
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
+            reservation_max_age_seconds=settings.reservation_max_age_seconds,
         )
         candidate_detail = {
             "backend_id": backend_id,
@@ -195,6 +196,7 @@ async def select_candidate_backend(
             estimate.estimated_cost_usd,
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
+            reservation_max_age_seconds=settings.reservation_max_age_seconds,
         )
         if reserved:
             logger.info(

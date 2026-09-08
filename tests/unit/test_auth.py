@@ -53,6 +53,21 @@ class TestClientAuth:
         assert response.status_code == 200
         assert response.json()["authenticated"] is True
 
+    def test_valid_key_at_last_position_authenticates(self, monkeypatch) -> None:
+        test_settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key-a", "client-key-b", "client-key-c"]',
+            admin_api_keys_json='["admin-key-789"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+        )
+        monkeypatch.setattr("foundry_router.auth.load_settings", lambda: test_settings)
+
+        response: Response = client.get("/client-test", headers={"api-key": "client-key-c"})
+        assert response.status_code == 200
+        assert response.json()["authenticated"] is True
+
     def test_invalid_key(self) -> None:
         response: Response = client.get("/client-test", headers={"api-key": "invalid-key"})
         assert response.status_code == 401

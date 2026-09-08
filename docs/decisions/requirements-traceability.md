@@ -96,3 +96,18 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Outbound HTTP connection pool limits (`httpx.Limits`) and HTTP/2 multiplexing | `src/foundry_router/backends/` | `docs/plans/phase-07-infrastructure-operations/` |
 | Lifespan graceful shutdown reservation and stream drain handler (`SIGTERM`) | `src/foundry_router/main.py` | `docs/plans/phase-07-infrastructure-operations/` |
 | Automated CI/CD deployment pipeline and operational smoke test suite | `.github/workflows/deploy.yml`, `scripts/operations/` | `docs/plans/phase-07-infrastructure-operations/` |
+
+## Phase 08 Credit-Integrity and Boundary Hardening Traceability (Implemented)
+
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Server-owned reservation/finalization identity decoupled from client `x-request-id` (F1) | Implemented | `src/foundry_router/main.py`, `src/foundry_router/api/routes/openai.py` | `tests/unit/test_main.py` (`test_duplicate_client_request_id_creates_independent_reservations`) |
+| Bounded request intake: `413` before JSON parsing, bounded token-estimation recursion (F2) | Implemented | `src/foundry_router/api/common.py`, `src/foundry_router/config/__init__.py`, `src/foundry_router/credit.py` | `tests/unit/test_api_common.py`, `tests/unit/test_credit.py` |
+| Credit/pricing configuration completeness surfaced at readiness rather than a silent permanent 503 (F3) | Implemented | `src/foundry_router/api/routes/health.py` | `tests/unit/test_main.py` (readiness tests) |
+| Reservation age tracking, bounded reaper, and admin visibility of reservation count/age (F4) | Implemented | `src/foundry_router/credit.py`, `src/foundry_router/api/routes/admin.py`, `src/foundry_router/config/__init__.py` | `tests/unit/test_credit.py` (reaper tests) |
+| `parse_retry_after` hardened against non-ASCII digit headers (F5) | Implemented | `src/foundry_router/forwarding/__init__.py` | `tests/unit/test_main.py` (`test_retry_after_non_ascii_digit_returns_none`) |
+| Streaming usage extraction pre-filter with unchanged charged-cost semantics (F7) | Implemented | `src/foundry_router/forwarding/__init__.py` | `tests/unit/test_main.py` (terminal usage tests) |
+| Constant-work auth key comparison without early return (F8) | Implemented | `src/foundry_router/auth/__init__.py` | `tests/unit/test_auth.py` |
+| Per-request `sync_from_settings` retained for correctness; made cheap via settings-identity fast path (F6, revised) | Implemented | `src/foundry_router/routing/__init__.py`, `src/foundry_router/credit.py` | `tests/unit/test_credit.py`, `tests/unit/test_main.py` |
+
+F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast config-load error: hard-failing config load on incomplete per-backend credit configuration or per-model pricing would have made the existing request-time fail-closed defense (`insufficient_credit_capacity`) unreachable and would have broken legitimate partial-configuration scenarios exercised by the existing test suite (see [risk register](../../plans/phase-08-credit-integrity-hardening/risk-register.md)). F6 was implemented by retaining the per-request `sync_from_settings` call — removing it broke correctness for any caller that swaps the `Settings` singleton without a corresponding explicit sync — and instead adding a settings-object-identity fast path so repeated calls with the same (`lru_cache`d) settings instance are effectively free in production.

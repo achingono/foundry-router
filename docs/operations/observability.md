@@ -19,8 +19,16 @@ The router emits structured `routing_decision` logs on every candidate selection
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
-- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, and cycle boundary timestamps without disclosing secrets.
+- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets.
 - **Remaining scope**: Azure Table Storage shared-state adapters and cross-replica diagnostics are still planned. Redis is an optional future hot-state cache and requires separate approval.
+
+## Reservation Lifecycle Safety (Implemented)
+
+Each in-memory credit reservation tracks a monotonic creation timestamp. A bounded, lock-protected sweep (triggered lazily from `assess` and `try_assign_reservation`) reclaims reservations older than `reservation_max_age_seconds` (`FOUNDRY_RESERVATION_MAX_AGE_SECONDS`, default 900 seconds) without charging the backend, preventing inflight credit from leaking on client disconnects or abandoned streams. The sweep is disabled (no expiry) when the configured max age is left at its non-finite default state; production defaults enable it. The default is aligned to the backend client's read/connect timeout plus margin so legitimate long-running streams are not reclaimed prematurely.
+
+## Credit and Pricing Configuration Completeness (Implemented)
+
+`GET /health/ready` reports two additional checks: `backend_credit_config_complete` (every backend referenced by a model pool has a cycle start day, cycle allowance, and initial estimated remaining credit) and `model_pricing_complete` (every configured model has a pricing entry). Readiness returns `503` when either check fails, surfacing misconfiguration before it silently manifests as `insufficient_credit_capacity` at request time. This is a readiness-level check rather than a config-load failure, preserving the existing fail-closed request-time behavior for defense in depth.
 
 ## Prometheus & OpenTelemetry Metrics (Partially implemented)
 

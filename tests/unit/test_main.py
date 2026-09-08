@@ -540,6 +540,10 @@ class TestOpenAIEndpoints:
     def test_retry_after_is_clamped(self) -> None:
         assert _parse_retry_after("300", 30.0) == 30.0
 
+    def test_retry_after_non_ascii_digit_returns_none(self) -> None:
+        # U+0665 (Arabic-Indic digit five): str.isdigit() is True but float() cannot parse it.
+        assert _parse_retry_after("\u0665", 30.0) is None
+
     def test_retry_delay_schedule_is_bounded_and_honors_retry_after(self) -> None:
         assert (
             _retry_delay_seconds(
@@ -1293,6 +1297,53 @@ class TestOpenAIEndpoints:
         assert route_b.calls[0].request.headers["api-key"] == "key-b"
         assert "authorization" not in route_a.calls[0].request.headers
         assert "authorization" not in route_b.calls[0].request.headers
+
+    @respx.mock
+    def test_duplicate_client_request_id_creates_independent_reservations(
+        self, setup_settings
+    ) -> None:
+        usage_response = Response(
+            200,
+            json={"id": "ok", "usage": {"prompt_tokens": 100, "completion_tokens": 20}},
+        )
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=usage_response)
+        respx.post(
+            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(return_value=usage_response)
+
+        from foundry_router.main import _credit_store
+
+        async def total_available() -> float:
+            snapshot_a = await _credit_store.assess(
+                "backend_a", 0.0, min_credit_reserve_usd=0.0, min_credit_reserve_percent=0.0
+            )
+            snapshot_b = await _credit_store.assess(
+                "backend_b", 0.0, min_credit_reserve_usd=0.0, min_credit_reserve_percent=0.0
+            )
+            return snapshot_a.available_credit_usd + snapshot_b.available_credit_usd
+
+        asyncio.run(_credit_store.sync_from_settings(setup_settings))
+        before_total = asyncio.run(total_available())
+
+        duplicate_id = "client-supplied-duplicate-id"
+        for _ in range(2):
+            response = client.post(
+                "/openai/v1/responses",
+                headers={"api-key": "client-key-123", "x-request-id": duplicate_id},
+                json={"model": "gpt-4", "input": "hello"},
+            )
+            assert response.status_code == 200
+            # The client correlation ID is still echoed unchanged.
+            assert response.headers["x-request-id"] == duplicate_id
+
+        after_total = asyncio.run(total_available())
+
+        expected_single_charge = ((100 * 10.0) + (20 * 30.0)) / 1_000_000
+        assert before_total - after_total == pytest.approx(2 * expected_single_charge)
 
     @respx.mock
     def test_non_2xx_response_releases_reservation_without_charge(self, monkeypatch) -> None:

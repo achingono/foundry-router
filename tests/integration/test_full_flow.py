@@ -22,8 +22,10 @@ def setup_settings(monkeypatch):
         models_json='{"gpt-4": {"backends": {"mock_backend": 1.0}}}',
         client_api_keys_json='["client-key-123"]',
         admin_api_keys_json='["admin-key-789"]',
-        pricing_json="{}",
-        backend_cycle_start_day_json="{}",
+        pricing_json='{"gpt-4": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+        backend_cycle_start_day_json='{"mock_backend": 1}',
+        backend_cycle_allowance_usd_json='{"mock_backend": 200.0}',
+        backend_initial_estimated_remaining_usd_json='{"mock_backend": 200.0}',
     )
     monkeypatch.setattr("foundry_router.main.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.auth.load_settings", lambda: test_settings)

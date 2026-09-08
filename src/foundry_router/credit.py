@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
@@ -13,6 +14,9 @@ from typing import Any, Protocol
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 CHARS_PER_TOKEN_DIVISOR = 3
 MIN_SCORE_DENOMINATOR = 0.0001
+MAX_TEXT_WALK_DEPTH = 32
+MAX_TEXT_WALK_CHARS = 2_000_000
+DEFAULT_RESERVATION_MAX_AGE_SECONDS = math.inf
 
 
 class CreditState(StrEnum):
@@ -66,6 +70,7 @@ class BackendCreditLiveSnapshot:
     current_cycle_start_utc: datetime
     next_reset_utc: datetime
     active_reservations: int
+    oldest_reservation_age_seconds: float | None = None
 
 
 class CreditStore(Protocol):
@@ -81,6 +86,7 @@ class CreditStore(Protocol):
         min_credit_reserve_usd: float,
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
     ) -> CreditAssessment: ...
 
     async def try_assign_reservation(
@@ -92,6 +98,7 @@ class CreditStore(Protocol):
         min_credit_reserve_usd: float,
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
     ) -> bool: ...
 
     async def finalize_request(
@@ -135,6 +142,7 @@ class _Reservation:
     request_id: str
     backend_id: str
     estimated_cost_usd: float
+    created_at_monotonic: float = field(default_factory=time.monotonic)
 
 
 def calculate_cycle_window(now_utc: datetime, cycle_start_day: int) -> CycleWindow:
@@ -294,11 +302,13 @@ def _estimate_text_tokens(value: Any) -> int:
     return _chars_to_tokens_from_count(total_chars)
 
 
-def _walk_text_chars(value: Any) -> int:
+def _walk_text_chars(value: Any, *, depth: int = 0) -> int:
+    if depth > MAX_TEXT_WALK_DEPTH:
+        return -1
     if value is None:
         return 0
     if isinstance(value, str):
-        return len(value)
+        return len(value) if len(value) <= MAX_TEXT_WALK_CHARS else -1
     if isinstance(value, (int, float, bool)):
         return 0
     if isinstance(value, (bytes, bytearray, memoryview)):
@@ -306,18 +316,22 @@ def _walk_text_chars(value: Any) -> int:
     if isinstance(value, list):
         total = 0
         for item in value:
-            chars = _walk_text_chars(item)
+            chars = _walk_text_chars(item, depth=depth + 1)
             if chars < 0:
                 return -1
             total += chars
+            if total > MAX_TEXT_WALK_CHARS:
+                return -1
         return total
     if isinstance(value, dict):
         total = 0
         for item in value.values():
-            chars = _walk_text_chars(item)
+            chars = _walk_text_chars(item, depth=depth + 1)
             if chars < 0:
                 return -1
             total += chars
+            if total > MAX_TEXT_WALK_CHARS:
+                return -1
         return total
     return -1
 
@@ -343,8 +357,13 @@ class InMemoryCreditStore:
         self._lock = asyncio.Lock()
         self._snapshots: dict[str, _BackendCreditSnapshot] = {}
         self._reservations: dict[str, _Reservation] = {}
+        self._last_synced_settings_id: int | None = None
 
     async def sync_from_settings(self, settings: Any) -> None:
+        # `load_settings` is an lru_cache singleton, so the common production case
+        # is repeated calls with the identical settings object; skip redundant work.
+        if id(settings) == self._last_synced_settings_id:
+            return
         now = datetime.now(UTC)
         async with self._lock:
             for backend_id in settings.backends:
@@ -369,6 +388,7 @@ class InMemoryCreditStore:
                 else:
                     existing.cycle_start_day = cycle_start_day
                     existing.cycle_allowance_usd = allowance
+            self._last_synced_settings_id = id(settings)
 
     async def assess(
         self,
@@ -378,9 +398,11 @@ class InMemoryCreditStore:
         min_credit_reserve_usd: float,
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
     ) -> CreditAssessment:
         now = now_utc or datetime.now(UTC)
         async with self._lock:
+            self._sweep_expired_reservations_locked(reservation_max_age_seconds)
             snapshot = self._snapshots.get(backend_id)
             if snapshot is None:
                 return CreditAssessment(
@@ -408,9 +430,11 @@ class InMemoryCreditStore:
         min_credit_reserve_usd: float,
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
     ) -> bool:
         now = now_utc or datetime.now(UTC)
         async with self._lock:
+            self._sweep_expired_reservations_locked(reservation_max_age_seconds)
             snapshot = self._snapshots.get(backend_id)
             if snapshot is None:
                 return False
@@ -462,6 +486,7 @@ class InMemoryCreditStore:
         async with self._lock:
             self._snapshots.clear()
             self._reservations.clear()
+            self._last_synced_settings_id = None
 
     async def apply_reconciled_remaining(
         self,
@@ -506,10 +531,17 @@ class InMemoryCreditStore:
         snapshots: dict[str, BackendCreditLiveSnapshot] = {}
         async with self._lock:
             reservation_counts: dict[str, int] = {}
+            oldest_reservation_monotonic: dict[str, float] = {}
+            now_monotonic = time.monotonic()
             for reservation in self._reservations.values():
                 reservation_counts[reservation.backend_id] = (
                     reservation_counts.get(reservation.backend_id, 0) + 1
                 )
+                existing_oldest = oldest_reservation_monotonic.get(reservation.backend_id)
+                if existing_oldest is None or reservation.created_at_monotonic < existing_oldest:
+                    oldest_reservation_monotonic[reservation.backend_id] = (
+                        reservation.created_at_monotonic
+                    )
 
             for backend_id in backend_ids:
                 snapshot = self._snapshots.get(backend_id)
@@ -524,6 +556,7 @@ class InMemoryCreditStore:
                     min_credit_reserve_percent,
                     now,
                 )
+                oldest_monotonic = oldest_reservation_monotonic.get(backend_id)
                 snapshots[backend_id] = BackendCreditLiveSnapshot(
                     state=assessment.state,
                     available_credit_usd=assessment.available_credit_usd,
@@ -533,8 +566,30 @@ class InMemoryCreditStore:
                     current_cycle_start_utc=cycle.current_cycle_start_utc,
                     next_reset_utc=cycle.next_reset_utc,
                     active_reservations=reservation_counts.get(backend_id, 0),
+                    oldest_reservation_age_seconds=(
+                        max(0.0, now_monotonic - oldest_monotonic)
+                        if oldest_monotonic is not None
+                        else None
+                    ),
                 )
         return snapshots
+
+    def _sweep_expired_reservations_locked(self, reservation_max_age_seconds: float) -> None:
+        """Reclaim inflight credit from reservations older than the configured max age.
+
+        Bounded to the current number of active reservations; must be called with
+        `self._lock` already held.
+        """
+        if not math.isfinite(reservation_max_age_seconds):
+            return
+        now_monotonic = time.monotonic()
+        expired = [
+            reservation
+            for reservation in self._reservations.values()
+            if (now_monotonic - reservation.created_at_monotonic) > reservation_max_age_seconds
+        ]
+        for reservation in expired:
+            self._release_locked(reservation, charge_reserved=False, charged_cost_usd=None)
 
     def _release_locked(
         self,
