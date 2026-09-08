@@ -24,9 +24,17 @@ class AllowedBackendClient:
             backend_id: httpx.URL(str(config.endpoint))
             for backend_id, config in self._settings.backends.items()
         }
+        # Phase 07: Configurable connection pool with keep-alive tuning
+        limits = httpx.Limits(
+            max_connections=self._settings.http_max_connections,
+            max_keepalive_connections=self._settings.http_max_keepalive_connections,
+            keepalive_expiry=self._settings.http_keepalive_expiry_seconds,
+        )
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0),
             follow_redirects=False,
+            limits=limits,
+            http2=self._settings.http2_enabled,  # Enable HTTP/2 multiplexing if configured
         )
 
     @property

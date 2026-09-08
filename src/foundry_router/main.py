@@ -53,6 +53,11 @@ _metrics_store = InMemoryMetricsStore()
 _reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
 _reconciliation_loop: ReconciliationLoop | None = None
 
+# Phase 07: Graceful shutdown with request draining
+_active_requests = 0
+_active_requests_lock = asyncio.Lock()
+_shutdown_event: asyncio.Event | None = None
+
 # Compatibility aliases used by existing tests.
 _backend_health_state = _health_store.state
 _backend_health_lock = _health_store.lock
@@ -99,6 +104,42 @@ def set_reconciliation_provider(provider: ReconciliationProvider) -> None:
     _reconciliation_provider = provider
 
 
+async def _increment_active_requests() -> None:
+    """Increment active request counter."""
+    global _active_requests
+    async with _active_requests_lock:
+        _active_requests += 1
+
+
+async def _decrement_active_requests() -> None:
+    """Decrement active request counter."""
+    global _active_requests
+    async with _active_requests_lock:
+        _active_requests -= 1
+
+
+async def _drain_active_requests(timeout_seconds: float) -> None:
+    """Wait for active requests to complete, up to timeout."""
+    import time
+
+    start_time = time.time()
+    check_interval = 0.1
+    while time.time() - start_time < timeout_seconds:
+        async with _active_requests_lock:
+            if _active_requests == 0:
+                logger.info("all_active_requests_drained")
+                return
+        logger.debug("waiting_for_requests_to_drain", active_count=_active_requests)
+        await asyncio.sleep(check_interval)
+    async with _active_requests_lock:
+        remaining = _active_requests
+    logger.warning(
+        "graceful_shutdown_timeout_reached",
+        active_requests=remaining,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def _reconciliation_status_snapshot() -> dict[str, Any]:
     return (
         _reconciliation_loop.status_snapshot()
@@ -116,6 +157,7 @@ def _reconciliation_status_snapshot() -> dict[str, Any]:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> Any:
+    global _shutdown_event
     settings = load_settings()
     setup_logging(settings.log_level)
     logger.info(
@@ -134,13 +176,18 @@ async def lifespan(_app: FastAPI) -> Any:
         logger=logger,
     )
     await _reconciliation_loop.start()
+    # Phase 07: Initialize shutdown event for graceful draining
+    _shutdown_event = asyncio.Event()
     yield
+    # Phase 07: Drain in-flight requests on shutdown
     logger.info("foundry_router_shutting_down")
+    await _drain_active_requests(settings.graceful_shutdown_timeout_seconds)
     await _reset_reconciliation_state()
     await close_backend_client()
     await _reset_backend_health_state()
     await _reset_credit_state()
     await _reset_metrics_state()
+    _shutdown_event = None
 
 
 app = FastAPI(
@@ -169,6 +216,16 @@ async def add_correlation_id(request: Request, call_next: Any) -> Response:
         return response
     finally:
         structlog.contextvars.clear_contextvars()
+
+
+@app.middleware("http")
+async def track_active_requests(request: Request, call_next: Any) -> Response:
+    """Phase 07: Track active requests for graceful shutdown draining."""
+    await _increment_active_requests()
+    try:
+        return await call_next(request)
+    finally:
+        await _decrement_active_requests()
 
 
 @app.exception_handler(Exception)
