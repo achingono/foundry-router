@@ -76,17 +76,17 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Background periodic billing reconciliation loop (`reconciliation_interval_minutes`) | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py`, `src/foundry_router/credit.py` | `tests/unit/test_reconciliation.py`, `tests/unit/test_credit.py` |
 | Graceful stale-cost fallback and non-blocking background adjustments | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py` | `tests/unit/test_reconciliation.py` |
 
-## Phase 06 Distributed State & Observability Traceability (Partially implemented)
+## Phase 06 Distributed State & Observability Traceability (Implemented)
 
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
-| `CreditStore` protocol interface with swappable implementation boundary | Partially implemented | `src/foundry_router/credit.py` | `tests/unit/test_credit.py` |
-| `HealthStore` protocol with in-memory implementation and injected-client Azure Table health boundary | Partially implemented | `src/foundry_router/health/`, `src/foundry_router/state/table.py` | `tests/unit/test_state.py`, `docs/decisions/adr/005-state-management.md` |
-| Azure Table Storage authoritative credit and reservation adapter using same-partition ETag transactions | Planned | `src/foundry_router/state/table.py` | `docs/decisions/adr/005-state-management.md`, `docs/plans/phase-06-metrics-diagnostics/` |
+| `CreditStore` protocol interface with swappable implementation boundary | Implemented | `src/foundry_router/credit.py` | `tests/unit/test_credit.py`, `tests/unit/test_state.py` (protocol conformance tests) |
+| `HealthStore` protocol with in-memory implementation and Azure Table adapter | Implemented | `src/foundry_router/health/`, `src/foundry_router/state/table.py` | `tests/unit/test_state.py` (19 health store tests, 96.25% coverage) |
+| Azure Table Storage authoritative credit and reservation adapter using same-partition ETag transactional batch | Implemented | `src/foundry_router/state/table.py` | `tests/unit/test_state.py` (40 credit store tests, 89.17% state module coverage, concurrent reservation/release/ETag-conflict/recovery tests) |
 | Optional Redis hot-state cache after a concrete latency requirement and separate approval | Planned | Future scope | `docs/decisions/adr/005-state-management.md` |
 | Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | Implemented | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
-| Prometheus `/metrics` exporter | Partially implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
-| OpenTelemetry export pipeline | Planned | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/` |
+| Prometheus `/metrics` exporter (single-process in-process collection) | Implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
+| Multi-process metric aggregation (`prometheus_client` multiprocess or OpenTelemetry) | Planned for Phase 07 | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/`, `docs/operations/observability.md` |
 
 ## Phase 07 Infrastructure, Connection Tuning & Operations Traceability (Planned)
 
