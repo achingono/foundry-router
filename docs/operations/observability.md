@@ -1,6 +1,6 @@
 # Observability and Troubleshooting
 
-## Status: Partially implemented
+## Status: Partially implemented (Phase 06 distributed state adapters complete; multi-process aggregation planned Phase 07)
 
 Use structured JSON logs with correlation IDs (`x-request-id`). Record request ID, model, backend, endpoint type, status, latency, tokens, estimated cost, retry count, streaming flag, routing state, and routing score. Never record authorization headers, API keys, prompts, or model outputs.
 
@@ -15,12 +15,12 @@ The router emits structured `routing_decision` logs on every candidate selection
 - `estimated_request_cost_usd`: Conservative request reservation amount
 - `candidates`: List of evaluated candidate backends with `health_state`, `cooldown_remaining_seconds`, `credit_state`, `available_credit_usd`, `projected_unused_credit_usd`, and composite `score`.
 
-## Live Administrative Diagnostics (Partially implemented)
+## Live Administrative Diagnostics (Implemented)
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
-- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets.
-- **Remaining scope**: Azure Table Storage shared-state adapters and cross-replica diagnostics are still planned. Redis is an optional future hot-state cache and requires separate approval.
+- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Backed by Azure Table Storage adapters (`AzureTableCreditStore`, `AzureTableHealthStore`) for multi-replica deployments.
+- **Multi-replica support**: Azure Table Storage integration enables consistent credit accounting and health state across multiple container instances.
 
 ## Reservation Lifecycle Safety (Implemented)
 
@@ -39,8 +39,12 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `foundry_router_backend_health_state{backend}`: Current backend health state gauge.
 - `foundry_router_credit_available_usd{backend}`: Current spendable balance gauge.
 - `/metrics` uses admin authentication (`x-admin-key` or Bearer admin token).
+- Single-process in-memory collection via `InMemoryMetricsStore` (implemented in Phase 06).
 
-OpenTelemetry exporters and cross-process aggregation are still planned.
+Multi-process metric aggregation (for `--workers > 1` deployments) requires either:
+- `prometheus_client` multiprocess mode (file-based metric storage in `PROMETHEUS_MULTIPROC_DIR`)
+- OpenTelemetry exporter integration
+- Both are planned for Phase 07 operations hardening.
 
 ## Operator Checks
 
