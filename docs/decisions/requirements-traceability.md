@@ -88,14 +88,14 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Prometheus `/metrics` exporter (single-process in-process collection) | Implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Multi-process metric aggregation (`prometheus_client` multiprocess or OpenTelemetry) | Planned for Phase 07 | `src/foundry_router/metrics/` | `docs/plans/phase-06-metrics-diagnostics/`, `docs/operations/observability.md` |
 
-## Phase 07 Infrastructure, Connection Tuning & Operations Traceability (Planned)
+## Phase 07 Infrastructure, Connection Tuning & Operations Traceability (Implemented)
 
-| Requirement | Target Package | Plan Reference |
-| --- | --- | --- |
-| Bicep Infrastructure as Code for Azure Container Apps & Key Vault | `infra/` | `docs/plans/phase-07-infrastructure-operations/` |
-| Outbound HTTP connection pool limits (`httpx.Limits`) and HTTP/2 multiplexing | `src/foundry_router/backends/` | `docs/plans/phase-07-infrastructure-operations/` |
-| Lifespan graceful shutdown reservation and stream drain handler (`SIGTERM`) | `src/foundry_router/main.py` | `docs/plans/phase-07-infrastructure-operations/` |
-| Automated CI/CD deployment pipeline and operational smoke test suite | `.github/workflows/deploy.yml`, `scripts/operations/` | `docs/plans/phase-07-infrastructure-operations/` |
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Bicep Infrastructure as Code for Azure Container Apps & Key Vault | Implemented | `infra/main.bicep`, `infra/parameters.*.json` | `infra/README.md` (deployment guide, 200+ LOC Bicep with Log Analytics, Key Vault, container app config) |
+| Outbound HTTP connection pool limits (`httpx.Limits`) and HTTP/2 multiplexing | Implemented | `src/foundry_router/backends/__init__.py`, `src/foundry_router/config/__init__.py` | Settings fields (http_max_connections, http_max_keepalive_connections, http_keepalive_expiry_seconds, http2_enabled); AllowedBackendClient integration; all 227 tests passing |
+| Lifespan graceful shutdown with request draining (`SIGTERM` timeout) | Implemented | `src/foundry_router/main.py` | `_active_requests` counter, `track_active_requests` middleware, `_drain_active_requests()` with timeout, integrated into lifespan context |
+| Automated CI/CD deployment pipeline and operational smoke test suite | Implemented | `.github/workflows/deploy.yml`, `scripts/operations/smoke-test.sh` | GitHub Actions multi-stage workflow (build, validate, deploy staging, smoke tests); bash smoke test with retry logic and admin diagnostics validation |
 
 ## Phase 08 Credit-Integrity and Boundary Hardening Traceability (Implemented)
 
