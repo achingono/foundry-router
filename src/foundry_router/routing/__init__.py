@@ -10,6 +10,8 @@ from fastapi import Response
 from fastapi.responses import StreamingResponse
 
 from foundry_router.credit import (
+    CreditAssessmentContext,
+    CreditReservePolicy,
     CreditState,
     estimate_request_cost,
     score_credit_assessment,
@@ -136,13 +138,27 @@ async def select_candidate_backend(
     candidate_details: list[dict[str, Any]] = []
     has_credit_capacity = False
     for backend_id in health_eligible:
-        assessment = await credit_store.assess(
-            backend_id,
-            estimate.estimated_cost_usd,
-            min_credit_reserve_usd=settings.min_credit_reserve_usd,
-            min_credit_reserve_percent=settings.min_credit_reserve_percent,
-            reservation_max_age_seconds=settings.reservation_max_age_seconds,
-        )
+        # Use bundled context when the store exposes it (reduces PLR0913 call-site verbosity);
+        # fall back to scalar Protocol args for test doubles / legacy stores.
+        if hasattr(credit_store, "assess_with_context"):
+            ctx = CreditAssessmentContext(
+                reserve_policy=CreditReservePolicy(
+                    min_credit_reserve_usd=settings.min_credit_reserve_usd,
+                    min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                ),
+                reservation_max_age_seconds=settings.reservation_max_age_seconds,
+            )
+            assessment = await credit_store.assess_with_context(
+                backend_id, estimate.estimated_cost_usd, ctx
+            )
+        else:
+            assessment = await credit_store.assess(
+                backend_id,
+                estimate.estimated_cost_usd,
+                min_credit_reserve_usd=settings.min_credit_reserve_usd,
+                min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                reservation_max_age_seconds=settings.reservation_max_age_seconds,
+            )
         candidate_detail = {
             "backend_id": backend_id,
             "health_state": snapshots[backend_id].state,
@@ -190,14 +206,26 @@ async def select_candidate_backend(
 
     scored_candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
     for _score, _weight, backend_id in scored_candidates:
-        reserved = await credit_store.try_assign_reservation(
-            request_id,
-            backend_id,
-            estimate.estimated_cost_usd,
-            min_credit_reserve_usd=settings.min_credit_reserve_usd,
-            min_credit_reserve_percent=settings.min_credit_reserve_percent,
-            reservation_max_age_seconds=settings.reservation_max_age_seconds,
-        )
+        if hasattr(credit_store, "try_assign_with_context"):
+            ctx2 = CreditAssessmentContext(
+                reserve_policy=CreditReservePolicy(
+                    min_credit_reserve_usd=settings.min_credit_reserve_usd,
+                    min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                ),
+                reservation_max_age_seconds=settings.reservation_max_age_seconds,
+            )
+            reserved = await credit_store.try_assign_with_context(
+                request_id, backend_id, estimate.estimated_cost_usd, ctx2
+            )
+        else:
+            reserved = await credit_store.try_assign_reservation(
+                request_id,
+                backend_id,
+                estimate.estimated_cost_usd,
+                min_credit_reserve_usd=settings.min_credit_reserve_usd,
+                min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                reservation_max_age_seconds=settings.reservation_max_age_seconds,
+            )
         if reserved:
             logger.info(
                 "routing_decision",

@@ -59,6 +59,62 @@ class CreditAssessment:
 
 
 @dataclass(frozen=True)
+class CreditReservePolicy:
+    """Bundled reserve knobs to reduce parameter bloat (PLR0913).
+
+    Groups the two settings that jointly define the safety reserve:
+    ``max(min_credit_reserve_usd, cycle_allowance_usd * min_credit_reserve_percent/100)``.
+    Use this at call sites that currently pass the two fields separately; future
+    ``CreditStore`` revisions may accept this object directly to keep signatures
+    concise when additional policy flags are added.
+    """
+
+    min_credit_reserve_usd: float
+    min_credit_reserve_percent: float
+
+
+@dataclass(frozen=True)
+class CreditAssessmentContext:
+    """Bundled context for assessment/reservation decisions.
+
+    Combines reserve policy with clock and aging knobs so call sites can pass a
+    single object instead of 4+ scalar args. This is the intended direction for
+    reducing PLR0913 bloat; the current ``CreditStore`` Protocol retains explicit
+    scalar args for backward compatibility. ``InMemoryCreditStore`` and
+    ``AzureTableCreditStore`` now expose ``assess_with_context`` /
+    ``try_assign_with_context`` that delegate through this object, and new code
+    should prefer constructing
+    it via ``CreditAssessmentContext.from_settings(settings, now_utc=...)`` when
+    available.
+    """
+
+    reserve_policy: CreditReservePolicy
+    now_utc: datetime | None = None
+    reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS
+
+    @classmethod
+    def from_settings(
+        cls,
+        settings: Any,
+        *,
+        now_utc: datetime | None = None,
+        reservation_max_age_seconds: float | None = None,
+    ) -> CreditAssessmentContext:
+        return cls(
+            reserve_policy=CreditReservePolicy(
+                min_credit_reserve_usd=float(settings.min_credit_reserve_usd),
+                min_credit_reserve_percent=float(settings.min_credit_reserve_percent),
+            ),
+            now_utc=now_utc,
+            reservation_max_age_seconds=(
+                float(settings.reservation_max_age_seconds)
+                if reservation_max_age_seconds is None
+                else float(reservation_max_age_seconds)
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class BackendCreditLiveSnapshot:
     """Live per-backend credit diagnostics for admin and metrics surfaces."""
 
@@ -391,19 +447,16 @@ class InMemoryCreditStore:
                     existing.cycle_allowance_usd = allowance
             self._last_synced_settings_id = id(settings)
 
-    async def assess(
+    async def assess_with_context(
         self,
         backend_id: str,
         estimated_request_cost_usd: float,
-        *,
-        min_credit_reserve_usd: float,
-        min_credit_reserve_percent: float,
-        now_utc: datetime | None = None,
-        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
+        context: CreditAssessmentContext,
     ) -> CreditAssessment:
-        now = now_utc or datetime.now(UTC)
+        """Context-based assess that bundles reserve policy + clock + aging."""
+        now = context.now_utc or datetime.now(UTC)
         async with self._lock:
-            self._sweep_expired_reservations_locked(reservation_max_age_seconds)
+            self._sweep_expired_reservations_locked(context.reservation_max_age_seconds)
             snapshot = self._snapshots.get(backend_id)
             if snapshot is None:
                 return CreditAssessment(
@@ -417,14 +470,13 @@ class InMemoryCreditStore:
             return self._assessment(
                 snapshot,
                 estimated_request_cost_usd,
-                min_credit_reserve_usd,
-                min_credit_reserve_percent,
+                context.reserve_policy.min_credit_reserve_usd,
+                context.reserve_policy.min_credit_reserve_percent,
                 now,
             )
 
-    async def try_assign_reservation(
+    async def assess(
         self,
-        request_id: str,
         backend_id: str,
         estimated_request_cost_usd: float,
         *,
@@ -432,10 +484,29 @@ class InMemoryCreditStore:
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
         reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
+    ) -> CreditAssessment:
+        # Scalar Protocol path retained for backward compat; delegates via bundled context.
+        context = CreditAssessmentContext(
+            reserve_policy=CreditReservePolicy(
+                min_credit_reserve_usd=min_credit_reserve_usd,
+                min_credit_reserve_percent=min_credit_reserve_percent,
+            ),
+            now_utc=now_utc,
+            reservation_max_age_seconds=reservation_max_age_seconds,
+        )
+        return await self.assess_with_context(backend_id, estimated_request_cost_usd, context)
+
+    async def try_assign_with_context(
+        self,
+        request_id: str,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        context: CreditAssessmentContext,
     ) -> bool:
-        now = now_utc or datetime.now(UTC)
+        """Context-based reservation that bundles policy + clock + aging."""
+        now = context.now_utc or datetime.now(UTC)
         async with self._lock:
-            self._sweep_expired_reservations_locked(reservation_max_age_seconds)
+            self._sweep_expired_reservations_locked(context.reservation_max_age_seconds)
             snapshot = self._snapshots.get(backend_id)
             if snapshot is None:
                 return False
@@ -448,8 +519,8 @@ class InMemoryCreditStore:
             assessment = self._assessment(
                 snapshot,
                 estimated_request_cost_usd,
-                min_credit_reserve_usd,
-                min_credit_reserve_percent,
+                context.reserve_policy.min_credit_reserve_usd,
+                context.reserve_policy.min_credit_reserve_percent,
                 now,
             )
             if assessment.state not in {CreditState.USABLE, CreditState.CONSERVATION}:
@@ -465,6 +536,29 @@ class InMemoryCreditStore:
                 estimated_cost_usd=estimated_request_cost_usd,
             )
             return True
+
+    async def try_assign_reservation(
+        self,
+        request_id: str,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = DEFAULT_RESERVATION_MAX_AGE_SECONDS,
+    ) -> bool:
+        context = CreditAssessmentContext(
+            reserve_policy=CreditReservePolicy(
+                min_credit_reserve_usd=min_credit_reserve_usd,
+                min_credit_reserve_percent=min_credit_reserve_percent,
+            ),
+            now_utc=now_utc,
+            reservation_max_age_seconds=reservation_max_age_seconds,
+        )
+        return await self.try_assign_with_context(
+            request_id, backend_id, estimated_request_cost_usd, context
+        )
 
     async def finalize_request(
         self,

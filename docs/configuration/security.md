@@ -1,6 +1,6 @@
 # Security
 
-## Status: Partially implemented
+## Status: Implemented (auth, allow-list, redaction, intake bounds, constant-time HMAC; TLS/network remain deployment responsibilities)
 
 The proxy must not be an unrestricted public relay. Client requests require authentication, and `/admin/status` requires separate authentication. The implemented backend client accepts only each configured backend's HTTPS origin and base path, disables redirects, injects only the selected backend credential per attempt, propagates the validated correlation ID, and strips sensitive headers. Retry/failover reuse the same credential-isolation rules and do not forward client secrets upstream. User input must not create arbitrary outbound destinations or an SSRF path. Public listener TLS and network controls remain deployment responsibilities.
 

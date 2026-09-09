@@ -4,7 +4,7 @@ Contributor and coding-agent instructions for Foundry Router.
 
 ## Repository Status
 
-This repository contains a production-ready implementation through Phase 07. Configuration validation, authentication, health checks, model listing, structured logging, backend request safety, packaging, CI definitions, streaming/non-streaming forwarding, retries, cooldowns, credit management with distributed state (Azure Table Storage adapters), comprehensive observability (admin diagnostics, Prometheus metrics), Infrastructure as Code (Bicep), connection pool tuning, graceful shutdown, and CI/CD automation are implemented. Multi-worker metrics aggregation via prometheus_client multiprocess mode or OpenTelemetry remains planned for future optimization. Do not describe planned behavior as implemented, invent Azure resource IDs, or assume that a documented endpoint is runnable. Use the status labels `Implemented`, `Partially implemented`, `Planned`, and `Design target` consistently.
+This repository contains a production-ready implementation through Phase 08. Configuration validation, authentication, health checks, model listing, structured logging, backend request safety, packaging, CI definitions, streaming/non-streaming forwarding, retries, cooldowns, credit management with distributed state (Azure Table Storage adapters), comprehensive observability (admin diagnostics, Prometheus metrics single-process), Infrastructure as Code (Bicep), connection pool tuning, graceful shutdown, CI/CD automation, and credit-integrity boundary hardening (server-owned reservation keys, intake bounds, readiness completeness, reaper, constant-time auth) are implemented. Multi-worker metrics aggregation via prometheus_client multiprocess mode or OpenTelemetry remains planned for future optimization. Do not describe planned behavior as implemented, invent Azure resource IDs, or assume that a documented endpoint is runnable. Use the status labels `Implemented`, `Partially implemented`, `Planned`, and `Design target` consistently.
 
 ## Canonical References
 
@@ -68,6 +68,7 @@ Implement in this order unless a plan justifies another sequence:
 5. Credit-cycle calculations, pricing-driven estimates, safety reserves, and concurrent reservations.
 6. Explainable model-specific routing and cost reconciliation.
 7. Metrics, administrative status, IaC, CI/CD, and operational smoke tests.
+8. Credit-integrity boundary hardening (server-owned reservation IDs, bounded intake, readiness completeness checks, reservation reaper, constant-time auth, Retry-After hardening).
 
 ## Planning Templates
 

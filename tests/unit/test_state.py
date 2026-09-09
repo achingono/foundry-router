@@ -710,8 +710,6 @@ def test_table_health_store_handles_parse_errors() -> None:
 
 def test_table_credit_store_assessment_with_conservation_state() -> None:
     async def run() -> None:
-        from datetime import timedelta
-
         client = FakeTableClient()
         store = AzureTableCreditStore(client)
         settings = _settings_stub()
@@ -1086,7 +1084,7 @@ def test_table_health_store_write_with_exception() -> None:
                 return None
 
             async def upsert_entity(self, entity: Mapping[str, object]) -> None:
-                raise Exception("Database error")
+                raise RuntimeError("Database error")
 
         store = AzureTableHealthStore(FailingClient())
 

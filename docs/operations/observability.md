@@ -1,6 +1,6 @@
 # Observability and Troubleshooting
 
-## Status: Partially implemented (Phase 06 distributed state adapters complete; multi-process aggregation planned Phase 07)
+## Status: Implemented (single-process Prometheus + live diagnostics; multi-process aggregation Planned)
 
 Use structured JSON logs with correlation IDs (`x-request-id`). Record request ID, model, backend, endpoint type, status, latency, tokens, estimated cost, retry count, streaming flag, routing state, and routing score. Never record authorization headers, API keys, prompts, or model outputs.
 
@@ -30,7 +30,7 @@ Each in-memory credit reservation tracks a monotonic creation timestamp. A bound
 
 `GET /health/ready` reports two additional checks: `backend_credit_config_complete` (every backend referenced by a model pool has a cycle start day, cycle allowance, and initial estimated remaining credit) and `model_pricing_complete` (every configured model has a pricing entry). Readiness returns `503` when either check fails, surfacing misconfiguration before it silently manifests as `insufficient_credit_capacity` at request time. This is a readiness-level check rather than a config-load failure, preserving the existing fail-closed request-time behavior for defense in depth.
 
-## Prometheus & OpenTelemetry Metrics (Partially implemented)
+## Prometheus & OpenTelemetry Metrics (Implemented single-process; multi-process aggregation Planned)
 
 The router exposes a Prometheus-compatible `/metrics` endpoint for in-process metrics:
 - `foundry_router_requests_total{model, backend, status}`: Request outcome counter.
@@ -44,7 +44,7 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 Multi-process metric aggregation (for `--workers > 1` deployments) requires either:
 - `prometheus_client` multiprocess mode (file-based metric storage in `PROMETHEUS_MULTIPROC_DIR`)
 - OpenTelemetry exporter integration
-- Both are planned for Phase 07 operations hardening.
+- Both remain **Planned**; current implementation (`src/foundry_router/metrics/__init__.py:15` `InMemoryMetricsStore`) is single-process only.
 
 ## Operator Checks
 

@@ -1,6 +1,6 @@
 # Routing and Scheduling
 
-## Status: Implemented (Core, Credit Scheduling, Reconciliation) / Planned (Distributed Stores)
+## Status: Implemented (Core, Credit Scheduling, Reconciliation, Distributed Stores; multi-worker metrics Planned)
 
 For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 
@@ -59,6 +59,6 @@ Every routing decision emits a structured `routing_decision` event containing:
 
 Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. Allow one immediate backend failover by default, use bounded exponential backoff, honor `Retry-After` within a maximum delay, and never retry indefinitely. A 429 enters quota cooldown. No retry or failover occurs after streaming has meaningfully started.
 
-## State Store Abstractions (Phases 5–6)
+## State Store Abstractions (Phases 5–6, Implemented)
 
-Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`. `CreditStore` is partially implemented; `HealthStore` and the injected-client Azure Table health boundary are implemented. Before future scale-out (`max_replicas > 1`), both protocols will be backed by Azure Table Storage: same-backend-partition transactional batches protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis is an optional later cache and cannot replace the authoritative store.
+Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`; multi-replica deployments use `AzureTableCreditStore` and `AzureTableHealthStore` (`src/foundry_router/state/table.py`). Both protocols (`CreditStore`, `HealthStore`) are implemented with swappable adapters. Azure Table Storage same-backend-partition transactional batches (ETag-guarded `balance` + `req-{id}` rows) protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis remains an optional later cache and cannot replace the authoritative store.

@@ -1,6 +1,6 @@
 # Configuration
 
-## Status: Partially implemented
+## Status: Implemented (Phase 08 bounds included; multi-worker metrics env still Planned)
 
 Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Retry/cooldown/failover settings are runtime behavior, and Phase 04 local credit estimation settings are runtime-enforced.
 

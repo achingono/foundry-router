@@ -1,6 +1,6 @@
 # Public API
 
-## Status: Partially implemented
+## Status: Implemented (Responses, embeddings, models, health, admin/status, metrics single-process; `chat/completions` remains optional Planned)
 
 The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
@@ -15,9 +15,9 @@ The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
-| `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics |
-| `GET /metrics` | Partially implemented; Prometheus text-format runtime metrics |
-| `POST /openai/v1/chat/completions` | Optional; must not delay Responses support |
+| `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics (backed by `AzureTableCreditStore`/`AzureTableHealthStore` for multi-replica) |
+| `GET /metrics` | Implemented (single-process Prometheus text via `InMemoryMetricsStore`); multi-process aggregation Planned |
+| `POST /openai/v1/chat/completions` | Optional **Planned**; must not delay Responses support |
 
 Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
