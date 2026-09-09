@@ -1,6 +1,6 @@
 # Runtime Features
 
-## Status: Partially implemented
+## Status: Implemented (multi-worker metrics aggregation Planned)
 
 The router is more than a load balancer. It is a model router, quota-aware failover layer, credit scheduler, and billing-cycle-aware capacity pool.
 
@@ -14,10 +14,10 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Credit-aware routing with safety reserves and cycle awareness. **Implemented**
 - Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
 - Structured explainable routing decision logging. **Implemented**
-- Persistent or externally reconciled usage/cost state. **Planned**
-- `CreditStore`, `HealthStore`, and the injected-client Azure Table health boundary for multi-replica support. **Partially implemented**; authoritative Azure Table credit transactions and SDK integration are **Planned**.
-- Liveness/readiness, structured logs, and useful metrics. **Partially implemented**
-- Secure credentials, IaC, automated deployment, local mocked-backend development, and tests. **Partially implemented**
+- Persistent or externally reconciled usage/cost state via periodic reconciliation loop (`reconciliation_interval_minutes` + `InMemoryCreditStore.apply_reconciled_remaining` / `AzureTableCreditStore.apply_reconciled_remaining`). **Implemented**
+- `CreditStore`, `HealthStore`, and the injected-client Azure Table health and credit adapters for multi-replica support. **Implemented** (see `src/foundry_router/state/table.py`); authoritative same-partition ETag transactions are implemented and verified by `tests/unit/test_state.py`.
+- Liveness/readiness, structured logs, and Prometheus metrics (single-process). **Implemented**; multi-process aggregation via `prometheus_client` multiprocess or OpenTelemetry remains **Planned**.
+- Secure credentials, IaC (Bicep), automated deployment, local mocked-backend development, and tests. **Implemented**
 
 ## Optional and Future Capabilities
 

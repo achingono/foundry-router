@@ -13,7 +13,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry de
 
 ## Current Status
 
-The current implementation is **Partially implemented**. Configuration validation, client/admin authentication, health endpoints, model listing, structured logging, backend request safety, non-streaming/streaming Responses and embeddings forwarding, and health-aware retry/cooldown/failover routing are **Implemented**. Credit scheduling is **Implemented**. Live admin diagnostics and Prometheus metrics are **Partially implemented**. Distributed state adapters, infrastructure, and deployment automation remain **Planned**.
+The current implementation is **Implemented** through Phase 08. Configuration validation, client/admin authentication, health endpoints, model listing, structured logging, backend request safety, non-streaming/streaming Responses and embeddings forwarding, health-aware retry/cooldown/failover routing, credit-aware scheduling with safety reserves and cycle windows, modular decomposition, cost reconciliation, Azure Table Storage state adapters (`CreditStore`/`HealthStore`), live admin diagnostics, Prometheus metrics (single-process), Bicep infrastructure, connection-pool/HTTP/2 tuning, graceful shutdown, and CI/CD automation are **Implemented**. Multi-worker metrics aggregation via `prometheus_client` multiprocess mode or OpenTelemetry remains **Planned**. Optional Redis hot-state cache remains **Planned** only after a concrete latency requirement and separate approval.
 
 ## Development
 

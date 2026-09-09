@@ -1,6 +1,6 @@
 # Solution Structure
 
-## Current Repository (Partially implemented)
+## Current Repository (Implemented through Phase 08; multi-worker metrics Planned)
 
 ```text
 foundry-router/
@@ -38,7 +38,7 @@ foundry-router/
 └── pyproject.toml
 ```
 
-Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, and Phase 05 modular decomposition are implemented. Distributed state store adapters and `infra/` IaC definitions remain Planned for Phases 06-07.
+Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, Phase 05 modular decomposition, Phase 06 distributed state adapters (`state/table.py` with `AzureTableCreditStore`/`AzureTableHealthStore`), and Phase 07 `infra/` IaC (`infra/main.bicep`) plus Phase 08 credit-integrity hardening are implemented. Multi-worker metrics aggregation remains Planned.
 
 ## Target Structure
 
@@ -55,10 +55,10 @@ foundry-router/
 │   ├── forwarding/           # Transport execution, retries, SSE parser
 │   ├── health/               # Ephemeral cooldown state tracking
 │   ├── logging/              # Redacted structured JSON logging
-│   ├── metrics/              # Prometheus / OpenTelemetry telemetry
+│   ├── metrics/              # Prometheus telemetry (single-process; multi-process Planned)
 │   ├── reconciliation/       # Background billing cost reconciliation
-│   ├── state/                # State protocols & planned Azure Table Storage adapter
-│   └── main.py               # Lightweight lifespan & application entrypoint
+│   ├── state/                # State protocols & Azure Table Storage adapters
+│   └── main.py               # Lightweight lifespan & application entrypoint (graceful shutdown)
 ├── tests/
 │   ├── unit/                 # Domain-specific unit test suites
 │   ├── integration/          # End-to-end proxy and concurrency tests

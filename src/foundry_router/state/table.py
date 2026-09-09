@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 from foundry_router.credit import (
     BackendCreditLiveSnapshot,
     CreditAssessment,
+    CreditAssessmentContext,
+    CreditReservePolicy,
     CreditState,
     calculate_cycle_window,
 )
@@ -27,6 +29,20 @@ from foundry_router.health import (
     BackendHealthSnapshot,
     BackendHealthState,
 )
+
+# Conservation thresholds govern when a USABLE backend is downgraded to CONSERVATION
+# to bias traffic toward capacity that would otherwise go unused at cycle end.
+# - CONSERVATION_DAYS_REMAINING_THRESHOLD (days): how close to reset to trigger; 3 days
+#   is tuned for typical ~30-day monthly cycles—small enough to avoid premature throttling
+#   yet early enough to drain ~5%+ projected waste. Unit: calendar days remaining (inclusive).
+# - CONSERVATION_UNUSED_RATIO (fraction of cycle_allowance_usd): what counts as
+#   "significant" projected unused credit (0.05 = 5%). Ratio keeps policy scale-invariant
+#   across different allowance sizes.
+# Both are hard-coded policy constants for now; promote to Settings (e.g.,
+# FOUNDRY_CONSERVATION_* env vars) only if operational tuning demonstrates a need,
+# to avoid accidental policy drift across replicas.
+CONSERVATION_DAYS_REMAINING_THRESHOLD = 3
+CONSERVATION_UNUSED_RATIO = 0.05
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -306,18 +322,21 @@ class AzureTableCreditStore:
                 await self._sync_balance_to_storage(backend_id, balance)
             self._last_synced_settings_id = id(settings)
 
-    async def assess(
+    async def assess_with_context(
         self,
         backend_id: str,
         estimated_request_cost_usd: float,
-        *,
-        min_credit_reserve_usd: float,
-        min_credit_reserve_percent: float,
-        now_utc: datetime | None = None,
-        reservation_max_age_seconds: float = math.inf,
+        context: CreditAssessmentContext,
     ) -> CreditAssessment:
-        """Assess credit suitability for a backend without reserving."""
-        now = now_utc or datetime.now(UTC)
+        """Context-based assess bundled via CreditAssessmentContext.
+
+        ``reservation_max_age_seconds`` inside ``context`` is intentionally not
+        piggybacked for the Table store (see ``assess`` docstring for rationale);
+        parameter is retained for Protocol compatibility and acknowledged via
+        ``_ = context.reservation_max_age_seconds``.
+        """
+        _ = context.reservation_max_age_seconds
+        now = context.now_utc or datetime.now(UTC)
         async with self._lock:
             balance = await self._get_balance_locked(backend_id, now)
             if balance is None:
@@ -331,14 +350,13 @@ class AzureTableCreditStore:
             return self._compute_assessment(
                 balance,
                 estimated_request_cost_usd,
-                min_credit_reserve_usd,
-                min_credit_reserve_percent,
+                context.reserve_policy.min_credit_reserve_usd,
+                context.reserve_policy.min_credit_reserve_percent,
                 now,
             )
 
-    async def try_assign_reservation(
+    async def assess(  # noqa: PLR0913 - scalar Protocol args retained for backward compat; delegates via CreditAssessmentContext
         self,
-        request_id: str,
         backend_id: str,
         estimated_request_cost_usd: float,
         *,
@@ -346,9 +364,42 @@ class AzureTableCreditStore:
         min_credit_reserve_percent: float,
         now_utc: datetime | None = None,
         reservation_max_age_seconds: float = math.inf,
+    ) -> CreditAssessment:
+        """Assess credit suitability for a backend without reserving.
+
+        Note: ``reservation_max_age_seconds`` is intentionally not used by the
+        Table-backed store. ``InMemoryCreditStore`` piggybacks a bounded sweep of
+        expired reservations on ``assess``/``try_assign`` because it can iterate
+        an in-process dict. ``AzureTableCreditStore`` cannot efficiently scan
+        reservation rows via ``TableEntityClient`` (no list/query is exposed), so
+        aging/reaping is intentionally not piggybacked here. Expired reservations
+        are expected to be reclaimed by an explicit external reaper or Table TTL
+        policy; if callers rely on inline aging, they should use the in-memory
+        store or invoke a dedicated ``reap_expired_reservations`` operation.
+        The parameter is retained in the signature for ``CreditStore`` Protocol
+        compatibility and to avoid implying unsupported inline semantics.
+        Delegates to ``assess_with_context`` via ``CreditAssessmentContext``.
+        """
+        context = CreditAssessmentContext(
+            reserve_policy=CreditReservePolicy(
+                min_credit_reserve_usd=min_credit_reserve_usd,
+                min_credit_reserve_percent=min_credit_reserve_percent,
+            ),
+            now_utc=now_utc,
+            reservation_max_age_seconds=reservation_max_age_seconds,
+        )
+        return await self.assess_with_context(backend_id, estimated_request_cost_usd, context)
+
+    async def try_assign_with_context(
+        self,
+        request_id: str,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        context: CreditAssessmentContext,
     ) -> bool:
-        """Attempt to reserve credit for a request. Returns True if successful."""
-        now = now_utc or datetime.now(UTC)
+        """Context-based reservation bundled via CreditAssessmentContext."""
+        _ = context.reservation_max_age_seconds
+        now = context.now_utc or datetime.now(UTC)
         for attempt in range(self._max_retries):
             try:
                 async with self._lock:
@@ -359,14 +410,13 @@ class AzureTableCreditStore:
                     assessment = self._compute_assessment(
                         balance,
                         estimated_request_cost_usd,
-                        min_credit_reserve_usd,
-                        min_credit_reserve_percent,
+                        context.reserve_policy.min_credit_reserve_usd,
+                        context.reserve_policy.min_credit_reserve_percent,
                         now,
                     )
                     if assessment.state not in {CreditState.USABLE, CreditState.CONSERVATION}:
                         return False
 
-                    # Build transactional batch to atomically create reservation and update balance
                     new_balance = _BalanceRow(
                         backend_id=balance.backend_id,
                         cycle_start_day=balance.cycle_start_day,
@@ -404,7 +454,6 @@ class AzureTableCreditStore:
                     if await self._client.try_batch_transaction(ops):
                         self._balance_cache[backend_id] = (time.monotonic(), new_balance)
                         return True
-                    # ETag conflict; retry
             except TableEntityCreditStoreError:
                 return False
             except Exception:
@@ -414,6 +463,38 @@ class AzureTableCreditStore:
                 await asyncio.sleep(self._retry_backoff_ms * (2**attempt) / 1000.0)
 
         return False
+
+    async def try_assign_reservation(  # noqa: PLR0913 - scalar Protocol args retained; delegates via CreditAssessmentContext
+        self,
+        request_id: str,
+        backend_id: str,
+        estimated_request_cost_usd: float,
+        *,
+        min_credit_reserve_usd: float,
+        min_credit_reserve_percent: float,
+        now_utc: datetime | None = None,
+        reservation_max_age_seconds: float = math.inf,
+    ) -> bool:
+        """Attempt to reserve credit for a request. Returns True if successful.
+
+        ``reservation_max_age_seconds`` is intentionally not piggybacked here for
+        the same reason as in :meth:`assess` (no efficient Table scan via the
+        injected ``TableEntityClient``). See :meth:`assess` docstring for the
+        expected external reaper/TTL semantics. Parameter retained for
+        ``CreditStore`` Protocol compatibility. Delegates to
+        ``try_assign_with_context`` via ``CreditAssessmentContext``.
+        """
+        context = CreditAssessmentContext(
+            reserve_policy=CreditReservePolicy(
+                min_credit_reserve_usd=min_credit_reserve_usd,
+                min_credit_reserve_percent=min_credit_reserve_percent,
+            ),
+            now_utc=now_utc,
+            reservation_max_age_seconds=reservation_max_age_seconds,
+        )
+        return await self.try_assign_with_context(
+            request_id, backend_id, estimated_request_cost_usd, context
+        )
 
     async def finalize_request(
         self,
@@ -426,7 +507,7 @@ class AzureTableCreditStore:
         async with self._lock:
             # Scan all backends to find which one owns this reservation
             backend_id = None
-            for cached_backend_id in self._balance_cache.keys():
+            for cached_backend_id in self._balance_cache:
                 entity = await self._client.get_entity(
                     cached_backend_id, f"{self._RESERVATION_ROW_PREFIX}{request_id}"
                 )
@@ -662,7 +743,9 @@ class AzureTableCreditStore:
             state = CreditState.PROTECTED
         elif estimated_request_cost_usd > available_credit:
             state = CreditState.INSUFFICIENT_CAPACITY
-        elif cycle.days_remaining <= 3 and projected_unused > (balance.cycle_allowance_usd * 0.05):
+        elif cycle.days_remaining <= CONSERVATION_DAYS_REMAINING_THRESHOLD and projected_unused > (
+            balance.cycle_allowance_usd * CONSERVATION_UNUSED_RATIO
+        ):
             state = CreditState.CONSERVATION
         else:
             state = CreditState.USABLE

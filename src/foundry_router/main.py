@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from fastapi import FastAPI, Request, Response
@@ -120,8 +121,6 @@ async def _decrement_active_requests() -> None:
 
 async def _drain_active_requests(timeout_seconds: float) -> None:
     """Wait for active requests to complete, up to timeout."""
-    import time
-
     start_time = time.time()
     check_interval = 0.1
     while time.time() - start_time < timeout_seconds:
@@ -223,7 +222,8 @@ async def track_active_requests(request: Request, call_next: Any) -> Response:
     """Phase 07: Track active requests for graceful shutdown draining."""
     await _increment_active_requests()
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        return cast(Response, response)  # noqa: TC006 - runtime cast requires concrete type
     finally:
         await _decrement_active_requests()
 

@@ -1,6 +1,6 @@
 # Development Workflow
 
-## Status: Planned
+## Status: Implemented (CI, Docker, mocked backends, 80% coverage gate)
 
 Implement incrementally from the boundaries in [architecture](../architecture/index.md). Prefer a small asynchronous Python service and avoid heavyweight infrastructure. Keep behavior feature-local, document Azure-specific assumptions, and preserve the client model name and streaming semantics.
 
