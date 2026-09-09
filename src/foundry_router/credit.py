@@ -162,6 +162,7 @@ class CreditStore(Protocol):
         self,
         request_id: str,
         *,
+        backend_id: str | None = None,
         charge_reserved: bool,
         charged_cost_usd: float | None,
     ) -> None: ...
@@ -564,9 +565,11 @@ class InMemoryCreditStore:
         self,
         request_id: str,
         *,
+        backend_id: str | None = None,
         charge_reserved: bool,
         charged_cost_usd: float | None,
     ) -> None:
+        _ = backend_id  # accepted for Protocol parity with AzureTableCreditStore; not needed for in-memory
         async with self._lock:
             reservation = self._reservations.get(request_id)
             if reservation is None:

@@ -81,6 +81,19 @@ class FakeTableClient:
                     del self.entities[key]
         return True
 
+    async def query_entities(
+        self, partition_key: str, row_key_prefix: str | None = None
+    ) -> list[Mapping[str, object]]:
+        await asyncio.sleep(0)
+        result: list[Mapping[str, object]] = []
+        for (pk, rk), ent in self.entities.items():
+            if pk != partition_key:
+                continue
+            if row_key_prefix is not None and not rk.startswith(row_key_prefix):
+                continue
+            result.append(dict(ent))
+        return result
+
 
 def test_in_memory_health_store_conforms_to_protocol() -> None:
     assert isinstance(InMemoryHealthStore(), HealthStore)

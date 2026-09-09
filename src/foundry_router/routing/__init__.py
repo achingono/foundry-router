@@ -348,6 +348,7 @@ async def execute_with_single_failover(
                     model=model,
                     settings=settings,
                     response=first_result.response,
+                    backend_id=first_backend_id,
                 )
                 reservation_closed_or_transferred = True
                 return await record_and_return(
@@ -380,6 +381,7 @@ async def execute_with_single_failover(
                     model=model,
                     settings=settings,
                     response=first_result.response,
+                    backend_id=first_backend_id,
                 )
                 reservation_closed_or_transferred = True
                 return await record_and_return(
@@ -402,6 +404,7 @@ async def execute_with_single_failover(
                     model=model,
                     settings=settings,
                     response=first_result.response,
+                    backend_id=first_backend_id,
                 )
                 reservation_closed_or_transferred = True
                 return await record_and_return(all_cooldown, backend_id=first_backend_id)
@@ -416,6 +419,7 @@ async def execute_with_single_failover(
                     model=model,
                     settings=settings,
                     response=first_result.response,
+                    backend_id=first_backend_id,
                 )
                 reservation_closed_or_transferred = True
                 return await record_and_return(
@@ -426,6 +430,7 @@ async def execute_with_single_failover(
                 model=model,
                 settings=settings,
                 response=first_result.response,
+                backend_id=first_backend_id,
             )
             reservation_closed_or_transferred = True
             return await record_and_return(
@@ -450,6 +455,7 @@ async def execute_with_single_failover(
                 model=model,
                 settings=settings,
                 response=second_result.response,
+                backend_id=second_backend_id,
             )
             reservation_closed_or_transferred = True
             if second_result.retryable_failure:
@@ -470,8 +476,19 @@ async def execute_with_single_failover(
         return await record_and_return(second_result.response, backend_id=second_backend_id)
     finally:
         if not reservation_closed_or_transferred:
-            await credit_store.finalize_request(
-                request_id,
-                charge_reserved=False,
-                charged_cost_usd=None,
-            )
+            try:
+                await credit_store.finalize_request(
+                    request_id,
+                    backend_id=None,
+                    charge_reserved=False,
+                    charged_cost_usd=None,
+                )
+            except TypeError as exc:
+                if "backend_id" in str(exc):
+                    await credit_store.finalize_request(
+                        request_id,
+                        charge_reserved=False,
+                        charged_cost_usd=None,
+                    )
+                else:
+                    raise
