@@ -86,14 +86,26 @@ async def finalize_non_streaming_credit(
     settings: Any,
     response: Response,
     credit_store: Any,
+    backend_id: str | None = None,
 ) -> float | None:
     is_success = 200 <= response.status_code < 300
     charged_cost = (
         estimate_response_usage_cost(response, model, settings.pricing) if is_success else None
     )
-    await credit_store.finalize_request(
-        request_id,
-        charge_reserved=is_success,
-        charged_cost_usd=charged_cost,
-    )
+    try:
+        await credit_store.finalize_request(
+            request_id,
+            backend_id=backend_id,
+            charge_reserved=is_success,
+            charged_cost_usd=charged_cost,
+        )
+    except TypeError as exc:
+        if "backend_id" in str(exc):
+            await credit_store.finalize_request(
+                request_id,
+                charge_reserved=is_success,
+                charged_cost_usd=charged_cost,
+            )
+        else:
+            raise
     return charged_cost

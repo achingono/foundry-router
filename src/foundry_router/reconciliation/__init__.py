@@ -102,6 +102,23 @@ class ReconciliationLoop:
             )
             return
 
+        # N2: opportunistic reaping of expired reservations for stores that support it
+        # (AzureTableCreditStore). In-memory store already piggybacks sweep on assess,
+        # but explicit reap is safe and idempotent.
+        reap_count = 0
+        if hasattr(self._credit_store, "reap_expired_reservations"):
+            try:
+                max_age = float(getattr(self._settings, "reservation_max_age_seconds", 0) or 0)
+                # _reap is no-op when max_age is non-finite (disabled)
+                reap_count = await self._credit_store.reap_expired_reservations(
+                    max_age_seconds=max_age, now_utc=now
+                )
+            except Exception as exc:  # pragma: no cover - best-effort reaper
+                self._logger.warning(
+                    "credit_reaper_failed",
+                    error_type=type(exc).__name__,
+                )
+
         self._status.last_success_utc = now.isoformat()
         self._status.last_error = None
         self._status.last_updated_backends = updated_count
@@ -109,6 +126,7 @@ class ReconciliationLoop:
         self._logger.info(
             "credit_reconciliation_applied",
             updated_backends=updated_count,
+            reaped_reservations=reap_count,
         )
 
     async def _run(self) -> None:

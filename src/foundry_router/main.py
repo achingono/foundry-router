@@ -8,12 +8,15 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from structlog import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 import foundry_router.forwarding as forwarding_module
 from foundry_router.api.routes.admin import build_router as build_admin_router
@@ -219,13 +222,49 @@ async def add_correlation_id(request: Request, call_next: Any) -> Response:
 
 @app.middleware("http")
 async def track_active_requests(request: Request, call_next: Any) -> Response:
-    """Phase 07: Track active requests for graceful shutdown draining."""
+    """Phase 07: Track active requests for graceful shutdown draining.
+
+    N7: Health probes are excluded so orchestrator polling does not prevent
+    drain. N1: For StreamingResponse, the count is held until the body
+    iterator completes (stream's finally finalizes credit), restoring the
+    guarantee that drain waits for streams to finish before closing the
+    shared httpx client.
+    """
+    # N7: exclude liveness/readiness probes
+    if request.url.path.startswith("/health"):
+        return cast(Response, await call_next(request))  # noqa: TC006
+
     await _increment_active_requests()
+    response: Response | None = None
+    is_streaming = False
     try:
-        response = await call_next(request)
-        return cast(Response, response)  # noqa: TC006 - runtime cast requires concrete type
+        response = cast(Response, await call_next(request))  # noqa: TC006
+        is_streaming = isinstance(response, StreamingResponse)
+        if is_streaming:
+            # Hold drain counter until stream body is fully consumed.
+            original_iterator = response.body_iterator  # type: ignore[attr-defined]
+
+            async def _tracked_stream() -> AsyncIterator[bytes]:
+                try:
+                    if hasattr(original_iterator, "__aiter__"):
+                        async for chunk in original_iterator:
+                            yield chunk
+                    else:
+                        for chunk in original_iterator:
+                            yield chunk
+                finally:
+                    await _decrement_active_requests()
+
+            response.body_iterator = _tracked_stream()  # type: ignore[attr-defined]
+            # Caller will stream; decrement deferred to iterator's finally.
+            return response
+        return response
     finally:
-        await _decrement_active_requests()
+        if not is_streaming:
+            await _decrement_active_requests()
+        elif response is None:
+            # call_next raised before response was produced
+            await _decrement_active_requests()
 
 
 @app.exception_handler(Exception)

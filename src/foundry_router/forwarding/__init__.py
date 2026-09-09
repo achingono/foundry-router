@@ -171,11 +171,22 @@ async def stream_response(
             process_event_payload(pending_event_bytes)
         await context.__aexit__(None, None, None)
         is_stream_success = metric_status_code < 400
-        await credit_store.finalize_request(
-            request_id,
-            charge_reserved=is_stream_success or (charged_cost is not None),
-            charged_cost_usd=charged_cost if is_stream_success else None,
-        )
+        try:
+            await credit_store.finalize_request(
+                request_id,
+                backend_id=backend_id,
+                charge_reserved=is_stream_success or (charged_cost is not None),
+                charged_cost_usd=charged_cost if is_stream_success else None,
+            )
+        except TypeError as exc:
+            if "backend_id" in str(exc):
+                await credit_store.finalize_request(
+                    request_id,
+                    charge_reserved=is_stream_success or (charged_cost is not None),
+                    charged_cost_usd=charged_cost if is_stream_success else None,
+                )
+            else:
+                raise
         await metrics_store.observe_request(
             model=model,
             backend=backend_id,
