@@ -18,10 +18,13 @@ Allow the router to front multiple free-tier Google AI Studio (Gemini) API keys 
 logical model and select, per request, the key with the highest estimated chance of success
 rather than cycling keys round-robin. This phase adds a Google AI Studio backend provider type,
 represents each API key as an independent backend within the existing model-pool machinery, and
-adds proactive per-key rate-limit accounting (requests-per-minute, tokens-per-minute, and
-requests-per-day) that feeds the existing explainable scoring function. The result is a
-quota-aware load balancer that avoids keys that are rate-limited, in cooldown, or about to cross a
-free-tier limit, while preserving the existing streaming, credit, health, and failover contracts.
+adds proactive rate-limit accounting for requests-per-minute (RPM), input-tokens-per-minute (TPM),
+and requests-per-day (RPD) that feeds the existing explainable scoring function. Because Google
+enforces these limits **per Google Cloud project, not per API key**, accounting is scoped to a
+configurable quota group so keys that share a project share a budget; only keys in distinct
+projects add real throughput. The result is a quota-aware load balancer that avoids keys that are
+rate-limited, in cooldown, or about to cross a free-tier limit, while preserving the existing
+streaming, credit, health, and failover contracts.
 
 ## Design Summary
 The existing routing core already selects a backend for a model from a weighted pool using an
@@ -32,13 +35,26 @@ plus a new **rate-limit health signal**:
 
 - Each Google AI Studio key is a distinct backend with `provider: "google_ai_studio"`, the shared
   Google endpoint, and its own credential.
-- A new rate-limit state boundary tracks each key's RPM, TPM, and RPD consumption against
-  configured free-tier budgets, using monotonic sliding windows with an explicit RPD reset.
-- The router consults remaining budget before dispatch: a key with exhausted or nearly-exhausted
-  budget scores lower (or is proactively skipped), so traffic flows to the key most likely to
-  succeed.
-- Reactive `429`/`Retry-After` handling continues to drive `QUOTA_COOLDOWN` through the existing
-  health store; the new proactive signal complements it so most 429s are avoided before they occur.
+- Rate-limit state is scoped to a configurable **quota group** that names the Google Cloud project,
+  not the key. Each Google backend declares its project via a `quota_group` value (the project ID or
+  name); two keys that share a project set the same value and therefore share one RPM/TPM/RPD
+  budget. When omitted, a key forms its own group by its backend ID, which is the correct default
+  for the one-key-per-project deployment. To raise throughput the keys must belong to different
+  projects (different `quota_group` values), because Google enforces limits per project, not per
+  key.
+- Window semantics follow Google's published behaviour: RPM and **input** TPM are evaluated over a
+  minute, and the router computes usage over the trailing 60 seconds as a prudent assumption
+  (Google documents only "within a minute" and does not commit to rolling versus calendar-minute);
+  RPD is a fixed daily quota that resets at **midnight Pacific Time** (07:00 UTC during PDT, 08:00
+  UTC during PST), not a rolling 24-hour window. There is no single universal free-tier triplet:
+  limits vary by model, variant, and account tier, so they are configuration inputs, never code
+  constants.
+- The router consults remaining budget before dispatch: a key whose group is exhausted or
+  nearly-exhausted scores lower (or is proactively skipped), so traffic flows to the key most
+  likely to succeed.
+- Reactive `429 RESOURCE_EXHAUSTED` handling continues to drive `QUOTA_COOLDOWN` through the
+  existing health store, using exponential backoff with jitter (Google's recommendation); the new
+  proactive signal complements it so most 429s are avoided before they occur.
 
 Quota (rate limits) and credit (dollar allowance) remain separate concepts. Free-tier keys carry
 no dollar cost, so this phase also defines how a backend can opt out of dollar-credit accounting
@@ -51,9 +67,11 @@ without tripping the Phase 08 readiness completeness checks.
   and Google-specific endpoint/auth/URL handling in the backend client via the Gemini
   OpenAI-compatibility surface.
 - Representing an arbitrary number of API keys as backends in a model pool (no special-case A/B or
-  two-key assumptions).
+  two-key assumptions), with a configurable quota group per backend so same-project keys share a
+  budget and only distinct-project keys add throughput.
 - A rate-limit state boundary (`RateLimitStore` protocol plus an in-memory single-replica
-  implementation) tracking per-key RPM, TPM, and RPD with window resets.
+  implementation) tracking per-quota-group RPM, input TPM, and RPD with a trailing-60-second
+  window for the per-minute dimensions and a midnight-Pacific reset for RPD.
 - Per-key free-tier limit configuration wired through the existing settings/JSON pattern with
   bounded validation.
 - A rate-limit health signal integrated into the existing explainable scoring so selection favours

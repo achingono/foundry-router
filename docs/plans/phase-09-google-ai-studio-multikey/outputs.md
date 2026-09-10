@@ -6,11 +6,11 @@
 | --- | --- | --- |
 | Provider-aware backend config | `BackendConfig.provider` discriminator with `azure_foundry` default and `google_ai_studio` support; provider-specific validation | Source change + tests |
 | Google AI Studio client support | `AllowedBackendClient` builds the Google OpenAI-compatibility URL and Google auth header for `google_ai_studio` backends; header stripped from client input | Source change + tests |
-| Multi-key pool pattern | An arbitrary number of API keys represented as distinct backends in one model pool, with no A/B special case; documented config pattern | Source usage + docs + integration test |
-| Rate-limit state boundary | `RateLimitStore` Protocol and in-memory implementation tracking per-key RPM/TPM/RPD with window resets, reservation, and finalization | Source change + tests |
-| Rate-limit configuration | New per-backend rate-limit JSON setting with bounded validation and unknown-backend checks | Source change + tests |
+| Multi-key pool pattern | An arbitrary number of API keys represented as distinct backends in one model pool, with no A/B special case and a configurable quota group per key; documented config pattern | Source usage + docs + integration test |
+| Rate-limit state boundary | `RateLimitStore` Protocol and in-memory implementation tracking per-quota-group RPM/input-TPM/RPD with a trailing-60-second window and midnight-Pacific RPD reset, plus reservation and finalization | Source change + tests |
+| Rate-limit configuration | New per-quota-group rate-limit JSON setting with bounded validation and unknown-group checks | Source change + tests |
 | Quota-aware scoring | Rate-limit health term integrated into the explainable scoring so the highest-success key is selected; explainable `routing_decision` logs | Source change + tests |
-| Reactive limit + daily reset | Google `429`/`Retry-After` drives `QUOTA_COOLDOWN`; RPD daily reset returns keys to service; no mid-stream failover | Source change + tests |
+| Reactive limit + daily reset | Google `429`/`Retry-After` drives `QUOTA_COOLDOWN` (exponential backoff with jitter when no usable `Retry-After`); RPD midnight-Pacific reset returns keys to service; no mid-stream failover | Source change + tests |
 | Free-tier credit handling | A backend can opt out of dollar-credit accounting without tripping Phase 08 readiness checks; zero-cost estimation for free models | Source change + tests |
 | Observability | `/admin/status` per-key remaining budget and cooldown; rate-limit metrics; secret-safe (backend ID only) | Source change + tests |
 | ADR | New ADR for provider-aware, quota-based routing linked from the decisions index | Markdown |
