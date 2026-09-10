@@ -25,9 +25,30 @@
   (`x-goog-api-key`). The concrete base URL and header name must be confirmed against current
   Google documentation during design and recorded in the ADR; do not hard-code an unverified URL
   in source or docs.
-- Google AI Studio free-tier rate-limit dimensions (requests-per-minute, tokens-per-minute,
-  requests-per-day) and their reset semantics (per-minute rolling window; per-day reset). Exact
-  numeric limits are configuration inputs supplied per model/key, not constants baked into code.
+- Google AI Studio free-tier rate-limit dimensions and semantics, per Google's published docs
+  (<https://ai.google.dev/gemini-api/docs/rate-limits>):
+  - **RPM** (requests per minute), **TPM** (input tokens per minute), and **RPD** (requests per
+    day) are enforced **independently** — staying under one does not excuse exceeding another.
+  - Limits apply **per Google Cloud project, not per API key**; several keys for one project do not
+    multiply the quota. Increasing throughput requires keys in **distinct projects**.
+  - RPM and TPM are minute-based. Google documents only "within a minute" and does not commit to a
+    rolling versus calendar-minute implementation (it reserves the explicit term "rolling 10-minute
+    window" for a separate, spend-based limit that is not applicable to the Free tier). The prudent
+    client design is to pace continuously and compute usage over the trailing 60 seconds.
+  - RPD is a **fixed daily quota** that resets at **midnight Pacific Time** (07:00 UTC during PDT,
+    08:00 UTC during PST; ~03:00 Toronto time), not a rolling 24-hour window.
+  - There is **no single universal free-tier triplet**; values vary by model, variant
+    (stable vs preview/experimental), and account/usage tier, and Google notes displayed limits may
+    change and are not guaranteed. Exact numeric limits are configuration inputs supplied per model
+    and quota group, never code constants.
+  - Google recommends retrying `429 RESOURCE_EXHAUSTED` with **exponential backoff and jitter**
+    (<https://ai.google.dev/gemini-api/docs/troubleshooting>).
+- Deriving the owning project from an API key: AI Studio API keys (the `AIza…` form) are opaque and
+  do not embed a decodable project ID. The owning project can only be resolved via the Cloud API
+  Keys API (`apikeys.googleapis.com`, `keys.lookupKey`/`projects.locations.keys.get`) called with
+  separate authorized credentials that have permission on that project — the key alone cannot
+  self-identify. The project association is therefore taken from configuration; automated lookup is
+  an optional best-effort enhancement, not a dependency.
 
 ## Optional Inputs
 - ADR-004 (allow-list HTTP client) and ADR-005 (state management) for consistency of the new
@@ -41,4 +62,6 @@
 - [ ] The implemented code still matches the module map above before editing.
 - [ ] The Google OpenAI-compatibility base URL and auth header have been confirmed against current
       Google documentation and recorded in the ADR.
-- [ ] Free-tier limit values are supplied as configuration, not committed as code constants.
+- [ ] Free-tier limit values are supplied as configuration per model and quota group, not committed
+      as code constants, and the model-specific values are taken from the authenticated AI Studio
+      Rate Limits page.

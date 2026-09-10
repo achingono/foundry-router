@@ -9,16 +9,24 @@
       guesses.
 - [ ] An arbitrary number of API keys can back one model as distinct backends with no A/B or
       two-key special case; an integration test proves cross-key routing under scoring rules.
-- [ ] Per-key RPM, TPM, and RPD are tracked with correct minute- and day-window rollovers;
-      reservation and finalization reconcile estimated vs actual token usage; unit tests cover
-      rollover, reconciliation, exhaustion, and reset.
+- [ ] Rate-limit accounting is scoped to a configurable quota group (Google Cloud project) declared
+      per backend via `quota_group`: keys sharing a project set the same value and share one budget
+      and cool down together, and only distinct-project keys add throughput; a test proves same-group
+      budget sharing. Project association comes from configuration (AI Studio keys do not embed a
+      decodable project); any auto-derivation is best-effort and non-blocking.
+- [ ] Per-group RPM, input TPM, and RPD are tracked with a trailing-60-second window for the
+      per-minute dimensions and a midnight-Pacific RPD reset (07:00 UTC PDT / 08:00 UTC PST,
+      DST-aware); reservation and finalization reconcile estimated vs actual input-token usage;
+      unit tests cover rollover, DST boundary, reconciliation, exhaustion, and reset.
 - [ ] Selection is quota-aware: among otherwise-equal keys the one with the most remaining headroom
       is chosen, a key near its limit is deprioritised or skipped, and the decision is deterministic
       and explainable via `routing_decision` logs. It is not round-robin.
 - [ ] A rate-limit reservation uses the server-owned request key (never a client value) and is
       released on failover and on request abandonment.
-- [ ] Google `429`/`Retry-After` drives `QUOTA_COOLDOWN` through the existing health path; RPD daily
-      reset returns a key to service; no failover occurs after meaningful streaming output begins.
+- [ ] Google `429`/`Retry-After` drives `QUOTA_COOLDOWN` through the existing health path; a 429
+      without a usable `Retry-After` uses exponential backoff with jitter bounded by
+      `retry_max_delay_seconds`; RPD daily reset returns a key to service at midnight Pacific; no
+      failover occurs after meaningful streaming output begins.
 - [ ] Free-tier backends are routable without dollar-credit configuration and do not trip the Phase
       08 readiness completeness checks; metered Azure backends still fail readiness when credit
       config is missing; the chosen approach is recorded.
