@@ -73,7 +73,7 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- |
 | Modular decomposition of `main.py` into decoupled domain packages | Implemented | `src/foundry_router/{health,routing,forwarding,api}/`, `src/foundry_router/main.py` | `tests/unit/test_main.py`, `docs/plans/phase-05-routing-reconciliation/` |
-| Background periodic billing reconciliation loop (`reconciliation_interval_minutes`) | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py`, `src/foundry_router/credit.py` | `tests/unit/test_reconciliation.py`, `tests/unit/test_credit.py` |
+| Background periodic billing reconciliation loop applying externally supplied remaining-credit snapshots (`reconciliation_interval_minutes`) | Partially implemented — loop and adapter interface are implemented; only a settings-based override adapter exists, live Azure Cost Management integration is Planned | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py`, `src/foundry_router/credit.py` | `tests/unit/test_reconciliation.py`, `tests/unit/test_credit.py` |
 | Graceful stale-cost fallback and non-blocking background adjustments | Implemented | `src/foundry_router/reconciliation/`, `src/foundry_router/main.py` | `tests/unit/test_reconciliation.py` |
 
 ## Phase 06 Distributed State & Observability Traceability (Implemented)
