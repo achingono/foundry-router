@@ -1,5 +1,7 @@
 # Phase 01 Exit Criteria
 
+> **Status:** Superseded by [`phase-01-hardening/exit-criteria.md`](../phase-01-hardening/exit-criteria.md), where every criterion below is re-verified and checked complete. This checklist is retained for historical planning traceability only and should not be read as an open/incomplete gate; see the hardening plan's evidence and risk register for current status. The hardening plan's Approval Table remains Pending sign-off.
+
 ## Gate Checklist
 - [ ] `pyproject.toml` defines all dependencies with pinned versions
 - [ ] `src/foundry_router/config/` loads and validates all settings from `docs/configuration/index.md`
