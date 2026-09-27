@@ -29,6 +29,7 @@ class BackendSelectionResult:
     candidates: list[str]
     snapshots: dict[str, Any]
     insufficient_credit_capacity: bool
+    pricing_unavailable: bool = False
 
 
 def ranked_model_backends(
@@ -81,7 +82,7 @@ async def select_candidate_backend(
             operation=operation,
             request_id=request_id,
             selected_backend=None,
-            reason="estimate_unavailable",
+            reason="pricing_unavailable",
             estimated_request_cost_usd=None,
             candidates=[
                 {
@@ -95,7 +96,7 @@ async def select_candidate_backend(
                 for backend_id in ranked_candidates
             ],
         )
-        return BackendSelectionResult(None, ranked_candidates, snapshots, True)
+        return BackendSelectionResult(None, ranked_candidates, snapshots, False, True)
 
     health_eligible = [
         backend_id
@@ -311,6 +312,15 @@ async def execute_with_single_failover(
         logger=logger,
     )
     if first_selection.backend_id is None:
+        if first_selection.pricing_unavailable:
+            return await record_and_return(
+                api_error(
+                    503,
+                    "Model pricing is unavailable for routing decisions",
+                    "pricing_unavailable",
+                ),
+                backend_id=None,
+            )
         candidate_cooldown_response = cooldown_exhausted_response(
             first_selection.candidates,
             first_selection.snapshots,
@@ -372,6 +382,23 @@ async def execute_with_single_failover(
         )
         second_backend_id = second_selection.backend_id
         if second_backend_id is None:
+            if second_selection.pricing_unavailable:
+                await finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=first_result.response,
+                    backend_id=first_backend_id,
+                )
+                reservation_closed_or_transferred = True
+                return await record_and_return(
+                    api_error(
+                        503,
+                        "Model pricing is unavailable for routing decisions",
+                        "pricing_unavailable",
+                    ),
+                    backend_id=first_backend_id,
+                )
             if (
                 first_result.response.status_code >= 500
                 and second_selection.insufficient_credit_capacity

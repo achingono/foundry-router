@@ -35,6 +35,66 @@ class TestBackendConfig:
         assert str(config.endpoint) == "https://example.openai.azure.com/"
         assert config.credential == "test-key"
 
+    def test_google_backend_validates_google_specific_fields(self) -> None:
+        config = BackendConfig(
+            provider="google_ai_studio",
+            endpoint="https://generativelanguage.googleapis.com",
+            credential="AIza-test-key",
+            deployment="gemini-2.5-flash",
+            quota_group="project-a",
+        )
+        assert config.provider == "google_ai_studio"
+        assert config.quota_group == "project-a"
+
+    def test_google_backend_requires_model_and_reuses_https_validation(self) -> None:
+        with pytest.raises(ValidationError):
+            BackendConfig(
+                provider="google_ai_studio",
+                endpoint="http://generativelanguage.googleapis.com",
+                credential="AIza-test-key",
+                deployment="gemini-2.5-flash",
+            )
+
+        with pytest.raises(ValidationError):
+            BackendConfig(
+                provider="google_ai_studio",
+                endpoint="https://generativelanguage.googleapis.com",
+                credential="AIza-test-key",
+            )
+
+    def test_azure_backend_requires_deployment_and_api_version(self) -> None:
+        with pytest.raises(ValidationError, match="deployment"):
+            BackendConfig(
+                provider="azure_foundry",
+                endpoint="https://example.openai.azure.com",
+                credential="test-key",
+            )
+
+        with pytest.raises(ValidationError, match="API version|api_version"):
+            BackendConfig(
+                provider="azure_foundry",
+                endpoint="https://example.openai.azure.com",
+                credential="test-key",
+                deployment="gpt-4",
+                api_version="",
+            )
+
+    def test_quota_group_defaults_to_backend_id(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FOUNDRY_BACKENDS_JSON": '{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash"}}',
+                "FOUNDRY_MODELS_JSON": '{"gemini-2.5-flash": {"backends": {"gemini_a": 1.0}}}',
+                "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                "FOUNDRY_PRICING_JSON": "{}",
+                "FOUNDRY_BACKEND_CYCLE_START_DAY_JSON": "{}",
+            },
+        ):
+            settings = load_settings()
+
+        assert settings.backends["gemini_a"].quota_group == "gemini_a"
+
     def test_endpoint_requires_https(self) -> None:
         with pytest.raises(ValidationError):
             BackendConfig(endpoint="http://example.com", credential="key")

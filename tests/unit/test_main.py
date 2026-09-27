@@ -980,7 +980,7 @@ class TestOpenAIEndpoints:
         )
 
         assert response.status_code == 503
-        assert response.json()["error"]["type"] == "insufficient_credit_capacity"
+        assert response.json()["error"]["type"] == "pricing_unavailable"
         assert not route.called
 
     @respx.mock

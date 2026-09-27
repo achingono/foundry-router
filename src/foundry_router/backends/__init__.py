@@ -88,6 +88,7 @@ class AllowedBackendClient:
             "api-key",
             "x-api-key",
             "apikey",
+            "x-goog-api-key",
             "cookie",
             "set-cookie",
             "proxy-authorization",
@@ -108,9 +109,17 @@ class AllowedBackendClient:
 
     def _backend_url(self, backend_id: str, operation: str) -> httpx.URL:
         config = self._settings.backends.get(backend_id)
-        if config is None or not config.deployment:
-            raise ValueError(f"Backend '{backend_id}' has no deployment configured")
+        if config is None:
+            raise ValueError(f"Unknown backend '{backend_id}'")
         base = httpx.URL(str(config.endpoint))
+        if config.provider == "google_ai_studio":
+            if not config.deployment:
+                raise ValueError(f"Backend '{backend_id}' has no Google model configured")
+            path = f"{base.path.rstrip('/')}/v1beta/openai/{operation.lstrip('/')}"
+            return base.copy_with(path=path)
+
+        if not config.deployment:
+            raise ValueError(f"Backend '{backend_id}' has no deployment configured")
         path = (
             f"{base.path.rstrip('/')}/openai/deployments/"
             f"{quote(config.deployment, safe='')}/{operation}"
@@ -122,6 +131,9 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         safe_headers = self._sanitize_headers(headers) or {}
+        if config.provider == "google_ai_studio":
+            safe_headers["x-goog-api-key"] = config.credential
+            return safe_headers
         safe_headers["api-key"] = config.credential
         return safe_headers
 
@@ -164,10 +176,27 @@ class AllowedBackendClient:
             raise SecurityError("Redirects are disabled for backend requests")
         if kwargs.get("auth") is not None or kwargs.get("cookies") is not None:
             raise SecurityError("Request auth and cookies are not accepted by the backend client")
+
         params = kwargs.get("params")
-        if isinstance(params, dict) and any(
-            str(key).lower() in {"api-key", "authorization", "token", "secret"} for key in params
-        ):
+        sensitive_param_names = {
+            "api-key",
+            "authorization",
+            "token",
+            "secret",
+            "x-api-key",
+            "x-goog-api-key",
+            "apikey",
+        }
+
+        if params is None:
+            return
+
+        try:
+            normalized_params = httpx.QueryParams(params)
+        except Exception as exc:  # pragma: no cover - validation guard only
+            raise SecurityError("Invalid query parameter payload") from exc
+
+        if any(str(key).lower() in sensitive_param_names for key in normalized_params.keys()):
             raise SecurityError("Sensitive query parameters are not accepted by the backend client")
 
     async def request(
