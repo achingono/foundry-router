@@ -2,9 +2,10 @@
 
 ## Current State
 
-The repository is **Implemented** through Phase 08 (see [Repository Status](../index.md)). It is a
-runnable FastAPI application that can be run locally, built as a container image, and deployed to
-Azure Container Apps via the Bicep templates in [`infra/`](../../infra/README.md).
+The repository is **Implemented** through Phase 08, with Phase 09 **Partially implemented** (see
+[Repository Status](../index.md)). It is a runnable FastAPI application that can be run locally,
+built as a container image, and deployed to Azure Container Apps via the Bicep templates in
+[`infra/`](../../infra/README.md).
 
 ## Local Run
 
@@ -41,6 +42,23 @@ Azure Container Apps via the Bicep templates in [`infra/`](../../infra/README.md
 
 See [Configuration](../configuration/index.md) and [Security](../configuration/security.md) for
 the full set of environment variables and authentication behavior.
+
+## Google AI Studio Backends
+
+Configure one backend per API key. Keys from the same Google Cloud project must share one
+`quota_group`; use distinct project IDs for independent project quotas. The JSON below is
+illustrative: replace every placeholder with values from your deployment secret store and the
+active AI Studio rate-limit page. Do not commit real API keys.
+
+```bash
+FOUNDRY_BACKENDS_JSON='{"gemini-project-a-key-1":{"provider":"google_ai_studio","endpoint":"https://generativelanguage.googleapis.com","credential":"<secret-from-secret-store>","deployment":"gemini-2.5-flash","quota_group":"project-a","credit_metered":false},"gemini-project-b-key-1":{"provider":"google_ai_studio","endpoint":"https://generativelanguage.googleapis.com","credential":"<secret-from-secret-store>","deployment":"gemini-2.5-flash","quota_group":"project-b","credit_metered":false}}'
+FOUNDRY_MODELS_JSON='{"gemini-2.5-flash":{"backends":{"gemini-project-a-key-1":1.0,"gemini-project-b-key-1":1.0}}}'
+FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON='{"project-a":{"rpm":15,"tpm":1000000,"rpd":1500},"project-b":{"rpm":15,"tpm":1000000,"rpd":1500}}'
+```
+
+The numeric limits are examples only, not router defaults. Google enforces Gemini RPM/TPM/RPD
+limits per project, and the limits vary by model and tier. Quota accounting is currently
+single-process; multi-replica aggregation is **Planned**.
 
 ## Verification
 

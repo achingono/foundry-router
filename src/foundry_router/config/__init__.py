@@ -21,6 +21,7 @@ class BackendConfig(BaseModel):
     deployment: str | None = None
     api_version: str = "2025-04-01-preview"
     quota_group: str | None = None
+    credit_metered: bool = True
 
     @field_validator("endpoint")
     @classmethod
@@ -52,6 +53,13 @@ class BackendConfig(BaseModel):
             raise ValueError("Backend API version must be a non-empty query value")
         return v
 
+    @field_validator("quota_group")
+    @classmethod
+    def validate_quota_group(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("Backend quota group must not be blank")
+        return v
+
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
         if self.provider == "azure_foundry":
@@ -63,7 +71,9 @@ class BackendConfig(BaseModel):
 
         if self.provider == "google_ai_studio":
             if not self.deployment or not self.deployment.strip():
-                raise ValueError("Google AI Studio model name is required for google_ai_studio backends")
+                raise ValueError(
+                    "Google AI Studio model name is required for google_ai_studio backends"
+                )
             return self
 
         return self
@@ -264,9 +274,7 @@ class Settings(BaseSettings):
     client_api_keys: list[str] = Field(default_factory=list, exclude=True)
     admin_api_keys: list[str] = Field(default_factory=list, exclude=True)
     pricing: dict[str, PricingConfig] = Field(default_factory=dict, exclude=True)
-    quota_group_rate_limits: dict[str, dict[str, int]] = Field(
-        default_factory=dict, exclude=True
-    )
+    quota_group_rate_limits: dict[str, dict[str, int]] = Field(default_factory=dict, exclude=True)
     backend_cycle_start_day: dict[str, int] = Field(default_factory=dict, exclude=True)
     backend_cycle_allowance_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
     backend_initial_estimated_remaining_usd: dict[str, float] = Field(
@@ -312,7 +320,8 @@ class Settings(BaseSettings):
                 if not isinstance(value, dict):
                     continue
                 normalised_value = dict(value)
-                normalised_value.setdefault("quota_group", backend_id)
+                if normalised_value.get("quota_group") is None:
+                    normalised_value["quota_group"] = backend_id
                 parsed_backends[backend_id] = BackendConfig(**normalised_value)
             self.backends = parsed_backends
         except (TypeError, ValueError) as exc:
@@ -342,6 +351,16 @@ class Settings(BaseSettings):
                     raise ValueError(
                         f"Model '{model_name}' references unknown backend '{backend_id}'"
                     )
+            has_metered_backend = any(
+                self.backends[backend_id].credit_metered for backend_id in pool.backends
+            )
+            has_non_metered_backend = any(
+                not self.backends[backend_id].credit_metered for backend_id in pool.backends
+            )
+            if has_metered_backend and has_non_metered_backend:
+                raise ValueError(
+                    f"Model '{model_name}' cannot mix credit-metered and non-metered backends"
+                )
 
         # Parse client API keys
         self.client_api_keys = load_key_list(
@@ -375,6 +394,12 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid FOUNDRY_PRICING_JSON pricing entry: {exc}") from exc
         if len(self.pricing) != len(pricing_data):
             raise ValueError("FOUNDRY_PRICING_JSON values must be JSON objects")
+        for model_name, pool in self.models.items():
+            if all(not self.backends[backend_id].credit_metered for backend_id in pool.backends):
+                self.pricing[model_name] = PricingConfig(
+                    input_per_million=0.0,
+                    output_per_million=0.0,
+                )
 
         # Parse quota group rate limits
         quota_limits_data = load_object(
@@ -384,7 +409,7 @@ class Settings(BaseSettings):
         parsed_quota_limits: dict[str, dict[str, int]] = {}
         for quota_group, limits in quota_limits_data.items():
             if not isinstance(limits, dict):
-                raise ValueError(f"Rate limits for '{quota_group}' must be a JSON object")
+                raise TypeError(f"Rate limits for '{quota_group}' must be a JSON object")
             parsed_limits = {}
             for key, value in limits.items():
                 if key not in {"rpm", "tpm", "rpd"}:
@@ -393,10 +418,16 @@ class Settings(BaseSettings):
                     )
                 if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                     raise ValueError(
-                        f"Rate limit '{key}' for quota group '{quota_group}' must be a positive integer"
+                        f"Rate limit '{key}' for quota group '{quota_group}' "
+                        "must be a positive integer"
                     )
                 parsed_limits[key] = value
             parsed_quota_limits[quota_group] = parsed_limits
+        declared_quota_groups = {backend.quota_group for backend in self.backends.values()}
+        unknown_quota_groups = parsed_quota_limits.keys() - declared_quota_groups
+        if unknown_quota_groups:
+            unknown_group = min(unknown_quota_groups)
+            raise ValueError(f"Rate limits reference unknown quota group '{unknown_group}'")
         self.quota_group_rate_limits = parsed_quota_limits
 
         # Parse backend cycle start days

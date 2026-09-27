@@ -15,6 +15,7 @@ from foundry_router.credit import (
     calculate_cycle_window,
     estimate_request_cost,
     estimate_response_usage_cost,
+    extract_response_usage_tokens,
     score_credit_assessment,
 )
 
@@ -115,6 +116,7 @@ class TestResponseUsageEstimation:
         )
         cost = estimate_response_usage_cost(response, "gpt-4", _pricing())
         assert cost == pytest.approx(0.0016)
+        assert extract_response_usage_tokens(response) == (100, 20)
 
     def test_falls_back_to_total_tokens(self) -> None:
         response = Response(
@@ -418,6 +420,22 @@ class TestCreditStore:
 
 
 class TestScoring:
+    def test_scoring_prefers_greater_quota_headroom(self) -> None:
+        shared = {
+            "state": CreditState.USABLE,
+            "is_health_active": True,
+            "is_error_cooldown": False,
+            "available_credit_usd": 100.0,
+            "estimated_request_cost_usd": 1.0,
+            "projected_unused_credit_usd": 30.0,
+            "cycle_allowance_usd": 100.0,
+        }
+
+        high_headroom = score_credit_assessment(**shared, quota_headroom=0.9)
+        low_headroom = score_credit_assessment(**shared, quota_headroom=0.2)
+
+        assert high_headroom > low_headroom
+
     def test_scoring_prefers_active_usable_with_headroom(self) -> None:
         strong = score_credit_assessment(
             state=CreditState.USABLE,

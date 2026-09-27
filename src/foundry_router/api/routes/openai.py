@@ -39,6 +39,7 @@ def build_router(
     credit_store: Any,
     metrics_store: Any,
     logger: Any,
+    rate_limit_store: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -91,15 +92,18 @@ def build_router(
                     api_error=api_error,
                     credit_store=credit_store,
                     metrics_store=metrics_store,
+                    rate_limit_store=rate_limit_store,
                 ),
                 health_store=health_store,
                 credit_store=credit_store,
+                rate_limit_store=rate_limit_store,
                 metrics_store=metrics_store,
                 logger=logger,
                 api_error=api_error,
                 finalize_non_streaming_credit=partial(
                     finalize_non_streaming_credit,
                     credit_store=credit_store,
+                    rate_limit_store=rate_limit_store,
                 ),
             )
 
@@ -123,12 +127,14 @@ def build_router(
             ),
             health_store=health_store,
             credit_store=credit_store,
+            rate_limit_store=rate_limit_store,
             metrics_store=metrics_store,
             logger=logger,
             api_error=api_error,
             finalize_non_streaming_credit=partial(
                 finalize_non_streaming_credit,
                 credit_store=credit_store,
+                rate_limit_store=rate_limit_store,
             ),
         )
 

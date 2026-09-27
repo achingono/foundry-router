@@ -1,10 +1,11 @@
 # Foundry Router
 
-Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It will present multiple subscriptions or projects as one logical model endpoint and route requests according to model availability, backend health, quota pressure, estimated cost, credit-cycle timing, safety reserves, and failover policy.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry and Google AI Studio backends. It presents model pools through one OpenAI-compatible endpoint and routes requests according to backend health, project quota headroom, estimated cost, credit-cycle timing, safety reserves, and failover policy.
 
 ## Objectives
 
 - Maximize useful utilization across multiple Azure Foundry backends.
+- Route across Google AI Studio keys using shared project quota groups and explainable headroom scoring.
 - Prevent either backend from being intentionally driven through its configured credit safety reserve.
 - Preserve OpenAI Responses API and streaming behavior.
 - Provide predictable, explainable, credit-aware routing rather than simple round-robin load balancing.
@@ -13,7 +14,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry de
 
 ## Current Status
 
-The current implementation is **Implemented** through Phase 08. Configuration validation, client/admin authentication, health endpoints, model listing, structured logging, backend request safety, non-streaming/streaming Responses and embeddings forwarding, health-aware retry/cooldown/failover routing, credit-aware scheduling with safety reserves and cycle windows, modular decomposition, cost reconciliation (background loop applying externally supplied remaining-credit snapshots; live Azure Cost Management integration Planned), Azure Table Storage state adapters (`CreditStore`/`HealthStore`), live admin diagnostics, Prometheus metrics (single-process), Bicep infrastructure, connection-pool/HTTP/2 tuning, graceful shutdown, and CI/CD automation are **Implemented**. Multi-worker metrics aggregation via `prometheus_client` multiprocess mode or OpenTelemetry remains **Planned**. Optional Redis hot-state cache remains **Planned** only after a concrete latency requirement and separate approval.
+The implementation is **Implemented** through Phase 08, with Phase 09 **Partially implemented**. Google AI Studio provider support, per-project quota accounting, quota-aware selection, non-metered free-tier routing, and admin/Prometheus diagnostics are implemented in-process. Distributed quota aggregation and multi-worker metrics aggregation remain **Planned**. Existing Azure forwarding, credit-aware scheduling, state adapters, reconciliation adapter, infrastructure, graceful shutdown, and CI/CD status are described in [the documentation hub](docs/index.md).
 
 ## Development
 

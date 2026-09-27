@@ -9,6 +9,30 @@ from fastapi import APIRouter, Depends, Request, Response
 from foundry_router.auth import verify_admin_auth
 
 
+async def _rate_limit_snapshots_by_backend(settings: Any, rate_limit_store: Any) -> dict[str, Any]:
+    if rate_limit_store is None:
+        return {}
+
+    await rate_limit_store.sync_from_settings(settings)
+    group_by_backend = {
+        backend_id: (getattr(config, "quota_group", None) or backend_id)
+        for backend_id, config in settings.backends.items()
+    }
+    groups = sorted(
+        {
+            quota_group
+            for quota_group in group_by_backend.values()
+            if quota_group in settings.quota_group_rate_limits
+        }
+    )
+    group_snapshots = await rate_limit_store.snapshot_quota_groups(groups)
+    return {
+        backend_id: group_snapshots[quota_group]
+        for backend_id, quota_group in group_by_backend.items()
+        if quota_group in group_snapshots
+    }
+
+
 def _admin_backend_status(
     name: str,
     config: Any,
@@ -16,6 +40,7 @@ def _admin_backend_status(
     *,
     health_snapshot: Any,
     credit_snapshot: Any,
+    rate_limit_snapshot: Any = None,
 ) -> dict[str, Any]:
     live_status = {
         "health_state": health_snapshot.state if health_snapshot is not None else None,
@@ -53,6 +78,21 @@ def _admin_backend_status(
         "next_reset_utc": credit_snapshot.next_reset_utc.isoformat()
         if credit_snapshot is not None
         else None,
+        "rate_limit": (
+            {
+                "quota_group": rate_limit_snapshot.quota_group,
+                "rpm_used_60s": rate_limit_snapshot.rpm_used_60s,
+                "input_tpm_used_60s": rate_limit_snapshot.input_tpm_used_60s,
+                "rpd_used": rate_limit_snapshot.rpd_used,
+                "remaining_rpm": rate_limit_snapshot.remaining_rpm,
+                "remaining_input_tpm": rate_limit_snapshot.remaining_input_tpm,
+                "remaining_rpd": rate_limit_snapshot.remaining_rpd,
+                "exhausted": rate_limit_snapshot.exhausted,
+                "retry_after_seconds": rate_limit_snapshot.retry_after_seconds,
+            }
+            if rate_limit_snapshot is not None
+            else None
+        ),
     }
     return {
         "endpoint": str(config.endpoint),
@@ -73,6 +113,7 @@ def build_router(
     health_store: Any,
     credit_store: Any,
     metrics_store: Any,
+    rate_limit_store: Any | None = None,
     reconciliation_status_snapshot: Any,
 ) -> APIRouter:
     router = APIRouter()
@@ -88,6 +129,7 @@ def build_router(
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
+        rate_limit_snapshots = await _rate_limit_snapshots_by_backend(settings, rate_limit_store)
 
         return {
             "version": "0.1.0",
@@ -98,6 +140,7 @@ def build_router(
                     settings,
                     health_snapshot=health_snapshots.get(name),
                     credit_snapshot=credit_snapshots.get(name),
+                    rate_limit_snapshot=rate_limit_snapshots.get(name),
                 )
                 for name, config in settings.backends.items()
             },
@@ -129,6 +172,7 @@ def build_router(
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
+        rate_limit_snapshots = await _rate_limit_snapshots_by_backend(settings, rate_limit_store)
         payload = await metrics_store.render_prometheus(
             backend_health_states={
                 backend_id: health_snapshot.state
@@ -138,6 +182,7 @@ def build_router(
                 backend_id: credit_snapshot.available_credit_usd
                 for backend_id, credit_snapshot in credit_snapshots.items()
             },
+            backend_rate_limit_snapshots=rate_limit_snapshots,
         )
         return Response(content=payload, media_type="text/plain; version=0.0.4; charset=utf-8")
 

@@ -1,10 +1,10 @@
 # Foundry Router Documentation
 
-Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry deployments. It presents multiple subscriptions or projects as one logical model endpoint, with forwarding, health-aware retry/cooldown/failover, credit-cycle/cost-aware scheduling, modular decomposition, Azure Table Storage adapters, cost reconciliation (background loop with pluggable adapter; live Azure Cost Management integration Planned), infrastructure as code, and credit-integrity hardening **Implemented**. Multi-worker metrics aggregation remains **Planned**. Redis is a separately approved future hot-state optimization only.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry and Google AI Studio backends. It presents configured model pools with forwarding, health-aware retry/cooldown/failover, credit-cycle scheduling, and single-process quota-aware Google key routing. Google quota state is **Partially implemented** as in-memory single-replica accounting; distributed quota aggregation remains **Planned**. Cost reconciliation remains a background loop with a pluggable adapter; live Azure Cost Management integration is **Planned**. Redis remains a separately approved future hot-state optimization.
 
 ## Repository Status
 
-The repository is **Implemented** through Phase 08. Configuration, authentication, health checks, model listing, backend request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, credit-aware scheduling, modular decomposition, cost reconciliation (background loop applying externally supplied remaining-credit snapshots; see [`docs/configuration/index.md`](configuration/index.md)), Azure Table Storage state adapters, live admin diagnostics, Prometheus metrics (single-process), infrastructure (Bicep), connection-pool/HTTP/2 tuning, graceful shutdown, and CI/CD automation are **Implemented**. Multi-worker metrics aggregation via `prometheus_client` multiprocess or OpenTelemetry and optional Redis hot-state cache remain **Planned**. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
+The repository is **Implemented** through Phase 08, with Phase 09 **Partially implemented**. Phase 09 adds Google AI Studio provider support, per-project quota groups, process-local RPM/input-TPM/RPD tracking, quota-aware scoring, free-tier credit opt-out, and admin/Prometheus quota diagnostics. Distributed quota aggregation and multi-worker metrics aggregation remain **Planned**. Configuration, authentication, request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, credit-aware scheduling, Azure Table Storage credit/health state, existing reconciliation adapter, Bicep infrastructure, graceful shutdown, and CI/CD automation remain **Implemented** as previously documented. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
 
 ## Start Here
 
@@ -42,6 +42,7 @@ The repository is **Implemented** through Phase 08. Configuration, authenticatio
 - [Phase 06 state store abstractions & metrics plan](plans/phase-06-metrics-diagnostics/index.md)
 - [Phase 07 infrastructure & operations plan](plans/phase-07-infrastructure-operations/index.md)
 - [Phase 08 credit-integrity and boundary hardening plan](plans/phase-08-credit-integrity-hardening/index.md)
+- [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
 
 ## Reading Convention
 

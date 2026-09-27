@@ -1,12 +1,31 @@
 # Routing and Scheduling
 
-## Status: Implemented (Core, Credit Scheduling, Reconciliation, Distributed Stores; multi-worker metrics Planned)
+## Status: Partially implemented (core, credit scheduling, and process-local Google quota-aware routing; distributed quota accounting Planned)
 
 For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 
 ## Separate Quota from Credit
 
 Quota represents rate or capacity constraints such as TPM/RPM. Credit represents a dollar or resource allowance. A backend can have high credit and exhausted quota, or available quota and insufficient safe credit. The router considers both independently.
+
+## Google AI Studio Quota Routing (Partially implemented)
+
+Represent each API key as a backend in the model pool. Routing uses the existing deterministic
+score and weight tie-break, not round-robin. A quota-health term is the minimum remaining fraction
+after the estimated request across configured RPM, input-TPM, and RPD dimensions, clamped to
+`0.0–1.0`; candidates that cannot fit the estimated request are skipped unless the single-candidate
+protected emergency fallback applies. The quota-health term uses ADR-006's existing 0.2 score
+weight.
+
+Rate state is shared by `quota_group` (normally a Google Cloud project), so keys in one project
+share budget and cooldown. The router reserves estimated input usage before dispatch and updates it
+from response or terminal SSE usage when available. Failover transfers the server-owned reservation;
+abandoned reservations are reclaimed after the configured age. Exhaustion and pre-output 429s cool
+all configured backends in the project group. The existing no-failover-after-stream-output rule is
+unchanged.
+
+The in-memory quota store is single-process only. Multi-worker and multi-replica quota aggregation
+is **Planned**; do not interpret local snapshots as authoritative Google quota counters.
 
 ## Backend States
 

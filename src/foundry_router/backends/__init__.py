@@ -196,7 +196,7 @@ class AllowedBackendClient:
         except Exception as exc:  # pragma: no cover - validation guard only
             raise SecurityError("Invalid query parameter payload") from exc
 
-        if any(str(key).lower() in sensitive_param_names for key in normalized_params.keys()):
+        if any(str(key).lower() in sensitive_param_names for key in normalized_params):
             raise SecurityError("Sensitive query parameters are not accepted by the backend client")
 
     async def request(

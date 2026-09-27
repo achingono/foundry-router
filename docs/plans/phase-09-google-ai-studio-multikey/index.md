@@ -9,9 +9,10 @@
 - [Evidence](evidence.md)
 
 ## Status
-Planned. No behaviour in this document is implemented yet. Implementation status labels
-(`Implemented`, `Partially implemented`, `Planned`, `Design target`) must be applied to the
-corresponding documentation only after the change lands and is verified.
+Partially implemented. Provider-aware Google backend support, project-scoped in-memory quota
+accounting, quota-aware selection, reactive group cooldown, free-tier credit opt-out, and
+quota diagnostics are implemented with focused tests. Phase 09 documentation and full W8
+verification remain in progress. Distributed quota accounting remains Planned.
 
 ## Objective
 Allow the router to front multiple free-tier Google AI Studio (Gemini) API keys for the same

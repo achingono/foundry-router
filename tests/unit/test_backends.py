@@ -53,7 +53,9 @@ class TestAllowedBackendClient:
         assert response.json() == {"ok": True}
 
     @respx.mock
-    async def test_google_ai_studio_backend_uses_google_openai_compat_url_and_header(self, monkeypatch):
+    async def test_google_ai_studio_backend_uses_google_openai_compat_url_and_header(
+        self, monkeypatch
+    ):
         settings = Settings(
             backends_json='{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash", "quota_group": "project-a"}}',
             models_json='{"gemini-2.5-flash": {"backends": {"gemini_a": 1.0}}}',
@@ -81,11 +83,15 @@ class TestAllowedBackendClient:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
 
-    async def test_google_ai_studio_backend_rejects_non_https_or_unapproved_host(self, test_settings):
+    async def test_google_ai_studio_backend_rejects_non_https_or_unapproved_host(
+        self, test_settings
+    ):
         client = AllowedBackendClient()
 
         with pytest.raises(SecurityError):
-            client._validate_url("http://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+            client._validate_url(
+                "http://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            )
         with pytest.raises(SecurityError):
             client._validate_url("https://not-allowed.example/v1beta/openai/chat/completions")
 

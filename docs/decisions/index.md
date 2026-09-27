@@ -15,3 +15,9 @@ Use credit-aware weighted routing during normal operation. Increase cycle urgenc
 ## Future Compatibility
 
 The backend model supports arbitrary backend counts and leaves room for subscription, project, region, endpoint, and deployment dimensions. Geographic routing is not required initially.
+
+## Architecture Records
+
+- [ADR-005: State Management](adr/005-state-management.md)
+- [ADR-006: Explainable Credit-Aware Routing](adr/006-routing-algorithm.md)
+- [ADR-007: Provider-Aware Quota Routing](adr/007-provider-aware-quota-routing.md) (Proposed)

@@ -53,6 +53,7 @@ async def _forward_streaming_with_retries(**kwargs: Any) -> BackendRequestResult
         api_error=api_error,
         credit_store=_main()._credit_store,
         metrics_store=_main()._metrics_store,
+        rate_limit_store=_main()._rate_limit_store,
         pre_output_timeout_seconds=_main().PRE_OUTPUT_TIMEOUT_SECONDS,
     )
 
@@ -63,12 +64,14 @@ async def _execute_with_single_failover(*args: Any, **kwargs: Any) -> Any:
         **kwargs,
         health_store=_main()._health_store,
         credit_store=_main()._credit_store,
+        rate_limit_store=_main()._rate_limit_store,
         metrics_store=_main()._metrics_store,
         logger=_main().logger,
         api_error=api_error,
         finalize_non_streaming_credit=lambda **inner: finalize_non_streaming_credit(
             **inner,
             credit_store=_main()._credit_store,
+            rate_limit_store=_main()._rate_limit_store,
         ),
     )
 
@@ -80,4 +83,5 @@ def _stream_response(*args: Any, **kwargs: Any) -> Any:
         set_backend_cooldown=_main()._set_backend_cooldown,
         credit_store=_main()._credit_store,
         metrics_store=_main()._metrics_store,
+        rate_limit_store=_main()._rate_limit_store,
     )

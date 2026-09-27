@@ -15,11 +15,16 @@ The router emits structured `routing_decision` logs on every candidate selection
 - `estimated_request_cost_usd`: Conservative request reservation amount
 - `candidates`: List of evaluated candidate backends with `health_state`, `cooldown_remaining_seconds`, `credit_state`, `available_credit_usd`, `projected_unused_credit_usd`, and composite `score`.
 
+For configured quota groups, candidate details also include the `quota_group`, normalized
+`quota_headroom`, and remaining RPM, input TPM, and RPD. These fields identify project groups and
+backend IDs only; credentials are not logged.
+
 ## Live Administrative Diagnostics (Implemented)
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
 - **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Backed by Azure Table Storage adapters (`AzureTableCreditStore`, `AzureTableHealthStore`) for multi-replica deployments.
+- **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters.
 - **Multi-replica support**: Azure Table Storage integration enables consistent credit accounting and health state across multiple container instances.
 
 ## Reservation Lifecycle Safety (Implemented)
@@ -40,6 +45,9 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `foundry_router_estimated_cost_usd_total{model, backend}`: Cumulative estimated request-cost.
 - `foundry_router_backend_health_state{backend}`: Current backend health state gauge.
 - `foundry_router_credit_available_usd{backend}`: Current spendable balance gauge.
+- `foundry_router_rate_limit_remaining{backend, quota_group, limit}`: Remaining configured RPM, input TPM, or RPD budget.
+- `foundry_router_rate_limit_exhausted{backend, quota_group}`: Whether the project quota group is exhausted.
+- `foundry_router_rate_limit_cooldown{backend, quota_group}`: Whether the backend is currently in quota cooldown.
 - `/metrics` uses admin authentication (`x-admin-key` or Bearer admin token).
 - Single-process in-memory collection via `InMemoryMetricsStore` (implemented in Phase 06).
 

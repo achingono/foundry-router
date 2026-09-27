@@ -1,28 +1,31 @@
 # Phase 09 Evidence
 
-Populate this log during implementation. All rows are pending because this phase is `Planned` and
-not yet implemented.
+Record implementation and verification evidence here. Phase 09 is `Partially implemented`; the
+distributed quota adapter remains `Planned`.
 
 ## Evidence Log
 
 | Item | Reference | Notes |
 | --- | --- | --- |
 | Feature request source | [index.md](index.md) Objective | Multiple free Google AI Studio keys, rate-limit/cooldown tracking, success-probability selection |
-| Google compatibility URL/auth confirmation | _pending_ | Record the confirmed base URL and auth header and the documentation source in the ADR |
-| Provider config + client tests | _pending_ | `tests/unit/test_config.py`, `tests/unit/test_backends.py` |
-| Multi-key routing integration test | _pending_ | `tests/integration/` cross-key routing (not round-robin) across distinct quota groups, plus same-group budget sharing, with the mock backend |
-| Rate-limit state boundary tests | _pending_ | Trailing-60s RPM/input-TPM rollover, midnight-Pacific RPD reset incl. DST, reservation vs finalization, same-group sharing, exhaustion → cooldown, reset → active |
-| Rate-limit configuration tests | _pending_ | Bounded validation, unknown-quota-group rejection |
-| Quota-aware scoring tests | _pending_ | Highest-headroom key chosen; near-limit key skipped; deterministic; failover releases reservation |
-| Reactive 429 + RPD reset tests | _pending_ | Google-style 429 with/without `Retry-After` (backoff+jitter bounds); RPD reset at midnight Pacific returns key to service; no mid-stream failover |
-| Free-tier credit handling tests | _pending_ | Free backend routable and passes readiness; metered backend still fails readiness when misconfigured |
-| Redaction test | _pending_ | No key/credential in logs, `/admin/status`, metric labels, or errors |
-| Observability | _pending_ | `/admin/status` per-key budget/cooldown; rate-limit metrics |
-| ADR | _pending_ | `docs/decisions/adr/00N-provider-aware-quota-routing.md` linked from the decisions index |
-| Full test run | _pending_ | `.venv/bin/python -m pytest -m "not docker" -q` |
-| Coverage report | _pending_ | `--cov=src/foundry_router`, >= 80% for implemented code |
-| Lint / format / type | _pending_ | `.venv/bin/ruff check`, `ruff format --check`, `.venv/bin/mypy src/` |
-| SonarQube scan | _pending_ | `scripts/quality/sonarqube-scan.sh` (N/A if absent) |
-| Deep-review prompt run | _pending_ | `.agents/prompts/deep-review.prompt.md` (N/A if absent) |
-| Docker build | _pending_ | Note N/A if the Docker CLI is unavailable |
-| Documentation updates | _pending_ | Routing, configuration, security, observability, traceability |
+| Google compatibility URL/auth confirmation | Implemented | ADR-007 | Google OpenAI compatibility URL and Google Cloud REST `x-goog-api-key` header confirmed against vendor docs fetched 2026-09-27 |
+| Provider config + client tests | Implemented | `tests/unit/test_config.py`, `tests/unit/test_backends.py` | Azure defaults preserved; URL/auth and sensitive-header handling covered |
+| Multi-key routing integration test | Implemented | `tests/integration/test_full_flow.py` | Three synthetic Google backends in distinct project groups; highest-headroom project selected, authenticated with that key, and exposed only by backend/group ID |
+| Rate-limit state boundary tests | Implemented | `tests/unit/test_ratelimit.py` | 10 tests cover monotonic rollover, Pacific midnight/DST, cooldown expiry, reservations, actual-token reconciliation, same-group use, failover transfer, reset delay, and age-based reaping |
+| Rate-limit configuration tests | Implemented | `tests/unit/test_config.py` | Positive integer bounds, supported dimensions, group references, and mixed-metering rejection |
+| Quota-aware scoring tests | Implemented | `tests/unit/test_main.py`, `tests/unit/test_credit.py` | Highest headroom, three groups, deterministic identical inputs, near-limit deprioritization, and group cooldown |
+| Reactive 429 + RPD reset tests | Implemented | `tests/unit/test_main.py`, `tests/unit/test_ratelimit.py` | Group-wide cooldown with/without `Retry-After`, bounded Google jitter, Pacific/DST reset, and existing streaming no-failover coverage |
+| Free-tier credit handling tests | Implemented | `tests/unit/test_main.py`, `tests/unit/test_config.py` | Non-metered backend routes and passes readiness; metered Azure readiness remains strict; mixed pools rejected |
+| Redaction test | Implemented | `tests/integration/test_full_flow.py`, `tests/unit/test_main.py`, `tests/unit/test_metrics.py` | Synthetic Google credential absent from response, logs, admin status, and metrics |
+| Observability | Implemented | `tests/unit/test_main.py`, `tests/unit/test_metrics.py` | Admin status exposes per-key/group budget; Prometheus exports remaining, exhausted, and cooldown gauges |
+| ADR | Implemented | [ADR-007](../../decisions/adr/007-provider-aware-quota-routing.md) | Linked from the decisions index; records provider, quota, scoring, and free-tier choices |
+| Full test run | Implemented | `.venv/bin/python -m pytest -m "not docker" -q --cov=src/foundry_router --cov-report=term-missing --disable-warnings` | 263 passed, 1 deselected |
+| Coverage report | Implemented | Same full-suite command | 88.22% total; `ratelimit.py` 95.37%, `routing/__init__.py` 81.93% |
+| Lint | Implemented | `.venv/bin/ruff check src/ tests/` | All checks passed |
+| Formatter | Partially implemented | `.venv/bin/ruff format --check src/ tests/` | Phase 09 files formatted; repository check still reports pre-existing formatting in untouched `src/foundry_router/state/table.py:618` |
+| Type check | Implemented | `.venv/bin/mypy src/` | Success: no issues in 22 source files |
+| Editor diagnostics | Implemented | VS Code diagnostics | No errors found |
+| SonarQube scan | Planned / N/A | `scripts/quality/sonarqube-scan.sh` | Script is absent from the repository |
+| Deep-review prompt run | Implemented | `.agents/prompts/deep-review.prompt.md` | Independent review completed; mixed-metering pools now fail config validation. Other suggestions were checked against explicit no-limit behavior, conservative minimum-headroom scoring, and reservation transfer semantics; no remaining actionable blocker was identified |
+| Docker build | Planned / N/A | Docker CLI | Docker CLI unavailable in this environment |
+| Documentation links | Implemented | Phase 09 documentation, README, docs hub | Relative links checked in 16 touched Markdown files; all targets exist |
