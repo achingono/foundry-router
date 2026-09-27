@@ -53,6 +53,43 @@ class TestAllowedBackendClient:
         assert response.json() == {"ok": True}
 
     @respx.mock
+    async def test_google_ai_studio_backend_uses_google_openai_compat_url_and_header(self, monkeypatch):
+        settings = Settings(
+            backends_json='{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash", "quota_group": "project-a"}}',
+            models_json='{"gemini-2.5-flash": {"backends": {"gemini_a": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+        )
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: settings)
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: settings)
+
+        respx.post(
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            headers={"x-goog-api-key": "AIza-test-key"},
+        ).mock(return_value=httpx.Response(200, json={"ok": True}))
+
+        client = AllowedBackendClient()
+        response = await client.request_backend(
+            "gemini_a",
+            "chat/completions",
+            json={"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "hi"}]},
+            headers={"authorization": "Bearer injected"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+
+    async def test_google_ai_studio_backend_rejects_non_https_or_unapproved_host(self, test_settings):
+        client = AllowedBackendClient()
+
+        with pytest.raises(SecurityError):
+            client._validate_url("http://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+        with pytest.raises(SecurityError):
+            client._validate_url("https://not-allowed.example/v1beta/openai/chat/completions")
+
+    @respx.mock
     async def test_request_to_blocked_backend_raises(self, test_settings):
         respx.get("https://blocked.openai.azure.com/test").mock(
             return_value=httpx.Response(200, json={"ok": True})
@@ -86,6 +123,28 @@ class TestAllowedBackendClient:
             await client.get(
                 "https://allowed-a.openai.azure.com/test",
                 params={"api-key": "secret"},
+            )
+        with pytest.raises(SecurityError):
+            await client.get(
+                "https://allowed-a.openai.azure.com/test",
+                params={"x-goog-api-key": "secret"},
+            )
+
+    async def test_request_rejects_sensitive_query_params_from_query_params_object(
+        self, test_settings
+    ):
+        client = AllowedBackendClient()
+
+        with pytest.raises(SecurityError):
+            await client.get(
+                "https://allowed-a.openai.azure.com/test",
+                params=httpx.QueryParams({"api-key": "secret"}),
+            )
+
+        with pytest.raises(SecurityError):
+            await client.get(
+                "https://allowed-a.openai.azure.com/test",
+                params=httpx.QueryParams({"x-goog-api-key": "secret"}),
             )
 
     @respx.mock

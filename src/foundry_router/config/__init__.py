@@ -14,11 +14,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
+    provider: Literal["azure_foundry", "google_ai_studio"] = "azure_foundry"
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
     region: str | None = None
-    deployment: str = Field(min_length=1)
+    deployment: str | None = None
     api_version: str = "2025-04-01-preview"
+    quota_group: str | None = None
 
     @field_validator("endpoint")
     @classmethod
@@ -36,7 +38,9 @@ class BackendConfig(BaseModel):
 
     @field_validator("deployment")
     @classmethod
-    def validate_deployment(cls, v: str) -> str:
+    def validate_deployment(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         if not v.strip() or "/" in v or "\\" in v:
             raise ValueError("Backend deployment must be a single non-empty path segment")
         return v
@@ -47,6 +51,22 @@ class BackendConfig(BaseModel):
         if not v.strip() or any(char in v for char in "&#?/"):
             raise ValueError("Backend API version must be a non-empty query value")
         return v
+
+    @model_validator(mode="after")
+    def validate_provider_specific_fields(self) -> BackendConfig:
+        if self.provider == "azure_foundry":
+            if not self.deployment or not self.deployment.strip():
+                raise ValueError("Backend deployment is required for azure_foundry backends")
+            if not self.api_version or not self.api_version.strip():
+                raise ValueError("Backend API version is required for azure_foundry backends")
+            return self
+
+        if self.provider == "google_ai_studio":
+            if not self.deployment or not self.deployment.strip():
+                raise ValueError("Google AI Studio model name is required for google_ai_studio backends")
+            return self
+
+        return self
 
 
 class ModelBackendPool(BaseModel):
@@ -277,9 +297,14 @@ class Settings(BaseSettings):
         # Parse backends
         backends_data = load_object(self.backends_json, "FOUNDRY_BACKENDS_JSON")
         try:
-            self.backends = {
-                k: BackendConfig(**v) for k, v in backends_data.items() if isinstance(v, dict)
-            }
+            parsed_backends = {}
+            for backend_id, value in backends_data.items():
+                if not isinstance(value, dict):
+                    continue
+                normalised_value = dict(value)
+                normalised_value.setdefault("quota_group", backend_id)
+                parsed_backends[backend_id] = BackendConfig(**normalised_value)
+            self.backends = parsed_backends
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Invalid FOUNDRY_BACKENDS_JSON backend entry: {exc}") from exc
         if len(self.backends) != len(backends_data):
