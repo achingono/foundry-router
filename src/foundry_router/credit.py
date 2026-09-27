@@ -295,7 +295,19 @@ def estimate_response_usage_cost(
     output_price = float(getattr(model_pricing, "output_per_million", float("nan")))
     if not _valid_non_negative_finite(input_price) or not _valid_non_negative_finite(output_price):
         return None
+    if input_price == 0.0 and output_price == 0.0:
+        return 0.0
 
+    usage_tokens = extract_response_usage_tokens(response)
+    if usage_tokens is None:
+        return None
+    input_tokens, output_tokens = usage_tokens
+    cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
+    return cost if _valid_non_negative_finite(cost) else None
+
+
+def extract_response_usage_tokens(response: Any) -> tuple[int, int] | None:
+    """Extract input and output token counts from a JSON response, if present."""
     content_type = response.headers.get("content-type", "") if hasattr(response, "headers") else ""
     if "application/json" not in content_type.lower():
         return None
@@ -328,9 +340,7 @@ def estimate_response_usage_cost(
         return None
     if output_tokens is None:
         output_tokens = 0
-
-    cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
-    return cost if _valid_non_negative_finite(cost) else None
+    return input_tokens, output_tokens
 
 
 def _usage_int(payload: dict[str, Any], key: str) -> int | None:
@@ -770,18 +780,33 @@ def score_credit_assessment(
     estimated_request_cost_usd: float,
     projected_unused_credit_usd: float,
     cycle_allowance_usd: float,
+    quota_headroom: float | None = None,
+    credit_metered: bool = True,
 ) -> float:
     """Compute ADR-006 composite score for candidate ranking."""
     availability = (
         1.0 if state == CreditState.USABLE else (0.5 if state == CreditState.CONSERVATION else 0.0)
     )
-    quota_health = 1.0 if is_health_active else 0.0
-    credit_health = min(
-        1.0, available_credit_usd / max(estimated_request_cost_usd, MIN_SCORE_DENOMINATOR)
+    quota_health = (
+        (1.0 if is_health_active else 0.0)
+        if quota_headroom is None
+        else max(0.0, min(1.0, quota_headroom))
     )
-    cycle_urgency = max(
-        0.0,
-        min(1.0, projected_unused_credit_usd / max(cycle_allowance_usd, MIN_SCORE_DENOMINATOR)),
+    credit_health = (
+        min(1.0, available_credit_usd / max(estimated_request_cost_usd, MIN_SCORE_DENOMINATOR))
+        if credit_metered
+        else 1.0
+    )
+    cycle_urgency = (
+        max(
+            0.0,
+            min(
+                1.0,
+                projected_unused_credit_usd / max(cycle_allowance_usd, MIN_SCORE_DENOMINATOR),
+            ),
+        )
+        if credit_metered
+        else 1.0
     )
     error_health = 0.0 if is_error_cooldown else 1.0
     return (

@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import subprocess
 import time
 
 import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 from foundry_router.config import Settings
-from foundry_router.main import app
+from foundry_router.main import (
+    _rate_limit_store,
+    _reset_backend_health_state,
+    _reset_credit_state,
+    _reset_metrics_state,
+    _reset_rate_limit_state,
+    app,
+)
 
 client = TestClient(app)
 
@@ -31,9 +42,95 @@ def setup_settings(monkeypatch):
     monkeypatch.setattr("foundry_router.auth.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.backends.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.config.load_settings", lambda: test_settings)
+    asyncio.run(_reset_backend_health_state())
+    asyncio.run(_reset_credit_state())
+    asyncio.run(_reset_metrics_state())
+    asyncio.run(_reset_rate_limit_state())
+    yield
+    asyncio.run(_reset_backend_health_state())
+    asyncio.run(_reset_credit_state())
+    asyncio.run(_reset_metrics_state())
+    asyncio.run(_reset_rate_limit_state())
 
 
 class TestFullFlow:
+    @respx.mock
+    def test_google_keys_route_by_project_quota_headroom(self, monkeypatch, caplog) -> None:
+        caplog.set_level(logging.INFO)
+        backend_configs = {
+            f"gemini-key-{suffix}": {
+                "provider": "google_ai_studio",
+                "endpoint": "https://generativelanguage.googleapis.com",
+                "credential": f"synthetic-project-{suffix}-key",
+                "deployment": "gemini-2.5-flash",
+                "quota_group": f"project-{suffix}",
+                "credit_metered": False,
+            }
+            for suffix in ("a", "b", "c")
+        }
+        settings = Settings(
+            backends_json=json.dumps(backend_configs),
+            models_json=json.dumps(
+                {"gemini-2.5-flash": {"backends": dict.fromkeys(backend_configs, 1.0)}}
+            ),
+            client_api_keys_json='["client-key-123"]',
+            admin_api_keys_json='["admin-key-789"]',
+            quota_group_rate_limits_json=json.dumps(
+                {
+                    "project-a": {"rpm": 3, "tpm": 1000, "rpd": 100},
+                    "project-b": {"rpm": 10, "tpm": 1000, "rpd": 100},
+                    "project-c": {"rpm": 20, "tpm": 1000, "rpd": 100},
+                }
+            ),
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: settings)
+        monkeypatch.setattr("foundry_router.auth.load_settings", lambda: settings)
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: settings)
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: settings)
+
+        async def seed_quota_usage() -> None:
+            await _rate_limit_store.sync_from_settings(settings)
+            await _rate_limit_store.record_estimate(
+                "project-a", request_count=1, estimated_input_tokens=0
+            )
+
+        asyncio.run(seed_quota_usage())
+        route = respx.post(
+            "https://generativelanguage.googleapis.com/v1beta/openai/responses"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "id": "from-project-c",
+                    "usage": {"input_tokens": 2, "output_tokens": 1},
+                },
+            )
+        )
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gemini-2.5-flash", "input": "hello"},
+        )
+        status = client.get("/admin/status", headers={"x-admin-key": "admin-key-789"})
+        metrics = client.get("/metrics", headers={"x-admin-key": "admin-key-789"})
+
+        assert response.status_code == 200
+        assert response.json()["id"] == "from-project-c"
+        assert route.call_count == 1
+        assert route.calls[0].request.headers["x-goog-api-key"] == "synthetic-project-c-key"
+        assert status.status_code == 200
+        assert metrics.status_code == 200
+        assert "synthetic-project-c-key" not in response.text
+        assert "synthetic-project-c-key" not in status.text
+        assert "synthetic-project-c-key" not in metrics.text
+        assert all(
+            "synthetic-project-c-key" not in record.getMessage() for record in caplog.records
+        )
+        project_c = status.json()["backends"]["gemini-key-c"]["live"]["rate_limit"]
+        assert project_c["quota_group"] == "project-c"
+        assert project_c["rpm_used_60s"] == 1
+
     def test_health_endpoints_without_auth(self) -> None:
         # Liveness
         response = client.get("/health/live")

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import Any
 
 import httpx
 import pytest
@@ -12,8 +15,11 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 from httpx import Response
 
+from foundry_router.api.common import api_error
 from foundry_router.config import Settings
-from foundry_router.credit import CreditState
+from foundry_router.credit import CreditAssessment, CreditState, InMemoryCreditStore
+from foundry_router.forwarding import forward_non_streaming_with_retries
+from foundry_router.health import InMemoryHealthStore
 from foundry_router.main import (
     BackendHealthRecord,
     BackendHealthState,
@@ -25,6 +31,7 @@ from foundry_router.main import (
     _reset_backend_health_state,
     _reset_credit_state,
     _reset_metrics_state,
+    _reset_rate_limit_state,
     _retry_delay_seconds,
     _set_backend_active,
     _set_backend_cooldown,
@@ -33,6 +40,8 @@ from foundry_router.main import (
     app,
     global_exception_handler,
 )
+from foundry_router.ratelimit import InMemoryRateLimitStore
+from foundry_router.routing import select_candidate_backend
 
 client = TestClient(app)
 
@@ -63,10 +72,12 @@ def setup_settings(monkeypatch):
     asyncio.run(_reset_backend_health_state())
     asyncio.run(_reset_credit_state())
     asyncio.run(_reset_metrics_state())
+    asyncio.run(_reset_rate_limit_state())
     yield test_settings
     asyncio.run(_reset_backend_health_state())
     asyncio.run(_reset_credit_state())
     asyncio.run(_reset_metrics_state())
+    asyncio.run(_reset_rate_limit_state())
 
 
 class TestHealthEndpoints:
@@ -81,6 +92,37 @@ class TestHealthEndpoints:
         data = response.json()
         assert data["ready"] is True
         assert all(data["checks"].values())
+
+    def test_readiness_allows_free_google_backend_without_credit_config(self, monkeypatch) -> None:
+        settings = Settings(
+            backends_json='{"gemini": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "synthetic-key", "deployment": "gemini-2.5-flash", "credit_metered": false}}',
+            models_json='{"gemini-2.5-flash": {"backends": {"gemini": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json='{"gemini-2.5-flash": {"input_per_million": 10.0, "output_per_million": 30.0}}',
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: settings)
+
+        response = client.get("/health/ready")
+
+        assert response.status_code == 200
+        assert response.json()["ready"] is True
+        assert settings.pricing["gemini-2.5-flash"].input_per_million == 0
+
+    def test_readiness_still_requires_credit_config_for_metered_backend(self, monkeypatch) -> None:
+        settings = Settings(
+            backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+            models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json='{"gpt-4": {"input_per_million": 1.0, "output_per_million": 1.0}}',
+        )
+        monkeypatch.setattr("foundry_router.main.load_settings", lambda: settings)
+
+        response = client.get("/health/ready")
+
+        assert response.status_code == 503
+        assert response.json()["checks"]["backend_credit_config_complete"] is False
 
     def test_readiness_unhealthy_when_no_backends(self, monkeypatch) -> None:
         test_settings = Settings(
@@ -175,6 +217,233 @@ class TestAdminEndpoint:
         }
         assert live["available_credit_usd"] is not None
         assert live["next_reset_utc"] is not None
+
+    def test_admin_status_includes_quota_group_snapshot(self, setup_settings: Settings) -> None:
+        setup_settings.quota_group_rate_limits = {"backend_a": {"rpm": 5, "tpm": 1000}}
+
+        response = client.get("/admin/status", headers={"x-admin-key": "admin-key-789"})
+
+        assert response.status_code == 200
+        rate_limit = response.json()["backends"]["backend_a"]["live"]["rate_limit"]
+        assert rate_limit["quota_group"] == "backend_a"
+        assert rate_limit["remaining_rpm"] == 5
+        assert rate_limit["remaining_input_tpm"] == 1000
+
+
+class TestQuotaAwareSelection:
+    def _settings(self, *, project_a_rpm: int = 3) -> Settings:
+        backends = {
+            "key-a-1": {
+                "provider": "google_ai_studio",
+                "endpoint": "https://generativelanguage.googleapis.com",
+                "credential": "synthetic-key-a-1",
+                "deployment": "gemini-2.5-flash",
+                "quota_group": "project-a",
+            },
+            "key-a-2": {
+                "provider": "google_ai_studio",
+                "endpoint": "https://generativelanguage.googleapis.com",
+                "credential": "synthetic-key-a-2",
+                "deployment": "gemini-2.5-flash",
+                "quota_group": "project-a",
+            },
+            "key-b": {
+                "provider": "google_ai_studio",
+                "endpoint": "https://generativelanguage.googleapis.com",
+                "credential": "synthetic-key-b",
+                "deployment": "gemini-2.5-flash",
+                "quota_group": "project-b",
+            },
+        }
+        return Settings(
+            backends_json=json.dumps(backends),
+            models_json=json.dumps(
+                {
+                    "gemini-2.5-flash": {"backends": {"key-a-1": 1.0, "key-b": 1.0}},
+                    "other-model": {"backends": {"key-a-2": 1.0}},
+                }
+            ),
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json='{"gemini-2.5-flash": {"input_per_million": 0, "output_per_million": 0}}',
+            quota_group_rate_limits_json=json.dumps(
+                {
+                    "project-a": {"rpm": project_a_rpm, "tpm": 1000, "rpd": 100},
+                    "project-b": {"rpm": 10, "tpm": 1000, "rpd": 100},
+                }
+            ),
+        )
+
+    @staticmethod
+    def _credit_store() -> Any:
+        class CreditStoreStub:
+            async def sync_from_settings(self, _settings: Any) -> None:
+                return None
+
+            async def assess(self, _backend_id: str, cost: float, **_kwargs: Any) -> Any:
+                return CreditAssessment(
+                    CreditState.USABLE,
+                    100.0,
+                    50.0,
+                    cost,
+                    100.0,
+                )
+
+            async def try_assign_reservation(self, *_args: Any, **_kwargs: Any) -> bool:
+                return True
+
+        return CreditStoreStub()
+
+    async def _select(
+        self,
+        settings: Settings,
+        rate_limit_store: InMemoryRateLimitStore,
+        health_store: Any,
+        credit_store: Any | None = None,
+    ) -> Any:
+        return await select_candidate_backend(
+            settings,
+            "gemini-2.5-flash",
+            operation="responses",
+            body={"input": "hello", "max_output_tokens": 16},
+            request_id="server-request-id",
+            health_store=health_store,
+            credit_store=credit_store or self._credit_store(),
+            logger=SimpleNamespace(info=lambda *_args, **_kwargs: None),
+            rate_limit_store=rate_limit_store,
+        )
+
+    @pytest.mark.asyncio
+    async def test_non_metered_backend_routes_without_credit_snapshot(self) -> None:
+        settings = self._settings()
+        settings.backends["key-a-1"].credit_metered = False
+        settings.models["gemini-2.5-flash"].backends = {"key-a-1": 1.0}
+
+        selection = await self._select(
+            settings,
+            InMemoryRateLimitStore(),
+            InMemoryHealthStore(),
+            InMemoryCreditStore(),
+        )
+
+        assert selection.backend_id == "key-a-1"
+
+    @pytest.mark.asyncio
+    async def test_selection_prefers_project_with_more_quota_headroom(self) -> None:
+        settings = self._settings()
+        rate_limit_store = InMemoryRateLimitStore()
+        await rate_limit_store.record_estimate(
+            "project-a", request_count=2, estimated_input_tokens=0
+        )
+        health_store = InMemoryHealthStore()
+
+        selection = await self._select(settings, rate_limit_store, health_store)
+
+        assert selection.backend_id == "key-b"
+
+    @pytest.mark.asyncio
+    async def test_selection_is_deterministic_for_identical_quota_inputs(self) -> None:
+        settings = self._settings()
+        first = await self._select(settings, InMemoryRateLimitStore(), InMemoryHealthStore())
+        second = await self._select(settings, InMemoryRateLimitStore(), InMemoryHealthStore())
+
+        assert first.backend_id == second.backend_id == "key-b"
+
+    @pytest.mark.asyncio
+    async def test_selection_ranks_three_distinct_quota_groups(self) -> None:
+        settings = self._settings()
+        settings.backends["key-a-2"].quota_group = "project-c"
+        settings.models["gemini-2.5-flash"].backends["key-a-2"] = 1.0
+        settings.quota_group_rate_limits["project-c"] = {
+            "rpm": 20,
+            "tpm": 1000,
+            "rpd": 100,
+        }
+        rate_limit_store = InMemoryRateLimitStore()
+        await rate_limit_store.record_estimate(
+            "project-a", request_count=2, estimated_input_tokens=0
+        )
+
+        selection = await self._select(settings, rate_limit_store, InMemoryHealthStore())
+
+        assert selection.backend_id == "key-a-2"
+
+    @pytest.mark.asyncio
+    async def test_exhausted_group_cools_all_its_keys(self) -> None:
+        settings = self._settings(project_a_rpm=2)
+        rate_limit_store = InMemoryRateLimitStore()
+        await rate_limit_store.record_estimate(
+            "project-a", request_count=2, estimated_input_tokens=0
+        )
+        health_store = InMemoryHealthStore()
+
+        selection = await self._select(settings, rate_limit_store, health_store)
+        health = await health_store.snapshot_backend_health(["key-a-1", "key-a-2"])
+
+        assert selection.backend_id == "key-b"
+        assert all(snapshot.state.value == "QUOTA_COOLDOWN" for snapshot in health.values())
+
+    @pytest.mark.asyncio
+    async def test_upstream_429_cools_all_keys_in_quota_group(self) -> None:
+        settings = self._settings()
+        settings.retry_attempts = 1
+        health_store = InMemoryHealthStore()
+
+        class BackendClient:
+            async def request_backend(self, *_args: Any, **_kwargs: Any) -> Response:
+                return Response(429, json={"error": "rate limited"}, headers={"retry-after": "5"})
+
+        async def no_sleep(_seconds: float) -> None:
+            return None
+
+        result = await forward_non_streaming_with_retries(
+            settings=settings,
+            backend_id="key-a-1",
+            operation="responses",
+            headers={},
+            body={},
+            get_backend_client=BackendClient,
+            set_backend_active=health_store.set_backend_active,
+            set_backend_cooldown=health_store.set_backend_cooldown,
+            sleep=no_sleep,
+            api_error=api_error,
+        )
+        health = await health_store.snapshot_backend_health(["key-a-1", "key-a-2"])
+
+        assert result.retryable_failure is True
+        assert all(snapshot.state.value == "QUOTA_COOLDOWN" for snapshot in health.values())
+
+    @pytest.mark.asyncio
+    async def test_google_429_without_retry_after_uses_bounded_jitter(self) -> None:
+        settings = self._settings()
+        settings.retry_attempts = 2
+        settings.retry_max_delay_seconds = 3.0
+        health_store = InMemoryHealthStore()
+        delays: list[float] = []
+
+        class BackendClient:
+            async def request_backend(self, *_args: Any, **_kwargs: Any) -> Response:
+                return Response(429, json={"error": "RESOURCE_EXHAUSTED"})
+
+        async def collect_sleep(seconds: float) -> None:
+            delays.append(seconds)
+
+        result = await forward_non_streaming_with_retries(
+            settings=settings,
+            backend_id="key-a-1",
+            operation="responses",
+            headers={},
+            body={},
+            get_backend_client=BackendClient,
+            set_backend_active=health_store.set_backend_active,
+            set_backend_cooldown=health_store.set_backend_cooldown,
+            sleep=collect_sleep,
+            api_error=api_error,
+        )
+
+        assert result.retryable_failure is True
+        assert len(delays) == 1
+        assert 0.0 <= delays[0] <= 1.0
 
 
 class TestMetricsEndpoint:
@@ -307,6 +576,38 @@ class TestOpenAIEndpoints:
         assert response.status_code == 200
         assert response.json()["object"] == "list"
         assert route.called
+
+    @respx.mock
+    def test_rate_limit_finalization_uses_actual_input_tokens(
+        self, setup_settings: Settings
+    ) -> None:
+        setup_settings.models["gpt-4"].backends = {"backend_a": 1.0}
+        setup_settings.backends["backend_a"].credential = "synthetic-secret-not-for-status"
+        setup_settings.quota_group_rate_limits = {"backend_a": {"rpm": 5, "tpm": 100, "rpd": 5}}
+        respx.post(
+            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
+            params={"api-version": "2025-04-01-preview"},
+        ).mock(
+            return_value=Response(
+                200,
+                json={"id": "response-test", "usage": {"input_tokens": 13, "output_tokens": 4}},
+            )
+        )
+
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "hello"},
+        )
+        status = client.get("/admin/status", headers={"x-admin-key": "admin-key-789"})
+
+        assert response.status_code == 200
+        assert status.status_code == 200
+        rate_limit = status.json()["backends"]["backend_a"]["live"]["rate_limit"]
+        assert rate_limit["rpm_used_60s"] == 1
+        assert rate_limit["input_tpm_used_60s"] == 13
+        assert rate_limit["rpd_used"] == 1
+        assert "synthetic-secret-not-for-status" not in status.text
 
     @respx.mock
     def test_429_triggers_quota_cooldown_and_failover(self) -> None:
@@ -1116,7 +1417,11 @@ class TestOpenAIEndpoints:
         assert route_b.call_count == 1
 
     @respx.mock
-    def test_stream_failure_after_first_chunk_emits_sse_error_without_failover(self) -> None:
+    def test_stream_failure_after_first_chunk_emits_sse_error_without_failover(
+        self, setup_settings: Settings
+    ) -> None:
+        setup_settings.retry_max_delay_seconds = 30.0
+
         class BrokenStream(httpx.AsyncByteStream):
             async def __aiter__(self):
                 yield b'data: {"id":"one"}\n\n'
@@ -1477,7 +1782,9 @@ class TestOpenAIEndpoints:
         )
         assert assessment.available_credit_usd == pytest.approx(200.0)
 
-    def test_stream_response_uses_terminal_usage_to_finalize_charge(self, monkeypatch) -> None:
+    def test_stream_response_uses_terminal_usage_to_finalize_charge(
+        self, monkeypatch, setup_settings: Settings
+    ) -> None:
         finalize_calls: list[dict[str, float | bool | str | None]] = []
 
         async def capture_finalize(
@@ -1495,6 +1802,17 @@ class TestOpenAIEndpoints:
             )
 
         monkeypatch.setattr("foundry_router.main._credit_store.finalize_request", capture_finalize)
+        setup_settings.quota_group_rate_limits = {"backend_a": {"tpm": 100}}
+
+        from foundry_router.main import _rate_limit_store
+
+        async def reserve_stream_quota() -> None:
+            await _rate_limit_store.sync_from_settings(setup_settings)
+            assert await _rate_limit_store.try_reserve_estimate(
+                "req-stream-usage", "backend_a", estimated_input_tokens=2
+            )
+
+        asyncio.run(reserve_stream_quota())
 
         class Context:
             async def __aexit__(self, *_args) -> None:
@@ -1533,6 +1851,9 @@ class TestOpenAIEndpoints:
         assert finalize_calls[0]["request_id"] == "req-stream-usage"
         assert finalize_calls[0]["charge_reserved"] is True
         assert finalize_calls[0]["charged_cost_usd"] == pytest.approx(0.00025)
+
+        quota_snapshot = asyncio.run(_rate_limit_store.snapshot_quota_groups(["backend_a"]))
+        assert quota_snapshot["backend_a"].input_tpm_used_60s == 10
 
     def test_stream_response_parses_crlf_and_trailing_usage_payload(self, monkeypatch) -> None:
         finalize_calls: list[dict[str, float | bool | str | None]] = []

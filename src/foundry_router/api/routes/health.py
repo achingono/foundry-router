@@ -21,11 +21,16 @@ def build_router(*, load_settings_fn: Any) -> APIRouter:
         routable_backend_ids = {
             backend_id for pool in settings.models.values() for backend_id in pool.backends
         }
+        metered_backend_ids = {
+            backend_id
+            for backend_id in routable_backend_ids
+            if backend_id not in settings.backends or settings.backends[backend_id].credit_metered
+        }
         backend_credit_config_complete = all(
             backend_id in settings.backend_cycle_start_day
             and backend_id in settings.backend_cycle_allowance_usd
             and backend_id in settings.backend_initial_estimated_remaining_usd
-            for backend_id in routable_backend_ids
+            for backend_id in metered_backend_ids
         )
         model_pricing_complete = all(
             model_name in settings.pricing for model_name in settings.models

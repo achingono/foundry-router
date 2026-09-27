@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from foundry_router.metrics import InMemoryMetricsStore
+from foundry_router.ratelimit import QuotaGroupSnapshot
 
 
 def _metric_value(payload: str, prefix: str) -> float:
@@ -15,6 +16,35 @@ def _metric_value(payload: str, prefix: str) -> float:
 
 
 class TestInMemoryMetricsStore:
+    def test_rate_limit_gauges_use_only_backend_and_group_ids(self) -> None:
+        store = InMemoryMetricsStore()
+        snapshot = QuotaGroupSnapshot(
+            quota_group="project-a",
+            remaining_rpm=4,
+            remaining_input_tpm=500,
+            remaining_rpd=20,
+            exhausted=False,
+            configured_limits=("rpm", "tpm", "rpd"),
+        )
+
+        payload = asyncio.run(
+            store.render_prometheus(
+                backend_health_states={"gemini-key-1": "ACTIVE"},
+                backend_available_credit_usd={},
+                backend_rate_limit_snapshots={"gemini-key-1": snapshot},
+            )
+        )
+
+        assert (
+            'foundry_router_rate_limit_remaining{backend="gemini-key-1",'
+            'quota_group="project-a",limit="rpm"} 4'
+        ) in payload
+        assert (
+            'foundry_router_rate_limit_remaining{backend="gemini-key-1",'
+            'quota_group="project-a",limit="input_tpm"} 500'
+        ) in payload
+        assert "synthetic-key" not in payload
+
     def test_latency_histogram_uses_discrete_bucket_accumulation(self) -> None:
         store = InMemoryMetricsStore()
 

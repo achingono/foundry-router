@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from typing import Any
 
 LATENCY_BUCKETS_SECONDS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
 
@@ -58,6 +59,7 @@ class InMemoryMetricsStore:
         *,
         backend_health_states: dict[str, str],
         backend_available_credit_usd: dict[str, float],
+        backend_rate_limit_snapshots: dict[str, Any] | None = None,
     ) -> str:
         async with self._lock:
             request_totals = dict(self._request_totals)
@@ -148,6 +150,57 @@ class InMemoryMetricsStore:
                 "foundry_router_credit_available_usd"
                 f'{{backend="{_escape_label(backend_id)}"}} '
                 f"{available_credit:.9f}"
+            )
+
+        lines.append(
+            "# HELP foundry_router_rate_limit_remaining Remaining requests or input tokens "
+            "for a configured quota group"
+        )
+        lines.append("# TYPE foundry_router_rate_limit_remaining gauge")
+        remaining_fields = {
+            "rpm": ("rpm", "remaining_rpm"),
+            "input_tpm": ("tpm", "remaining_input_tpm"),
+            "rpd": ("rpd", "remaining_rpd"),
+        }
+        for backend_id, snapshot in sorted((backend_rate_limit_snapshots or {}).items()):
+            quota_group = _escape_label(snapshot.quota_group)
+            for metric_limit_name, (config_limit_name, field_name) in remaining_fields.items():
+                if config_limit_name not in snapshot.configured_limits:
+                    continue
+                lines.append(
+                    "foundry_router_rate_limit_remaining"
+                    "{"
+                    f'backend="{_escape_label(backend_id)}",'
+                    f'quota_group="{quota_group}",'
+                    f'limit="{metric_limit_name}"'
+                    "} "
+                    f"{getattr(snapshot, field_name)}"
+                )
+
+        lines.append(
+            "# HELP foundry_router_rate_limit_exhausted Whether the backend quota group "
+            "is exhausted"
+        )
+        lines.append("# TYPE foundry_router_rate_limit_exhausted gauge")
+        for backend_id, snapshot in sorted((backend_rate_limit_snapshots or {}).items()):
+            lines.append(
+                "foundry_router_rate_limit_exhausted"
+                f'{{backend="{_escape_label(backend_id)}",'
+                f'quota_group="{_escape_label(snapshot.quota_group)}"}} '
+                f"{int(snapshot.exhausted)}"
+            )
+
+        lines.append(
+            "# HELP foundry_router_rate_limit_cooldown Whether a backend is in quota cooldown"
+        )
+        lines.append("# TYPE foundry_router_rate_limit_cooldown gauge")
+        for backend_id, snapshot in sorted((backend_rate_limit_snapshots or {}).items()):
+            is_cooling_down = backend_health_states.get(backend_id) == "QUOTA_COOLDOWN"
+            lines.append(
+                "foundry_router_rate_limit_cooldown"
+                f'{{backend="{_escape_label(backend_id)}",'
+                f'quota_group="{_escape_label(snapshot.quota_group)}"}} '
+                f"{int(is_cooling_down)}"
             )
 
         return "\n".join(lines) + "\n"

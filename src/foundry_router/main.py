@@ -44,6 +44,7 @@ from foundry_router.main_compat import (
     _stream_response,
 )
 from foundry_router.metrics import InMemoryMetricsStore
+from foundry_router.ratelimit import InMemoryRateLimitStore, RateLimitStore
 from foundry_router.reconciliation import (
     ReconciliationLoop,
     ReconciliationProvider,
@@ -54,6 +55,7 @@ logger = get_logger(__name__)
 _health_store = InMemoryHealthStore()
 _credit_store: CreditStore = InMemoryCreditStore()
 _metrics_store = InMemoryMetricsStore()
+_rate_limit_store: RateLimitStore = InMemoryRateLimitStore()
 _reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
 _reconciliation_loop: ReconciliationLoop | None = None
 
@@ -94,6 +96,10 @@ async def _reset_credit_state() -> None:
 
 async def _reset_metrics_state() -> None:
     await _metrics_store.reset()
+
+
+async def _reset_rate_limit_state() -> None:
+    await _rate_limit_store.reset()
 
 
 async def _reset_reconciliation_state() -> None:
@@ -170,6 +176,7 @@ async def lifespan(_app: FastAPI) -> Any:
     )
     get_backend_client()
     await _credit_store.sync_from_settings(settings)
+    await _rate_limit_store.sync_from_settings(settings)
     global _reconciliation_loop
     _reconciliation_loop = ReconciliationLoop(
         provider=_reconciliation_provider,
@@ -189,6 +196,7 @@ async def lifespan(_app: FastAPI) -> Any:
     await _reset_backend_health_state()
     await _reset_credit_state()
     await _reset_metrics_state()
+    await _reset_rate_limit_state()
     _shutdown_event = None
 
 
@@ -314,6 +322,7 @@ app.include_router(
         health_store=_health_store,
         credit_store=_credit_store,
         metrics_store=_metrics_store,
+        rate_limit_store=_rate_limit_store,
         reconciliation_status_snapshot=_reconciliation_status_snapshot,
     )
 )
@@ -326,6 +335,7 @@ app.include_router(
         credit_store=_credit_store,
         metrics_store=_metrics_store,
         logger=logger,
+        rate_limit_store=_rate_limit_store,
     )
 )
 
@@ -345,11 +355,13 @@ __all__ = [
     "_metrics_store",
     "_parse_retry_after",
     "_ranked_model_backends",
+    "_rate_limit_store",
     "_reconciliation_loop",
     "_reconciliation_provider",
     "_reset_backend_health_state",
     "_reset_credit_state",
     "_reset_metrics_state",
+    "_reset_rate_limit_state",
     "_reset_reconciliation_state",
     "_retry_delay_seconds",
     "_select_backend",

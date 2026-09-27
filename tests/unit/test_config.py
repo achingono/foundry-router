@@ -83,7 +83,7 @@ class TestBackendConfig:
         with patch.dict(
             os.environ,
             {
-                "FOUNDRY_BACKENDS_JSON": '{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash"}}',
+                "FOUNDRY_BACKENDS_JSON": '{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash", "quota_group": null}}',
                 "FOUNDRY_MODELS_JSON": '{"gemini-2.5-flash": {"backends": {"gemini_a": 1.0}}}',
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
@@ -94,6 +94,15 @@ class TestBackendConfig:
             settings = load_settings()
 
         assert settings.backends["gemini_a"].quota_group == "gemini_a"
+
+    def test_blank_quota_group_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="quota group must not be blank"):
+            BackendConfig(
+                endpoint="https://example.openai.azure.com",
+                credential="test-key",
+                deployment="gpt-4",
+                quota_group=" ",
+            )
 
     def test_endpoint_requires_https(self) -> None:
         with pytest.raises(ValidationError):
@@ -143,6 +152,39 @@ class TestPricingConfig:
 
 
 class TestSettings:
+    def test_model_pool_cannot_mix_metered_and_non_metered_backends(self) -> None:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FOUNDRY_BACKENDS_JSON": '{"azure": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}, "google": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "synthetic-key", "deployment": "gemini-2.5-flash", "credit_metered": false}}',
+                    "FOUNDRY_MODELS_JSON": '{"shared-model": {"backends": {"azure": 1.0, "google": 1.0}}}',
+                    "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                    "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                    "FOUNDRY_PRICING_JSON": '{"shared-model": {"input_per_million": 1.0, "output_per_million": 1.0}}',
+                },
+            ),
+            pytest.raises(ValueError, match="cannot mix credit-metered and non-metered"),
+        ):
+            load_settings()
+
+    def test_quota_group_rate_limits_must_reference_declared_group(self) -> None:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+                    "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+                    "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                    "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                    "FOUNDRY_PRICING_JSON": "{}",
+                    "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON": '{"project-unknown": {"rpm": 10}}',
+                },
+            ),
+            pytest.raises(ValueError, match="unknown quota group 'project-unknown'"),
+        ):
+            load_settings()
+
     def test_quota_group_rate_limits_are_replaced_when_reparsed(self) -> None:
         with patch.dict(
             os.environ,
@@ -152,11 +194,11 @@ class TestSettings:
                 "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
                 "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
                 "FOUNDRY_PRICING_JSON": "{}",
-                "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON": '{"project-a": {"rpm": 10}}',
+                "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON": '{"backend_a": {"rpm": 10}}',
             },
         ):
             settings = load_settings()
-            assert settings.quota_group_rate_limits == {"project-a": {"rpm": 10}}
+            assert settings.quota_group_rate_limits == {"backend_a": {"rpm": 10}}
 
             settings.quota_group_rate_limits_json = "{}"
             settings.parse_json_fields()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,7 +15,10 @@ import httpx
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 
-from foundry_router.credit import estimate_response_usage_cost
+from foundry_router.credit import (
+    estimate_response_usage_cost,
+    extract_response_usage_tokens,
+)
 from foundry_router.health import BackendHealthState
 
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
@@ -43,6 +47,25 @@ class BackendRequestResult:
 
 def is_retryable_status(status_code: int) -> bool:
     return status_code in RETRYABLE_STATUS_CODES
+
+
+async def _set_quota_group_cooldown(
+    settings: Any,
+    backend_id: str,
+    *,
+    set_backend_cooldown: Any,
+    cooldown_seconds: float,
+) -> None:
+    selected_config = settings.backends[backend_id]
+    quota_group = getattr(selected_config, "quota_group", None) or backend_id
+    for candidate_id, config in settings.backends.items():
+        candidate_group = getattr(config, "quota_group", None) or candidate_id
+        if candidate_group == quota_group:
+            await set_backend_cooldown(
+                candidate_id,
+                state=BackendHealthState.QUOTA_COOLDOWN,
+                cooldown_seconds=cooldown_seconds,
+            )
 
 
 def parse_retry_after(raw_value: str | None, max_delay_seconds: float) -> float | None:
@@ -78,6 +101,32 @@ def retry_delay_seconds(
     return min(max_delay_seconds, max(exponential, parsed_retry_after))
 
 
+def _backend_retry_delay_seconds(
+    settings: Any,
+    backend_id: str,
+    *,
+    attempt_number: int,
+    retry_after_header: str | None,
+) -> float:
+    max_delay_seconds = settings.retry_max_delay_seconds
+    backend_config = getattr(settings, "backends", {}).get(backend_id)
+    parsed_retry_after = parse_retry_after(retry_after_header, max_delay_seconds)
+    if (
+        getattr(backend_config, "provider", None) == "google_ai_studio"
+        and parsed_retry_after is None
+    ):
+        exponential_limit = min(
+            max_delay_seconds,
+            float(2 ** max(0, attempt_number - 1)),
+        )
+        return random.uniform(0.0, exponential_limit)
+    return retry_delay_seconds(
+        attempt_number=attempt_number,
+        max_delay_seconds=max_delay_seconds,
+        retry_after_header=retry_after_header,
+    )
+
+
 def upstream_response(response: httpx.Response, body: bytes) -> Response:
     content_type = response.headers.get("content-type", "application/json")
     headers = {
@@ -107,14 +156,16 @@ async def stream_response(
     set_backend_cooldown: Any,
     credit_store: Any,
     metrics_store: Any,
+    rate_limit_store: Any | None = None,
 ) -> Any:
     started_at = time.monotonic()
     charged_cost: float | None = None
     metric_status_code = status_code
     pending_event_bytes = b""
+    actual_input_tokens: int | None = None
 
     def process_event_payload(payload: bytes) -> None:
-        nonlocal charged_cost
+        nonlocal actual_input_tokens, charged_cost
         if b"usage" not in payload:
             return
         lines = payload.splitlines()
@@ -138,6 +189,9 @@ async def stream_response(
                 content=json.dumps({"usage": usage}).encode("utf-8"),
                 media_type="application/json",
             )
+            usage_tokens = extract_response_usage_tokens(usage_response)
+            if usage_tokens is not None:
+                actual_input_tokens = usage_tokens[0]
             estimated_cost = estimate_response_usage_cost(usage_response, model, pricing)
             if estimated_cost is not None:
                 charged_cost = estimated_cost
@@ -187,6 +241,10 @@ async def stream_response(
                 )
             else:
                 raise
+        if rate_limit_store is not None:
+            await rate_limit_store.finalize_request(
+                request_id, actual_input_tokens=actual_input_tokens
+            )
         await metrics_store.observe_request(
             model=model,
             backend=backend_id,
@@ -227,9 +285,10 @@ async def forward_non_streaming_with_retries(
                 cooldown_seconds=settings.retry_max_delay_seconds,
             )
             if attempt < max_attempts:
-                delay_seconds = retry_delay_seconds(
+                delay_seconds = _backend_retry_delay_seconds(
+                    settings,
+                    backend_id,
                     attempt_number=attempt,
-                    max_delay_seconds=settings.retry_max_delay_seconds,
                     retry_after_header=None,
                 )
                 if delay_seconds > 0:
@@ -274,19 +333,27 @@ async def forward_non_streaming_with_retries(
             upstream.headers.get("retry-after"),
             settings.retry_max_delay_seconds,
         )
-        await set_backend_cooldown(
-            backend_id,
-            state=cooldown_state,
-            cooldown_seconds=(
-                settings.retry_max_delay_seconds
-                if retry_after_seconds is None
-                else retry_after_seconds
-            ),
+        cooldown_seconds = (
+            settings.retry_max_delay_seconds if retry_after_seconds is None else retry_after_seconds
         )
+        if cooldown_state == BackendHealthState.QUOTA_COOLDOWN:
+            await _set_quota_group_cooldown(
+                settings,
+                backend_id,
+                set_backend_cooldown=set_backend_cooldown,
+                cooldown_seconds=cooldown_seconds,
+            )
+        else:
+            await set_backend_cooldown(
+                backend_id,
+                state=cooldown_state,
+                cooldown_seconds=cooldown_seconds,
+            )
         if attempt < max_attempts:
-            delay_seconds = retry_delay_seconds(
+            delay_seconds = _backend_retry_delay_seconds(
+                settings,
+                backend_id,
                 attempt_number=attempt,
-                max_delay_seconds=settings.retry_max_delay_seconds,
                 retry_after_header=upstream.headers.get("retry-after"),
             )
             if delay_seconds > 0:
@@ -314,6 +381,7 @@ async def forward_streaming_with_retries(
     api_error: Any,
     credit_store: Any,
     metrics_store: Any,
+    rate_limit_store: Any | None = None,
     pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
 ) -> BackendRequestResult:
     max_attempts = max(1, settings.retry_attempts)
@@ -335,9 +403,10 @@ async def forward_streaming_with_retries(
                 cooldown_seconds=settings.retry_max_delay_seconds,
             )
             if attempt < max_attempts:
-                delay_seconds = retry_delay_seconds(
+                delay_seconds = _backend_retry_delay_seconds(
+                    settings,
+                    backend_id,
                     attempt_number=attempt,
-                    max_delay_seconds=settings.retry_max_delay_seconds,
                     retry_after_header=None,
                 )
                 if delay_seconds > 0:
@@ -402,19 +471,29 @@ async def forward_streaming_with_retries(
                 upstream.headers.get("retry-after"),
                 settings.retry_max_delay_seconds,
             )
-            await set_backend_cooldown(
-                backend_id,
-                state=cooldown_state,
-                cooldown_seconds=(
-                    settings.retry_max_delay_seconds
-                    if retry_after_seconds is None
-                    else retry_after_seconds
-                ),
+            cooldown_seconds = (
+                settings.retry_max_delay_seconds
+                if retry_after_seconds is None
+                else retry_after_seconds
             )
+            if cooldown_state == BackendHealthState.QUOTA_COOLDOWN:
+                await _set_quota_group_cooldown(
+                    settings,
+                    backend_id,
+                    set_backend_cooldown=set_backend_cooldown,
+                    cooldown_seconds=cooldown_seconds,
+                )
+            else:
+                await set_backend_cooldown(
+                    backend_id,
+                    state=cooldown_state,
+                    cooldown_seconds=cooldown_seconds,
+                )
             if attempt < max_attempts:
-                delay_seconds = retry_delay_seconds(
+                delay_seconds = _backend_retry_delay_seconds(
+                    settings,
+                    backend_id,
                     attempt_number=attempt,
-                    max_delay_seconds=settings.retry_max_delay_seconds,
                     retry_after_header=upstream.headers.get("retry-after"),
                 )
                 if delay_seconds > 0:
@@ -440,9 +519,10 @@ async def forward_streaming_with_retries(
                 cooldown_seconds=settings.retry_max_delay_seconds,
             )
             if attempt < max_attempts:
-                delay_seconds = retry_delay_seconds(
+                delay_seconds = _backend_retry_delay_seconds(
+                    settings,
+                    backend_id,
                     attempt_number=attempt,
-                    max_delay_seconds=settings.retry_max_delay_seconds,
                     retry_after_header=None,
                 )
                 if delay_seconds > 0:
@@ -483,6 +563,7 @@ async def forward_streaming_with_retries(
                     set_backend_cooldown=set_backend_cooldown,
                     credit_store=credit_store,
                     metrics_store=metrics_store,
+                    rate_limit_store=rate_limit_store,
                 ),
                 status_code=upstream.status_code,
                 media_type="text/event-stream",

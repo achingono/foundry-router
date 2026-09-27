@@ -111,3 +111,15 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Per-request `sync_from_settings` retained for correctness; made cheap via settings-identity fast path (F6, revised) | Implemented | `src/foundry_router/routing/__init__.py`, `src/foundry_router/credit.py` | `tests/unit/test_credit.py`, `tests/unit/test_main.py` |
 
 F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast config-load error: hard-failing config load on incomplete per-backend credit configuration or per-model pricing would have made the existing request-time fail-closed defense (`insufficient_credit_capacity`) unreachable and would have broken legitimate partial-configuration scenarios exercised by the existing test suite (see [risk register](../plans/phase-08-credit-integrity-hardening/risk-register.md)). F6 was implemented by retaining the per-request `sync_from_settings` call — removing it broke correctness for any caller that swaps the `Settings` singleton without a corresponding explicit sync — and instead adding a settings-object-identity fast path so repeated calls with the same (`lru_cache`d) settings instance are effectively free in production.
+
+## Phase 09 Google AI Studio Multi-Key Quota Routing (Partially implemented)
+
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Provider-specific Google OpenAI-compatible URL and API-key header with client-header stripping | Implemented | `src/foundry_router/config/`, `src/foundry_router/backends/` | `tests/unit/test_config.py`, `tests/unit/test_backends.py`; vendor references in ADR-007 |
+| One backend per key and project-scoped quota-group configuration, including unknown-group rejection | Implemented | `src/foundry_router/config/` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |
+| Monotonic 60-second RPM/input-TPM, Pacific-midnight RPD, bounded reservations and actual-token reconciliation | Implemented (in-memory single process) | `src/foundry_router/ratelimit.py`, `src/foundry_router/api/common.py`, `src/foundry_router/forwarding/` | `tests/unit/test_ratelimit.py`, `tests/unit/test_main.py` |
+| Quota-headroom score, candidate filtering, project-wide proactive and reactive cooldown | Implemented | `src/foundry_router/routing/`, `src/foundry_router/forwarding/`, `src/foundry_router/credit.py` | `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
+| Homogeneous non-metered free-tier credit opt-out and zero pricing for free model pools | Implemented | `src/foundry_router/config/`, `src/foundry_router/api/routes/health.py`, `src/foundry_router/routing/` | `tests/unit/test_main.py`, `tests/unit/test_config.py` |
+| Per-key/group quota diagnostics and budget/cooldown metrics | Implemented | `src/foundry_router/api/routes/admin.py`, `src/foundry_router/metrics/` | `tests/unit/test_main.py`, `tests/unit/test_metrics.py` |
+| Cross-replica quota consistency and multi-worker quota/metrics aggregation | Planned | Future distributed rate-limit store | Phase 09 plan; no distributed quota adapter is implemented |

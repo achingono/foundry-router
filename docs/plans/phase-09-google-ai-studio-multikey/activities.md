@@ -7,8 +7,18 @@ verification. Each workstream lands as its own commit(s) with tests. Do not weak
 streaming/SSE contract or the "never retry or fail over after meaningful streaming output begins"
 rule while editing forwarding. Never log API keys, credentials, prompts, or model outputs.
 
-Before writing code, copy nothing else from templates; follow the required change workflow in
-`AGENTS.md` (plan review by a second model/session before implementation).
+The Phase 09 plan was independently reviewed before this implementation continuation. Existing
+phase documents are the working plan; do not create a duplicate plan folder.
+
+## Current Workstream Status
+
+| Workstream | Status | Evidence / Remaining work |
+| --- | --- | --- |
+| W1-W2 Provider and multi-key configuration | Implemented | Provider/backend and quota-group config tests; vendor URL/auth references recorded in ADR-007 |
+| W3-W4 Quota state and selection | Implemented | Monotonic windows, Pacific/DST RPD, reservation/finalization/reaping, headroom scoring, group cooldown tests |
+| W5-W6 Reactive limits and free-tier economics | Implemented | Group-wide 429 cooldown, bounded Google retry jitter, non-metered backend readiness/routing tests |
+| W7 Observability and documentation | Implemented | Admin and Prometheus paths, canonical docs, ADR, traceability, and relative links are verified |
+| W8 Verification | Partially implemented | Tests, coverage, lint, Mypy, and deep review pass; formatter gate reports one unrelated existing file; Docker unavailable |
 
 ## W1 — Provider-aware backend configuration and client
 1. Add a `provider` field to `BackendConfig` in `src/foundry_router/config/__init__.py`, a
