@@ -224,6 +224,13 @@ class Settings(BaseSettings):
         description="JSON object mapping model names to pricing configs",
     )
 
+    # Google AI Studio free-tier rate limits per quota group
+    quota_group_rate_limits_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON",
+        description="JSON object mapping quota groups to {rpm, tpm, rpd} limits",
+    )
+
     # Backend credit cycle start days (JSON string)
     backend_cycle_start_day_json: str = Field(
         default="{}",
@@ -257,6 +264,9 @@ class Settings(BaseSettings):
     client_api_keys: list[str] = Field(default_factory=list, exclude=True)
     admin_api_keys: list[str] = Field(default_factory=list, exclude=True)
     pricing: dict[str, PricingConfig] = Field(default_factory=dict, exclude=True)
+    quota_group_rate_limits: dict[str, dict[str, int]] = Field(
+        default_factory=dict, exclude=True
+    )
     backend_cycle_start_day: dict[str, int] = Field(default_factory=dict, exclude=True)
     backend_cycle_allowance_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
     backend_initial_estimated_remaining_usd: dict[str, float] = Field(
@@ -365,6 +375,29 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid FOUNDRY_PRICING_JSON pricing entry: {exc}") from exc
         if len(self.pricing) != len(pricing_data):
             raise ValueError("FOUNDRY_PRICING_JSON values must be JSON objects")
+
+        # Parse quota group rate limits
+        quota_limits_data = load_object(
+            self.quota_group_rate_limits_json,
+            "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON",
+        )
+        parsed_quota_limits: dict[str, dict[str, int]] = {}
+        for quota_group, limits in quota_limits_data.items():
+            if not isinstance(limits, dict):
+                raise ValueError(f"Rate limits for '{quota_group}' must be a JSON object")
+            parsed_limits = {}
+            for key, value in limits.items():
+                if key not in {"rpm", "tpm", "rpd"}:
+                    raise ValueError(
+                        f"Rate limit key '{key}' for quota group '{quota_group}' is not supported"
+                    )
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                    raise ValueError(
+                        f"Rate limit '{key}' for quota group '{quota_group}' must be a positive integer"
+                    )
+                parsed_limits[key] = value
+            parsed_quota_limits[quota_group] = parsed_limits
+        self.quota_group_rate_limits = parsed_quota_limits
 
         # Parse backend cycle start days
         cycle_data = load_object(

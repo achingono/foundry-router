@@ -143,6 +143,46 @@ class TestPricingConfig:
 
 
 class TestSettings:
+    def test_quota_group_rate_limits_are_replaced_when_reparsed(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+                "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+                "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                "FOUNDRY_PRICING_JSON": "{}",
+                "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON": '{"project-a": {"rpm": 10}}',
+            },
+        ):
+            settings = load_settings()
+            assert settings.quota_group_rate_limits == {"project-a": {"rpm": 10}}
+
+            settings.quota_group_rate_limits_json = "{}"
+            settings.parse_json_fields()
+
+        assert settings.quota_group_rate_limits == {}
+
+    def test_quota_group_rate_limits_must_be_json_object(self) -> None:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FOUNDRY_BACKENDS_JSON": '{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
+                    "FOUNDRY_MODELS_JSON": '{"gpt-4": {"backends": {"backend_a": 1.0}}}',
+                    "FOUNDRY_CLIENT_API_KEYS_JSON": '["client-key"]',
+                    "FOUNDRY_ADMIN_API_KEYS_JSON": '["admin-key"]',
+                    "FOUNDRY_PRICING_JSON": "{}",
+                    "FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON": "[]",
+                },
+            ),
+            pytest.raises(
+                TypeError,
+                match="FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON must be a JSON object",
+            ),
+        ):
+            load_settings()
+
     def test_minimal_valid_config(self) -> None:
         backends = {
             "backend_a": {
