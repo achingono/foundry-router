@@ -615,9 +615,7 @@ class AzureTableCreditStore:
                     self._balance_cache[resolved_backend_id] = (time.monotonic(), new_balance)
                     return
                 if attempt < self._max_retries - 1:
-                    balance = await self._get_balance_locked(
-                        resolved_backend_id, datetime.now(UTC)
-                    )
+                    balance = await self._get_balance_locked(resolved_backend_id, datetime.now(UTC))
                     if balance is None:
                         return
                     new_balance.etag = balance.etag

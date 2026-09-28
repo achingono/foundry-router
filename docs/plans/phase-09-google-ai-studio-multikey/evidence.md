@@ -1,7 +1,7 @@
 # Phase 09 Evidence
 
-Record implementation and verification evidence here. Phase 09 is `Partially implemented`; the
-distributed quota adapter remains `Planned`.
+Phase 09 is `Implemented` within its planned single-process scope. Distributed quota accounting
+remains `Planned` and out of scope.
 
 ## Evidence Log
 
@@ -20,12 +20,12 @@ distributed quota adapter remains `Planned`.
 | Observability | Implemented | `tests/unit/test_main.py`, `tests/unit/test_metrics.py` | Admin status exposes per-key/group budget; Prometheus exports remaining, exhausted, and cooldown gauges |
 | ADR | Implemented | [ADR-007](../../decisions/adr/007-provider-aware-quota-routing.md) | Linked from the decisions index; records provider, quota, scoring, and free-tier choices |
 | Full test run | Implemented | `.venv/bin/python -m pytest -m "not docker" -q --cov=src/foundry_router --cov-report=term-missing --disable-warnings` | 263 passed, 1 deselected |
-| Coverage report | Implemented | Same full-suite command | 88.22% total; `ratelimit.py` 95.37%, `routing/__init__.py` 81.93% |
+| Coverage report | Implemented | Same full-suite command | 88.26% total; `ratelimit.py` 95.37%, `routing/__init__.py` 81.93% |
 | Lint | Implemented | `.venv/bin/ruff check src/ tests/` | All checks passed |
-| Formatter | Partially implemented | `.venv/bin/ruff format --check src/ tests/` | Phase 09 files formatted; repository check still reports pre-existing formatting in untouched `src/foundry_router/state/table.py:618` |
+| Formatter | Implemented | `.venv/bin/ruff format --check src/ tests/` | All 35 files formatted; repository-wide check passes after formatting `src/foundry_router/state/table.py` |
 | Type check | Implemented | `.venv/bin/mypy src/` | Success: no issues in 22 source files |
 | Editor diagnostics | Implemented | VS Code diagnostics | No errors found |
-| SonarQube scan | Planned / N/A | `scripts/quality/sonarqube-scan.sh` | Script is absent from the repository |
+| SonarQube scan | N/A | `scripts/quality/sonarqube-scan.sh` | Script is absent from the repository |
 | Deep-review prompt run | Implemented | `.agents/prompts/deep-review.prompt.md` | Independent review completed; mixed-metering pools now fail config validation. Other suggestions were checked against explicit no-limit behavior, conservative minimum-headroom scoring, and reservation transfer semantics; no remaining actionable blocker was identified |
-| Docker build | Planned / N/A | Docker CLI | Docker CLI unavailable in this environment |
+| Docker build | N/A | Docker CLI | Docker CLI unavailable in this environment |
 | Documentation links | Implemented | Phase 09 documentation, README, docs hub | Relative links checked in 16 touched Markdown files; all targets exist |

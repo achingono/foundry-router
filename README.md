@@ -14,7 +14,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Current Status
 
-The implementation is **Implemented** through Phase 08, with Phase 09 **Partially implemented**. Google AI Studio provider support, per-project quota accounting, quota-aware selection, non-metered free-tier routing, and admin/Prometheus diagnostics are implemented in-process. Distributed quota aggregation and multi-worker metrics aggregation remain **Planned**. Existing Azure forwarding, credit-aware scheduling, state adapters, reconciliation adapter, infrastructure, graceful shutdown, and CI/CD status are described in [the documentation hub](docs/index.md).
+The implementation is **Implemented** through Phase 09 within its planned single-process scope. Google AI Studio provider support, per-project quota accounting, quota-aware selection, non-metered free-tier routing, and admin/Prometheus diagnostics are implemented in-process. Distributed quota aggregation and multi-worker metrics aggregation remain **Planned**. Existing Azure forwarding, credit-aware scheduling, state adapters, reconciliation adapter, infrastructure, graceful shutdown, and CI/CD status are described in [the documentation hub](docs/index.md).
 
 ## Development
 
