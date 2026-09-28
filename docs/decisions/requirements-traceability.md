@@ -112,7 +112,7 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast config-load error: hard-failing config load on incomplete per-backend credit configuration or per-model pricing would have made the existing request-time fail-closed defense (`insufficient_credit_capacity`) unreachable and would have broken legitimate partial-configuration scenarios exercised by the existing test suite (see [risk register](../plans/phase-08-credit-integrity-hardening/risk-register.md)). F6 was implemented by retaining the per-request `sync_from_settings` call — removing it broke correctness for any caller that swaps the `Settings` singleton without a corresponding explicit sync — and instead adding a settings-object-identity fast path so repeated calls with the same (`lru_cache`d) settings instance are effectively free in production.
 
-## Phase 09 Google AI Studio Multi-Key Quota Routing (Partially implemented)
+## Phase 09 Google AI Studio Multi-Key Quota Routing (Implemented; single-process scope)
 
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |

@@ -20,4 +20,4 @@ The backend model supports arbitrary backend counts and leaves room for subscrip
 
 - [ADR-005: State Management](adr/005-state-management.md)
 - [ADR-006: Explainable Credit-Aware Routing](adr/006-routing-algorithm.md)
-- [ADR-007: Provider-Aware Quota Routing](adr/007-provider-aware-quota-routing.md) (Proposed)
+- [ADR-007: Provider-Aware Quota Routing](adr/007-provider-aware-quota-routing.md) (Proposed; maintainer approval pending)

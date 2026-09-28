@@ -2,7 +2,7 @@
 
 ## Current State
 
-The repository is **Implemented** through Phase 08, with Phase 09 **Partially implemented** (see
+The repository is **Implemented** through Phase 09 within its planned single-process scope (see
 [Repository Status](../index.md)). It is a runnable FastAPI application that can be run locally,
 built as a container image, and deployed to Azure Container Apps via the Bicep templates in
 [`infra/`](../../infra/README.md).

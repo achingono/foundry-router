@@ -18,7 +18,7 @@ phase documents are the working plan; do not create a duplicate plan folder.
 | W3-W4 Quota state and selection | Implemented | Monotonic windows, Pacific/DST RPD, reservation/finalization/reaping, headroom scoring, group cooldown tests |
 | W5-W6 Reactive limits and free-tier economics | Implemented | Group-wide 429 cooldown, bounded Google retry jitter, non-metered backend readiness/routing tests |
 | W7 Observability and documentation | Implemented | Admin and Prometheus paths, canonical docs, ADR, traceability, and relative links are verified |
-| W8 Verification | Partially implemented | Tests, coverage, lint, Mypy, and deep review pass; formatter gate reports one unrelated existing file; Docker unavailable |
+| W8 Verification | Implemented | 263 tests pass, coverage is 88.26%, Ruff lint/format and Mypy pass; SonarQube script and Docker CLI unavailable |
 
 ## W1 — Provider-aware backend configuration and client
 1. Add a `provider` field to `BackendConfig` in `src/foundry_router/config/__init__.py`, a

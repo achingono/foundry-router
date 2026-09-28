@@ -22,9 +22,9 @@
 - A configurable quota-health weight if tuning proves necessary (defaults conservative).
 
 ## Output Quality Checklist
-- [ ] All mandatory outputs produced.
-- [ ] All outputs reviewed before the gate.
-- [ ] Evidence log updated with output references.
-- [ ] Documentation uses `Implemented`/`Partially implemented`/`Planned`/`Design target` labels
+- [x] All mandatory outputs produced.
+- [x] All outputs reviewed before the gate.
+- [x] Evidence log updated with output references.
+- [x] Documentation uses `Implemented`/`Partially implemented`/`Planned`/`Design target` labels
       accurately.
-- [ ] No secrets, keys, prompts, outputs, or hard-coded identifiers in source or docs.
+- [x] No secrets, keys, prompts, outputs, or hard-coded identifiers in source or docs.

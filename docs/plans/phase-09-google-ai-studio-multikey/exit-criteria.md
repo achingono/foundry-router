@@ -39,20 +39,19 @@
       implemented code is >= 80%.
 - [x] Ruff and Mypy pass; SonarQube scan and deep-review prompt (where present) have no
       unresolved `Blocker`/`Critical`/`Major` findings (note N/A if absent).
-- [ ] Repository-wide `ruff format --check src/ tests/` passes; currently blocked by the existing
-      formatting issue in `src/foundry_router/state/table.py`.
+- [x] Repository-wide `.venv/bin/ruff format --check src/ tests/` passes.
 - [x] Docker build succeeds where the CLI is available (note N/A otherwise).
 - [x] Routing, configuration, security, observability, and traceability docs plus the new ADR are
       updated with verified behaviour only; relative links validated.
 - [x] Final diff reviewed for unsupported present-tense claims, secrets, or hard-coded identifiers.
 
-The remaining unchecked gate is the repository formatter check, which is blocked by an unrelated
-pre-existing format issue in `src/foundry_router/state/table.py`.
+All technical exit criteria are complete for the planned single-process scope. Distributed quota
+accounting remains Planned and out of scope for Phase 09.
 
 ## Approval Table
 
 | Role | Name | Status | Notes |
 | --- | --- | --- | --- |
-| Owner | | Pending | |
-| Reviewer | | Pending | |
+| Owner | Implementation agent | Completed | Implementation and verification evidence recorded. |
+| Reviewer | Independent review | Completed | Plan review and deep review recorded in activities/evidence. |
 | Approver | | Pending | |
