@@ -254,6 +254,41 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_PROTECTED_EMERGENCY_FALLBACK",
     )
 
+    # Distributed state backend (Phase 11). Default memory keeps all existing
+    # Settings(...) fixtures passing; table mode requires endpoint + table names.
+    state_backend: Literal["memory", "table"] = Field(
+        default="memory",
+        validation_alias="FOUNDRY_STATE_BACKEND",
+        description="State backend: process-local memory or shared Azure Table Storage",
+    )
+    table_endpoint: str = Field(
+        default="",
+        validation_alias="FOUNDRY_TABLE_ENDPOINT",
+        description="Table service endpoint (https) used only when state_backend is table",
+    )
+    table_health_name: str = Field(
+        default="routerhealth",
+        validation_alias="FOUNDRY_TABLE_HEALTH_NAME",
+        description="Health table name (3-63 alphanumerics, starting with a letter)",
+    )
+    table_credit_name: str = Field(
+        default="routercredit",
+        validation_alias="FOUNDRY_TABLE_CREDIT_NAME",
+        description="Credit table name (3-63 alphanumerics, starting with a letter)",
+    )
+    table_request_timeout_seconds: Annotated[float, Field(gt=0, le=60, allow_inf_nan=False)] = (
+        Field(
+            default=5.0,
+            validation_alias="FOUNDRY_TABLE_REQUEST_TIMEOUT_SECONDS",
+            description="Bounded per-operation timeout for Table Storage reads/writes",
+        )
+    )
+    rate_limit_replica_share: Annotated[int, Field(ge=1, le=1000)] = Field(
+        default=1,
+        validation_alias="FOUNDRY_RATE_LIMIT_REPLICA_SHARE",
+        description="Replica divisor for per-replica quota shares (emitted by Bicep from maxReplicas)",
+    )
+
     # Backend local credit-cycle allowance estimates (JSON string)
     backend_cycle_allowance_usd_json: str = Field(
         default="{}",
@@ -514,6 +549,45 @@ class Settings(BaseSettings):
                     "must be a finite non-negative number"
                 )
             self.reconciliation_overrides_usd[backend_id] = amount_float
+
+        # Phase 11: conditional state-backend validation (memory ignores storage fields
+        # so existing Settings(...) fixtures keep passing).
+        if self.state_backend == "table":
+            import re
+            from urllib.parse import urlsplit
+
+            endpoint = (self.table_endpoint or "").strip()
+            if not endpoint:
+                raise ValueError("FOUNDRY_TABLE_ENDPOINT is required when state_backend is table")
+            try:
+                parts = urlsplit(endpoint)
+            except ValueError as exc:
+                raise ValueError("FOUNDRY_TABLE_ENDPOINT must be a valid https URL") from exc
+            if parts.scheme != "https" or not parts.hostname:
+                raise ValueError("FOUNDRY_TABLE_ENDPOINT must be a valid https URL")
+            if parts.username or parts.password or parts.query or parts.fragment:
+                raise ValueError(
+                    "FOUNDRY_TABLE_ENDPOINT must not carry credentials, query or fragment"
+                )
+            lowered = endpoint.lower()
+            if (
+                "sig=" in lowered
+                or "se=" in lowered
+                or "accountkey" in lowered
+                or "sharedkey" in lowered
+            ):
+                raise ValueError(
+                    "FOUNDRY_TABLE_ENDPOINT must not carry a key, SAS token or connection string"
+                )
+            name_pattern = re.compile(r"^[A-Za-z][A-Za-z0-9]{2,62}$")
+            for label, value in (
+                ("FOUNDRY_TABLE_HEALTH_NAME", self.table_health_name),
+                ("FOUNDRY_TABLE_CREDIT_NAME", self.table_credit_name),
+            ):
+                if not isinstance(value, str) or not name_pattern.match(value):
+                    raise ValueError(
+                        f"{label} must be 3-63 alphanumerics starting with a letter"
+                    )
 
         return self
 
