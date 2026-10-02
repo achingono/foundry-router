@@ -30,6 +30,38 @@ class QuotaGroupSnapshot:
     configured_limits: tuple[str, ...] = ()
 
 
+def effective_quota_limits(
+    quota_limits: dict[str, dict[str, int]], replica_share: int
+) -> dict[str, dict[str, int]]:
+    """Derive the per-replica limits enforced by one replica (D6 option B).
+
+    Each replica enforces ``floor(limit / share)`` on every dimension (RPM,
+    input TPM, RPD) through a single contract used by startup sync, the routing
+    comparison/re-sync and admin sync. Ordinary admissions across replicas can
+    therefore never exceed the configured provider quota in aggregate; the only
+    exemptions are the protected emergency fallback (explicit
+    ``allow_over_limit``) and brief single-revision rollout overlap.
+    """
+    share = max(1, int(replica_share))
+    return {
+        group: {dim: limit // share for dim, limit in limits.items()}
+        for group, limits in quota_limits.items()
+    }
+
+
+def zero_share_dimensions(
+    quota_limits: dict[str, dict[str, int]], replica_share: int
+) -> list[tuple[str, str]]:
+    """Return (group, dimension) pairs whose per-replica share floors to zero."""
+    effective = effective_quota_limits(quota_limits, replica_share)
+    return [
+        (group, dim)
+        for group, limits in effective.items()
+        for dim, limit in limits.items()
+        if limit <= 0
+    ]
+
+
 @dataclass
 class _UsageRecord:
     request_id: str | None
@@ -102,12 +134,14 @@ class InMemoryRateLimitStore:
         return self._reservation_max_age_seconds
 
     async def sync_from_settings(self, settings: Any) -> None:
-        limits = {
+        raw_limits = {
             group: dict(group_limits)
             for group, group_limits in getattr(settings, "quota_group_rate_limits", {}).items()
         }
+        share = int(getattr(settings, "rate_limit_replica_share", 1) or 1)
         async with self._lock:
-            self._quota_limits = limits
+            # D6 option B: each replica enforces its per-replica share locally.
+            self._quota_limits = effective_quota_limits(raw_limits, share)
             self._reservation_max_age_seconds = float(
                 getattr(settings, "reservation_max_age_seconds", 900.0)
             )
@@ -388,4 +422,6 @@ __all__ = [
     "InMemoryRateLimitStore",
     "QuotaGroupSnapshot",
     "RateLimitStore",
+    "effective_quota_limits",
+    "zero_share_dimensions",
 ]

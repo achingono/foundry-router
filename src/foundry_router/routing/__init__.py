@@ -22,6 +22,7 @@ from foundry_router.health import (
     BackendHealthState,
     cooldown_exhausted_response,
 )
+from foundry_router.ratelimit import effective_quota_limits
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,12 @@ async def select_candidate_backend(
         backend_id: (getattr(settings.backends[backend_id], "quota_group", None) or backend_id)
         for backend_id in ranked_candidates
     }
+    # D6 option B: routing evaluates the same per-replica effective limits the
+    # store enforces, so the re-sync below cannot silently revert the share.
+    effective_limits = effective_quota_limits(
+        {group: dict(limits) for group, limits in quota_limits.items()},
+        int(getattr(settings, "rate_limit_replica_share", 1) or 1),
+    )
     configured_groups = sorted(
         {
             quota_group
@@ -169,7 +176,7 @@ async def select_candidate_backend(
         rate_limit_store is not None
         and hasattr(rate_limit_store, "sync_from_settings")
         and (
-            getattr(rate_limit_store, "quota_limits", None) != quota_limits
+            getattr(rate_limit_store, "quota_limits", None) != effective_limits
             or getattr(rate_limit_store, "reservation_max_age_seconds", None)
             != settings.reservation_max_age_seconds
         )
@@ -212,7 +219,7 @@ async def select_candidate_backend(
 
     def quota_headroom(backend_id: str) -> float | None:
         quota_group = quota_group_by_backend[backend_id]
-        limits = quota_limits.get(quota_group)
+        limits = effective_limits.get(quota_group)
         quota_snapshot = quota_snapshots.get(quota_group)
         if not limits or quota_snapshot is None:
             return None
@@ -229,7 +236,7 @@ async def select_candidate_backend(
         return max(0.0, min(1.0, *headroom_ratios)) if headroom_ratios else None
 
     def quota_can_fit(backend_id: str) -> bool:
-        limits = quota_limits.get(quota_group_by_backend[backend_id])
+        limits = effective_limits.get(quota_group_by_backend[backend_id])
         quota_snapshot = quota_snapshots.get(quota_group_by_backend[backend_id])
         if not limits or quota_snapshot is None:
             return True
@@ -433,7 +440,7 @@ async def select_candidate_backend(
             )
         if reserved:
             quota_group = quota_group_by_backend[backend_id]
-            if rate_limit_store is not None and quota_group in quota_limits:
+            if rate_limit_store is not None and quota_group in effective_limits:
                 quota_reserved = await rate_limit_store.try_reserve_estimate(
                     request_id,
                     quota_group,
