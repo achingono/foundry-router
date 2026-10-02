@@ -26,6 +26,8 @@ keeping them confidential; see [API key security guidance](https://docs.cloud.go
 
 Infrastructure should define only the RBAC and identity permissions needed for Foundry access, cost reconciliation, registry access, and deployment. GitHub Actions should prefer OIDC over long-lived credentials. Subscription IDs and resource IDs belong in deployment parameters, not source defaults.
 
+Phase 10 wires the container app's system-assigned identity with least privilege: `AcrPull` scoped to the registry resource (managed-identity pull, ACR only; external registries use secret-mode pull with a `@secure()` credential supplied out of band) and `Key Vault Secrets User` scoped to the vault, with `keyVaultReference` secrets (`identity: 'system'`) surfaced via `secretRef` env entries. No secret value appears in the template, parameter files, or workflows. Role assignments on pre-existing resources in another resource group deploy through modules scoped to that group.
+
 ## Required Security Tests
 
 Tests must verify client authentication, administrative authentication, secret and authorization-header redaction, prompt/output non-logging, configured-backend-only egress, and rejection of arbitrary user-supplied endpoint URLs.

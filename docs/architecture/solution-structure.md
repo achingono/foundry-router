@@ -1,6 +1,6 @@
 # Solution Structure
 
-## Current Repository (Implemented through Phase 08; multi-worker metrics Planned)
+## Current Repository (Implemented through Phase 10 template; deployed multi-replica Partially implemented, Phase 11 Planned)
 
 ```text
 foundry-router/
@@ -38,7 +38,7 @@ foundry-router/
 └── pyproject.toml
 ```
 
-Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, Phase 05 modular decomposition, Phase 06 distributed state adapters (`state/table.py` with `AzureTableCreditStore`/`AzureTableHealthStore`), and Phase 07 `infra/` IaC (`infra/main.bicep`) plus Phase 08 credit-integrity hardening are implemented. Multi-worker metrics aggregation remains Planned.
+Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, Phase 05 modular decomposition, Phase 06 distributed state adapter code (`state/table.py` with `AzureTableCreditStore`/`AzureTableHealthStore`), Phase 07 `infra/` IaC plus Phase 08 credit-integrity hardening plus Phase 10 mode-parameterised Bicep (`registryMode`/`keyVaultMode`, derived image coordinates, RBAC secret wiring, ingestion cap/alert, `Basic` console-log plan, `maxReplicas: 1` interim guard) are implemented. Deployed multi-replica shared state is Partially implemented (storage provisioning, client wiring and multi-replica deployment Planned in Phase 11). Multi-worker metrics aggregation remains Planned.
 
 ## Target Structure
 

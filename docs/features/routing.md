@@ -72,7 +72,8 @@ Every routing decision emits a structured `routing_decision` event containing:
 - `selected_backend`: Selected backend ID or `null` if none
 - `reason`: Rationale (e.g. `selected`, `all_candidates_in_cooldown_or_disabled`, `insufficient_credit_capacity`)
 - `estimated_request_cost_usd`: Conservative calculated cost
-- `candidates`: Array of candidate health states, cooldowns, credit states, and computed composite scores.
+
+Per-backend candidate detail (health, cooldown, credit, composite score, quota headroom) is emitted on `routing_decision_detail` at `DEBUG`/`WARNING`, not on the production `INFO` event.
 
 ## Retry and Failover
 
@@ -80,4 +81,4 @@ Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. 
 
 ## State Store Abstractions (Phases 5–6, Implemented)
 
-Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`; multi-replica deployments use `AzureTableCreditStore` and `AzureTableHealthStore` (`src/foundry_router/state/table.py`). Both protocols (`CreditStore`, `HealthStore`) are implemented with swappable adapters. Azure Table Storage same-backend-partition transactional batches (ETag-guarded `balance` + `req-{id}` rows) protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis remains an optional later cache and cannot replace the authoritative store.
+Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`; multi-replica deployments will use `AzureTableCreditStore` and `AzureTableHealthStore` (`src/foundry_router/state/table.py`) once Phase 11 provisions Storage and wires the client. Adapter code is **Implemented** with swappable protocols; deployed multi-replica shared state is **Partially implemented** (storage provisioning, client wiring and multi-replica deployment **Planned** in Phase 11). Azure Table Storage same-backend-partition transactional batches (ETag-guarded `balance` + `req-{id}` rows) protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis remains an optional later cache and cannot replace the authoritative store.

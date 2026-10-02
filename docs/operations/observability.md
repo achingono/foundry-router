@@ -13,7 +13,8 @@ The router emits structured `routing_decision` logs on every candidate selection
 - `selected_backend`: Chosen backend ID or `null`
 - `reason`: Rationale (`selected`, `all_candidates_in_cooldown_or_disabled`, `insufficient_credit_capacity`, etc.)
 - `estimated_request_cost_usd`: Conservative request reservation amount
-- `candidates`: List of evaluated candidate backends with `health_state`, `cooldown_remaining_seconds`, `credit_state`, `available_credit_usd`, `projected_unused_credit_usd`, and composite `score`.
+
+Per-backend candidate detail (health, cooldown, credit, score, quota headroom) is emitted on a separate `routing_decision_detail` event at `DEBUG` on success and `WARNING` on failure, so production `INFO` carries the decision without the full candidate array (Phase 10 source-volume reduction).
 
 For configured quota groups, candidate details also include the `quota_group`, normalized
 `quota_headroom`, and remaining RPM, input TPM, and RPD. These fields identify project groups and
@@ -23,9 +24,9 @@ backend IDs only; credentials are not logged.
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
-- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Backed by Azure Table Storage adapters (`AzureTableCreditStore`, `AzureTableHealthStore`) for multi-replica deployments.
+- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Table-backed live diagnostics for multi-replica are **Partially implemented** (adapter code **Implemented**; storage provisioning and client wiring **Planned** in Phase 11).
 - **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters.
-- **Multi-replica support**: Azure Table Storage integration enables consistent credit accounting and health state across multiple container instances.
+- **Multi-replica support**: Deployed multi-replica shared state is **Partially implemented**; Azure Table Storage provisioning, client wiring and multi-replica deployment are **Planned** in Phase 11.
 
 ## Reservation Lifecycle Safety (Implemented)
 
