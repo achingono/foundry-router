@@ -285,7 +285,7 @@ class Settings(BaseSettings):
             description="Bounded per-operation timeout for Table Storage reads/writes",
         )
     )
-    rate_limit_replica_share: Annotated[int, Field(ge=1, le=1000)] = Field(
+    rate_limit_replica_share: Annotated[int, Field(ge=0, le=1000)] = Field(
         default=1,
         validation_alias="FOUNDRY_RATE_LIMIT_REPLICA_SHARE",
         description="Replica divisor for per-replica quota shares (from maxReplicas)",

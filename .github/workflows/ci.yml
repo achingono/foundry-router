@@ -71,16 +71,23 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,azure]"
 
       - name: Run unit tests
-        run: pytest tests/unit/ tests/integration/ -v --cov=src/foundry_router --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+        run: pytest tests/unit/ tests/integration/ -v -m "not docker and not azurite" --cov=src/foundry_router --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
+
+      - name: Save unit coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: .coverage
+          include-hidden-files: true
 
   integration-tests:
     name: Integration Tests
@@ -98,15 +105,61 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,azure]"
 
       - name: Run integration tests
-        run: pytest tests/integration/ -v -m "not docker"
+        run: pytest tests/integration/ -v -m "not docker and not azurite"
+
+  azurite-tests:
+    name: Azurite Integration Tests (Phase 11)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Azurite
+        run: npm install -g azurite
+
+      - name: Start Azurite Table Service
+        run: |
+          nohup azurite --silent --tableHost 127.0.0.1 --tablePort 10002 > /tmp/azurite.log 2>&1 &
+          for attempt in {1..20}; do
+            if nc -z 127.0.0.1 10002; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/azurite.log
+          exit 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev,azure]"
+
+      - name: Run Azurite-marked integration tests
+        run: pytest tests/integration/test_azurite_distributed_state.py -v -m "azurite" --cov=src/foundry_router --cov-report= --cov-append
+
+      - name: Save Azurite coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-azurite
+          path: .coverage
+          include-hidden-files: true
 
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, unit-tests, integration-tests]
+    needs: [lint, typecheck, unit-tests, integration-tests, azurite-tests]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -145,15 +198,49 @@ jobs:
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, unit-tests, integration-tests, docker-build]
+    needs: [lint, typecheck, unit-tests, integration-tests, azurite-tests, docker-build]
     if: always()
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install coverage
+        if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
+        run: pip install coverage
+
+      - name: Download unit coverage
+        if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage-unit
+
+      - name: Download Azurite coverage
+        if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-azurite
+          path: coverage-azurite
+
+      - name: Enforce combined coverage
+        if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
+        run: |
+          coverage combine coverage-unit coverage-azurite
+          coverage report --fail-under=80
+
       - name: Check all jobs passed
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ]] || \
              [[ "${{ needs.typecheck.result }}" != "success" ]] || \
              [[ "${{ needs.unit-tests.result }}" != "success" ]] || \
              [[ "${{ needs.integration-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.azurite-tests.result }}" != "success" ]] || \
              [[ "${{ needs.docker-build.result }}" != "success" ]]; then
             echo "One or more required jobs failed"
             exit 1

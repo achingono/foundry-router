@@ -24,9 +24,9 @@ backend IDs only; credentials are not logged.
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
 - **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
-- **Live diagnostics**: Exposes ephemeral health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Table-backed live diagnostics for multi-replica are **Partially implemented** (adapter code **Implemented**; storage provisioning and client wiring **Planned** in Phase 11).
+- **Live diagnostics**: Exposes health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Table-backed diagnostics are implemented in code; Azure deployment verification remains pending.
 - **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters.
-- **Multi-replica support**: Deployed multi-replica shared state is **Partially implemented**; Azure Table Storage provisioning, client wiring and multi-replica deployment are **Planned** in Phase 11.
+- **Multi-replica support**: Deployed shared state remains **Partially implemented** until Azure validation and a two-replica deployment pass. Table provisioning, identity-only client wiring, startup selection and bounded readiness probes are implemented in the current code; production remains memory-backed with one replica.
 
 ## Reservation Lifecycle Safety (Implemented)
 
@@ -36,7 +36,7 @@ For the distributed `AzureTableCreditStore`, the same age bound is enforced by a
 
 ## Credit and Pricing Configuration Completeness (Implemented)
 
-`GET /health/ready` reports two additional checks: `backend_credit_config_complete` (every backend referenced by a model pool has a cycle start day, cycle allowance, and initial estimated remaining credit) and `model_pricing_complete` (every configured model has a pricing entry). Readiness returns `503` when either check fails, surfacing misconfiguration before it silently manifests as `insufficient_credit_capacity` at request time. This is a readiness-level check rather than a config-load failure, preserving the existing fail-closed request-time behavior for defense in depth.
+`GET /health/ready` reports `backend_credit_config_complete` and `model_pricing_complete`, plus `state_store_reachable` in table mode. The storage check verifies every configured backend has a balance row and caches successful/failed probes for at most five seconds. `rate_limit_share_valid` and a `rate_limit_share_<group>_<dimension>_valid` check identify any per-replica RPM, input-TPM, or RPD share that floors to zero. Readiness returns `503` for any failed check; this is a readiness-level signal, not a configuration-load failure. Request-time credit and quota admission still fail closed independently of the cached readiness result.
 
 ## Prometheus & OpenTelemetry Metrics (Implemented single-process; multi-process aggregation Planned)
 

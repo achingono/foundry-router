@@ -62,7 +62,7 @@ _reconciliation_loop: ReconciliationLoop | None = None
 _table_clients: tuple[Any, ...] = ()
 # Phase 11: bounded readiness probe cache (at most 5 seconds stale).
 _STATE_PROBE_CACHE_SECONDS = 5.0
-_state_probe_cache: dict[str, Any] = {"at": 0.0, "ok": True}
+_state_probe_cache: dict[str, Any] = {"at": None, "ok": False}
 
 
 class _LiveStore:
@@ -134,7 +134,8 @@ def _table_client_for(table: str) -> Any | None:
 async def _probe_state_stores(settings: Any) -> bool:
     """Bounded table-reachability probe, cached for at most 5 seconds."""
     now = time.monotonic()
-    if now - float(_state_probe_cache.get("at", 0.0)) <= _STATE_PROBE_CACHE_SECONDS:
+    cached_at = _state_probe_cache.get("at")
+    if cached_at is not None and now - float(cached_at) <= _STATE_PROBE_CACHE_SECONDS:
         return bool(_state_probe_cache.get("ok", True))
     backend_ids = list(getattr(settings, "backends", {}).keys())
     timeout = float(getattr(settings, "table_request_timeout_seconds", 5.0))
@@ -142,23 +143,24 @@ async def _probe_state_stores(settings: Any) -> bool:
     if not backend_ids:
         ok = False
     else:
-        target = backend_ids[0]
-        pairs = (
-            (settings.table_credit_name, "balance"),
-            (settings.table_health_name, "health"),
-        )
-        for table_name, row_key in pairs:
-            client = _table_client_for(table_name)
-            if client is None:
-                ok = False
-                break
+        credit_client = _table_client_for(settings.table_credit_name)
+        health_client = _table_client_for(settings.table_health_name)
+        if credit_client is None or health_client is None:
+            ok = False
+        else:
+            probes = [
+                credit_client.probe_reachable(
+                    backend_id, "balance", timeout_seconds=timeout, require_entity=True
+                )
+                for backend_id in backend_ids
+            ]
+            probes.append(
+                health_client.probe_reachable(backend_ids[0], "health", timeout_seconds=timeout)
+            )
             try:
-                reachable = await client.probe_reachable(target, row_key, timeout_seconds=timeout)
+                ok = all(await asyncio.gather(*probes))
             except Exception:
-                reachable = False
-            if not reachable:
                 ok = False
-                break
     _state_probe_cache.update(at=now, ok=ok)
     return ok
 
@@ -170,21 +172,19 @@ async def _extra_readiness_checks() -> dict[str, bool]:
     try:
         bad = zero_share_dimensions(
             {group: dict(limits) for group, limits in settings.quota_group_rate_limits.items()},
-            int(getattr(settings, "rate_limit_replica_share", 1) or 1),
+            int(getattr(settings, "rate_limit_replica_share", 1)),
         )
     except Exception:
         bad = []
-    if bad:
-        group, dim = bad[0]
+    checks["rate_limit_share_valid"] = not bad
+    for group, dim in bad:
         logger.warning(
             "rate_limit_share_invalid",
             quota_group=group,
             dimension=dim,
             share=getattr(settings, "rate_limit_replica_share", 1),
         )
-        checks["rate_limit_share_valid"] = False
-    else:
-        checks["rate_limit_share_valid"] = True
+        checks[f"rate_limit_share_{group}_{dim}_valid"] = False
     if getattr(settings, "state_backend", "memory") == "table":
         checks["state_store_reachable"] = await _probe_state_stores(settings)
     return checks

@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 
 def build_router(*, load_settings_fn: Any, extra_checks_fn: Any | None = None) -> APIRouter:
     router = APIRouter(tags=["Health"])
-    router = APIRouter(tags=["Health"])
 
     @router.get("/health/live")
     async def liveness() -> dict[str, str]:

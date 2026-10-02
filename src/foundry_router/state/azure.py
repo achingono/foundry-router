@@ -39,10 +39,15 @@ def select_credential() -> Any:
     Managed identity in Container Apps; developer credential chain locally.
     No shared-key, SAS or connection-string path exists.
     """
-    if _is_container_apps():
+    client_id = os.environ.get("FOUNDRY_AZURE_CLIENT_ID")
+    if _is_container_apps() or client_id:
         from azure.identity.aio import ManagedIdentityCredential
 
-        return ManagedIdentityCredential()
+        return (
+            ManagedIdentityCredential(client_id=client_id)
+            if client_id
+            else ManagedIdentityCredential()
+        )
     from azure.identity.aio import DefaultAzureCredential
 
     return DefaultAzureCredential()
@@ -55,11 +60,12 @@ def normalise_entity(entity: Mapping[str, Any]) -> dict[str, Any]:
     adapter reads ``"odata.etag"``. Every returned entity is normalised so the
     adapter receives the ETag; entities without one keep no ETag key.
     """
-    data = dict(entity)
-    if isinstance(entity, dict):
+    # Extract metadata as attribute (not dict key) since TableEntity.metadata
+    # is a property, not a dict key. dict(TableEntity) drops the metadata.
+    metadata = getattr(entity, "metadata", None)
+    if metadata is None and isinstance(entity, dict):
         metadata = entity.get("metadata")
-    else:
-        metadata = getattr(entity, "metadata", None)
+    data = dict(entity)
     etag: Any = None
     if isinstance(metadata, dict):
         etag = metadata.get("etag")
@@ -122,9 +128,12 @@ class AzureTableEntityClient:
         table_name: str,
         credential: Any | None = None,
         request_timeout_seconds: float = 5.0,
+        allow_http_for_testing: bool = False,
     ) -> None:
-        if not endpoint.startswith("https://"):
-            raise ValueError("table endpoint must use https")
+        if not endpoint.startswith("https://") and not (
+            allow_http_for_testing and endpoint.startswith("http://")
+        ):
+            raise ValueError("table endpoint must use https (or http for local testing)")
         self._endpoint = endpoint
         self._table_name = table_name
         self._credential = credential or select_credential()
@@ -140,6 +149,9 @@ class AzureTableEntityClient:
                 table_name=self._table_name,
                 credential=self._credential,
                 connection_timeout=self._timeout,
+                read_timeout=self._timeout,
+                retry_total=1,
+                retry_backoff_max=0.5,
             )
         return self._client
 
@@ -147,6 +159,11 @@ class AzureTableEntityClient:
         client, self._client = self._client, None
         if client is not None:
             await client.close()
+        close_credential = getattr(self._credential, "close", None)
+        if close_credential is not None:
+            result = close_credential()
+            if hasattr(result, "__await__"):
+                await result
 
     async def get_entity(self, partition_key: str, row_key: str) -> Mapping[str, Any] | None:
         from azure.core.exceptions import ResourceNotFoundError
@@ -215,8 +232,10 @@ class AzureTableEntityClient:
             await self._get_client().submit_transaction(batch)
         except TableTransactionError as exc:
             code = _error_code(exc)
-            index = getattr(exc, "index", 0) or 0
-            target = operations[index] if 0 <= index < len(operations) else None
+            index = _transaction_index(exc)
+            target = (
+                operations[index] if index is not None and 0 <= index < len(operations) else None
+            )
             if (
                 code == "UpdateConditionNotSatisfied"
                 and target is not None
@@ -244,7 +263,12 @@ class AzureTableEntityClient:
             return True
 
     async def probe_reachable(
-        self, partition_key: str, row_key: str, *, timeout_seconds: float = 5.0
+        self,
+        partition_key: str,
+        row_key: str,
+        *,
+        timeout_seconds: float = 5.0,
+        require_entity: bool = False,
     ) -> bool:
         """Bounded reachability probe for readiness (one read, cached by callers).
 
@@ -257,6 +281,7 @@ class AzureTableEntityClient:
         from azure.core.exceptions import ResourceNotFoundError
 
         try:
+            # Use the SDK client directly to avoid get_entity's exception handling
             await _asyncio.wait_for(
                 self._get_client().get_entity(partition_key=partition_key, row_key=row_key),
                 timeout=timeout_seconds,
@@ -264,8 +289,30 @@ class AzureTableEntityClient:
         except Exception as exc:
             code = _error_code(exc)
             if code == "TableNotFound":
+                _logger.warning(
+                    "table_probe_failed",
+                    table=self._table_name,
+                    error_type=type(exc).__name__,
+                    status_code=getattr(exc, "status_code", None),
+                )
                 return False
-            return bool(isinstance(exc, ResourceNotFoundError))
+            if isinstance(exc, ResourceNotFoundError):
+                if require_entity:
+                    _logger.warning(
+                        "table_probe_entity_missing",
+                        table=self._table_name,
+                        error_type=type(exc).__name__,
+                        status_code=getattr(exc, "status_code", None),
+                    )
+                    return False
+                return True
+            _logger.warning(
+                "table_probe_failed",
+                table=self._table_name,
+                error_type=type(exc).__name__,
+                status_code=getattr(exc, "status_code", None),
+            )
+            return False
         else:
             return True
 
@@ -306,15 +353,26 @@ def _error_code(exc: Exception) -> str | None:
     ):
         if candidate is not None:
             try:
+                # Handle enum values by extracting .value if available
+                if hasattr(candidate, "value"):
+                    return str(candidate.value)
                 return str(candidate)
             except Exception:
                 continue
     # Fall back to message parsing so real service errors still map correctly.
     message = str(getattr(exc, "message", exc) or "")
-    for known in ("UpdateConditionNotSatisfied", "EntityAlreadyExists"):
+    for known in ("UpdateConditionNotSatisfied", "EntityAlreadyExists", "TableNotFound"):
         if known in message:
             return known
     return None
+
+
+def _transaction_index(exc: Exception) -> int | None:
+    """Only trust an operation index explicitly included in the service message."""
+    import re
+
+    match = re.match(r"^\s*(\d+):", str(getattr(exc, "message", "")))
+    return int(match.group(1)) if match else None
 
 
 __all__ = [

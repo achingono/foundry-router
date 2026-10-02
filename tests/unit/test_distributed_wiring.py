@@ -52,6 +52,7 @@ def test_effective_quota_limits_floors_each_dimension() -> None:
     raw = {"g1": {"rpm": 10, "tpm": 101, "rpd": 3}}
     assert effective_quota_limits(raw, 2) == {"g1": {"rpm": 5, "tpm": 50, "rpd": 1}}
     assert effective_quota_limits(raw, 1) == raw
+    assert effective_quota_limits(raw, 0) == {"g1": {"rpm": 0, "tpm": 0, "rpd": 0}}
 
 
 @pytest.mark.asyncio
@@ -67,7 +68,7 @@ async def test_rate_limit_sync_applies_replica_share() -> None:
 
 
 @pytest.mark.asyncio
-async def test_routing_resync_keeps_per_replica_share(monkeypatch) -> None:
+async def test_routing_resync_keeps_per_replica_share() -> None:
     """Repeated routing calls must not revert the scaled store limits."""
     from foundry_router.health import BackendHealthSnapshot, BackendHealthState
     from foundry_router.routing import select_candidate_backend
@@ -127,12 +128,13 @@ async def test_routing_resync_keeps_per_replica_share(monkeypatch) -> None:
 async def test_readiness_zero_share_fails(monkeypatch) -> None:
     settings = _memory_settings(
         quota_group_rate_limits={"g1": {"rpm": 1}},
-        rate_limit_replica_share=2,
+        rate_limit_replica_share=0,
     )
     monkeypatch.setattr(main_module, "load_settings", lambda: settings)
     main_module._state_probe_cache.update(at=0.0, ok=True)
     checks = await _extra_readiness_checks()
     assert checks["rate_limit_share_valid"] is False
+    assert checks["rate_limit_share_g1_rpm_valid"] is False
     assert "state_store_reachable" not in checks
 
 
@@ -184,6 +186,32 @@ async def test_readiness_table_unreachable_is_503(monkeypatch) -> None:
     )
     main_module._state_probe_cache.update(at=0.0, ok=True)
     checks = await _extra_readiness_checks()
+    assert checks["state_store_reachable"] is False
+
+
+@pytest.mark.asyncio
+async def test_readiness_first_probe_does_not_assume_success(monkeypatch) -> None:
+    settings = SimpleNamespace(
+        state_backend="table",
+        table_endpoint="https://placeholder.table.core.windows.net",
+        table_health_name="routerhealth",
+        table_credit_name="routercredit",
+        table_request_timeout_seconds=5.0,
+        quota_group_rate_limits={},
+        rate_limit_replica_share=1,
+        backends={"b1": SimpleNamespace()},
+    )
+    monkeypatch.setattr(main_module, "load_settings", lambda: settings)
+    monkeypatch.setattr(main_module.time, "monotonic", lambda: 1.0)
+    monkeypatch.setattr(
+        main_module,
+        "_table_clients",
+        (_FakeProbeClient("routercredit", False), _FakeProbeClient("routerhealth", True)),
+    )
+    main_module._state_probe_cache.update(at=None, ok=False)
+
+    checks = await _extra_readiness_checks()
+
     assert checks["state_store_reachable"] is False
 
 

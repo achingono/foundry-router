@@ -26,7 +26,7 @@ keeping them confidential; see [API key security guidance](https://docs.cloud.go
 
 Infrastructure should define only the RBAC and identity permissions needed for Foundry access, cost reconciliation, registry access, and deployment. GitHub Actions should prefer OIDC over long-lived credentials. Subscription IDs and resource IDs belong in deployment parameters, not source defaults.
 
-Phase 10 wires the container app's system-assigned identity with least privilege: `AcrPull` scoped to the registry resource (managed-identity pull, ACR only; external registries use secret-mode pull with a `@secure()` credential supplied out of band) and `Key Vault Secrets User` scoped to the vault, with `keyVaultReference` secrets (`identity: 'system'`) surfaced via `secretRef` env entries. No secret value appears in the template, parameter files, or workflows. Role assignments on pre-existing resources in another resource group deploy through modules scoped to that group.
+The template creates a user-assigned runtime identity before the container app. `AcrPull` (ACR only), `Key Vault Secrets User`, and, in table mode, `Storage Table Data Contributor` are granted to it before app provisioning; storage data access is scoped to each router table. Key Vault references select this identity, and the application selects it through `FOUNDRY_AZURE_CLIENT_ID`. External registries use secret-mode pull with an out-of-band `@secure()` credential. No storage key, SAS token, connection string, or registry credential is committed. Role assignments for pre-existing resources in another resource group deploy through modules scoped to that group. Azure rollout and RBAC propagation still require environment verification.
 
 ## Required Security Tests
 

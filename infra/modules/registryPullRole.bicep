@@ -4,7 +4,7 @@ targetScope = 'resourceGroup'
 @description('Name of the existing container registry.')
 param registryName string
 
-@description('Principal ID of the container app system-assigned identity.')
+@description('Principal ID of the pre-created container app runtime identity.')
 param principalId string
 
 @description('Deterministic suffix for the role assignment name.')

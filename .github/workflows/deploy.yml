@@ -96,6 +96,11 @@ jobs:
     needs: validate-bicep
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
+    permissions:
+      contents: read
+      packages: read
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -116,7 +121,9 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_STAGING }} \
             --template-file infra/main.bicep \
             --parameters infra/parameters.staging.json \
-            --parameters imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }}
+            --parameters registryAuthMode=secret registryServer=ghcr.io registryUsername=${{ github.actor }} \
+              imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }} \
+              registryPassword="$GHCR_TOKEN" alertEmailAddress=${{ vars.FOUNDRY_ALERT_EMAIL }}
 
   smoke-test-staging:
     runs-on: ubuntu-latest
@@ -152,6 +159,11 @@ jobs:
     needs: validate-bicep
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
     environment: production
+    permissions:
+      contents: read
+      packages: read
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -172,7 +184,9 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
             --template-file infra/main.bicep \
             --parameters infra/parameters.prod.json \
-            --parameters imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }}
+            --parameters registryAuthMode=secret registryServer=ghcr.io registryUsername=${{ github.actor }} \
+              imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }} \
+              registryPassword="$GHCR_TOKEN" alertEmailAddress=${{ vars.FOUNDRY_ALERT_EMAIL }}
 
   smoke-test-production:
     runs-on: ubuntu-latest

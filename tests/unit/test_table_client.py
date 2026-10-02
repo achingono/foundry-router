@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from foundry_router.state.azure import (
@@ -9,6 +11,7 @@ from foundry_router.state.azure import (
     TableEntityMissingEtagError,
     normalise_entity,
     prefix_upper_bound,
+    select_credential,
 )
 from foundry_router.state.table import _TransactionEntity
 
@@ -73,12 +76,18 @@ def _client_with(fake: _FakeAioClient) -> AzureTableEntityClient:
         table_name="routercredit",
         credential=object(),
     )
-    client._client = fake  # noqa: SLF001 - inject double to avoid network
+    client._client = fake
     return client
 
 
 def test_normalise_entity_bridges_sdk_metadata_etag() -> None:
-    entity = {"PartitionKey": "b1", "RowKey": "balance", "metadata": {"etag": "W/abc"}}
+    # The SDK returns TableEntity objects with a metadata attribute, not a dict key
+    class FakeTableEntity(dict):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.metadata = {"etag": "W/abc"}
+
+    entity = FakeTableEntity({"PartitionKey": "b1", "RowKey": "balance"})
     assert normalise_entity(entity)["odata.etag"] == "W/abc"
 
 
@@ -89,7 +98,14 @@ def test_normalise_entity_keeps_existing_odata_etag() -> None:
 
 def test_prefix_upper_bound_excludes_prefix_sibling() -> None:
     assert prefix_upper_bound("req-") == "req."
-    assert "req-anything" < prefix_upper_bound("req-")
+    assert prefix_upper_bound("req-") > "req-anything"
+
+
+def test_container_apps_credential_uses_configured_user_identity(monkeypatch) -> None:
+    monkeypatch.setattr("foundry_router.state.azure._is_container_apps", lambda: True)
+    monkeypatch.setenv("FOUNDRY_AZURE_CLIENT_ID", "test-client-id")
+    monkeypatch.setattr("azure.identity.aio.ManagedIdentityCredential", lambda **kwargs: kwargs)
+    assert select_credential() == {"client_id": "test-client-id"}
 
 
 @pytest.mark.asyncio
@@ -152,6 +168,19 @@ async def test_409_on_balance_update_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_transaction_conflict_without_explicit_index_raises() -> None:
+    from azure.data.tables import TableTransactionError
+
+    fake = _FakeAioClient()
+    err = TableTransactionError(message="The update condition is not satisfied.")
+    err.error_code = "UpdateConditionNotSatisfied"  # type: ignore[attr-defined]
+    fake.submit_error = err
+    client = _client_with(fake)
+    with pytest.raises(TableTransactionError):
+        await client.try_batch_transaction([_balance_update("W/1")])
+
+
+@pytest.mark.asyncio
 async def test_query_uses_parameterised_prefix_range() -> None:
     fake = _FakeAioClient()
     client = _client_with(fake)
@@ -173,3 +202,24 @@ async def test_try_create_false_on_exists() -> None:
     fake.create_error = err
     client = _client_with(fake)
     assert await client.try_create_entity({"PartitionKey": "b1", "RowKey": "balance"}) is False
+
+
+@pytest.mark.asyncio
+async def test_probe_reachable_fails_for_forbidden_and_timeout() -> None:
+    from azure.core.exceptions import HttpResponseError
+
+    class ForbiddenClient:
+        async def get_entity(self, **kwargs):
+            raise HttpResponseError(status_code=403, message="Forbidden")
+
+    class SlowClient:
+        async def get_entity(self, **kwargs):
+            await asyncio.sleep(0.05)
+
+    forbidden = _client_with(_FakeAioClient())
+    forbidden._client = ForbiddenClient()
+    assert not await forbidden.probe_reachable("b1", "balance", timeout_seconds=0.01)
+
+    slow = _client_with(_FakeAioClient())
+    slow._client = SlowClient()
+    assert not await slow.probe_reachable("b1", "balance", timeout_seconds=0.001)

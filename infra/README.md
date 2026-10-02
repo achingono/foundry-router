@@ -1,8 +1,8 @@
-# Foundry Router Infrastructure as Code (Phase 10)
+# Foundry Router Infrastructure as Code (Phases 10 and 11)
 
 ## Overview
 
-This directory contains Azure Bicep Infrastructure as Code (IaC) templates for deploying Foundry Router on Azure Container Apps (ACA). Phase 10 extends the Phase 07 template so a single template can either provision a new container registry and Key Vault or attach to pre-existing ones, wires image pull and Key Vault secret references, and enforces cost and replica guardrails.
+This directory contains Azure Bicep Infrastructure as Code (IaC) templates for deploying Foundry Router on Azure Container Apps (ACA). Phase 10 adds existing-resource modes and operational guardrails. Phase 11 adds conditional Azure Table Storage provisioning and app wiring. The multi-replica deployment gate remains pending until Azure validation and a two-replica deployment pass.
 
 Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `assertions`; `az bicep build`, `az bicep lint` and `az deployment group validate` evaluate them identically).
 
@@ -12,6 +12,7 @@ Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `asse
 - `bicepconfig.json`: Enables assertion evaluation
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
+- `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
 - `parameters.staging.json`: Placeholder-only staging parameters (`new`/`new`, hermetic CI)
 - `parameters.prod.json`: Placeholder-only production parameters (`new`/`new`, `maxReplicas: 1` interim guard)
 - `parameters.example.json`: Placeholder-only full parameter surface
@@ -23,7 +24,9 @@ Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `asse
 |---|---|---|---|
 | `registryMode` | `new` \| `existing` | `new` | Provision ACR or attach to a pre-existing registry |
 | `keyVaultMode` | `new` \| `existing` | `new` | Provision vault or attach to a pre-existing vault |
-| `registryAuthMode` | `managedIdentity` \| `secret` | `managedIdentity` | System-identity pull (ACR only) or stored credential pull |
+| `registryAuthMode` | `managedIdentity` \| `secret` | `managedIdentity` | User-assigned identity pull (ACR only) or stored credential pull |
+| `stateBackend` | `memory` \| `table` | `memory` | Process-local state or shared Azure Table state |
+| `storageMode` | `new` \| `existing` | `new` | Provision a hardened account or attach to an existing account when `stateBackend=table` |
 
 Defaults are `new` so CI validation stays hermetic (no pre-existing named resource required). Select `existing` only through gitignored `*.local.json` overrides or workflow inputs.
 
@@ -42,10 +45,11 @@ Managed-identity pull is only available for ACR. An `assert` fails validation wi
 
 ## Registry and vault wiring
 
-- `managedIdentity` -> `configuration.registries` carries `identity: 'system'` and no credential; `AcrPull` is granted to the container app's system-assigned principal scoped to the registry resource (deterministic `guid()`-seeded name; ARM implicit dependency on `containerApp.identity.principalId` orders it after the identity exists).
+- A user-assigned runtime identity is created before the container app. `AcrPull`, `Key Vault Secrets User`, and (in table mode) table-scoped `Storage Table Data Contributor` assignments target this identity and are dependencies of the app. This gives image pull and Key Vault references a principal before app provisioning. Container Apps uses the same identity for those references; `FOUNDRY_AZURE_CLIENT_ID` selects it for the Table SDK.
+- `managedIdentity` -> `configuration.registries` carries the user-assigned identity resource ID and no credential; `AcrPull` is scoped to the ACR resource. External registries do not create a placeholder ACR and require secret-mode pull.
 - `secret` -> a `@secure() registryPassword` parameter (plus plain-text username) populates `configuration.secrets` and `registries[].passwordSecretRef`. The value comes only from a gitignored `*.local.json` override or workflow secret.
 
-New vaults set `enableRbacAuthorization: true` (intentional change from the access-policy vault). The container app identity receives `Key Vault Secrets User` (read-only, least privilege) scoped to the vault. Secrets use the full `keyVaultReference` shape `{ name, keyVaultUrl, identity: 'system' }` (the app's own identity) with `secretRef` env entries. A `secretNamePrefix` parameter (default: `appName`-derived) namespaces router secrets in shared vaults. Secret *values* are never in the template; they remain operator-supplied out of band.
+New vaults set `enableRbacAuthorization: true` (intentional change from the access-policy vault). The runtime identity receives `Key Vault Secrets User` (read-only, least privilege) scoped to the vault. Key Vault references specify that user-assigned identity and expose values only through `secretRef` env entries. A `secretNamePrefix` parameter (default: `appName`-derived) namespaces router secrets in shared vaults. Secret *values* are never in the template; they remain operator-supplied out of band.
 
 First-deploy convergence: verify a clean deploy into an empty resource group end to end; distinguish transient `ImagePullBackOff` (role propagation) from a true crash loop before labelling the template `Implemented`.
 
@@ -57,8 +61,8 @@ Committed parameter files are placeholder-only. Environment-specific values (sub
 
 Required repository variables/secrets by name only (values never committed):
 
-- Variables: `FOUNDRY_IMAGE_REPOSITORY` (image repository path); secret-mode additionally uses a registry server variable.
-- Secrets: `AZURE_CREDENTIALS_STAGING`, `AZURE_CREDENTIALS_PRODUCTION` (deploy + Bicep validation login), `AZURE_RESOURCE_GROUP_STAGING`, `AZURE_RESOURCE_GROUP_PRODUCTION`, `ADMIN_API_KEY_PRODUCTION` (smoke test), plus the secret-mode registry credential (rotation owner: registry owning team; rotate via `*.local.json`/workflow secret update, never in repo).
+- Variables: `FOUNDRY_IMAGE_REPOSITORY` (lowercase GHCR image repository path), `FOUNDRY_ALERT_EMAIL` (required alert recipient).
+- Secrets: `AZURE_CREDENTIALS_STAGING`, `AZURE_CREDENTIALS_PRODUCTION` (deploy + Bicep validation login), `AZURE_RESOURCE_GROUP_STAGING`, `AZURE_RESOURCE_GROUP_PRODUCTION`, `ADMIN_API_KEY_PRODUCTION` (smoke test). GHCR pull uses the workflow-scoped `GITHUB_TOKEN` with package-read permission; other secret-mode registry credentials remain environment supplied and are rotated by the registry owning team.
 
 ## Cost guardrails
 
@@ -70,16 +74,27 @@ Required repository variables/secrets by name only (values never committed):
   | summarize BillableGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d), DataType
   | order by TimeGenerated desc
   ```
-- A scheduled query alert fires at 90% of the cap. Cap-hit drill: check the alert, run the triage query grouped by `DataType`, identify the spiking table, then check `ContainerAppConsoleLogs` volume and revision count before raising the cap.
+- A rolling-24-hour scheduled query alert fires at 90% of the cap and sends email through its action group. `alertEmailAddress` is required; committed parameter files use a placeholder and deployment workflows must set `FOUNDRY_ALERT_EMAIL`. Cap-hit drill: check the alert, run the triage query grouped by `DataType`, identify the spiking table, then check `ContainerAppConsoleLogs_CL` volume and revision count before raising the cap.
 - Subscription Advisor cost alerts and resource-group budget alerts are operator runbook steps (permissions the template may not hold), not template resources.
-- `consoleLogsPlan` defaults to `Basic` for `ContainerAppConsoleLogs` (retention 30 days; pay-as-you-go SKU unchanged). Trade-offs: per-query scan charges, reduced alerting, one plan switch per table per week. Revert to `Analytics` if query/alert needs emerge.
+- `consoleLogsPlan` defaults to `Basic` for `ContainerAppConsoleLogs_CL` (retention 30 days; pay-as-you-go SKU unchanged). Trade-offs: per-query scan charges, reduced alerting, one plan switch per table per week. Revert to `Analytics` if query/alert needs emerge.
 - Source-volume reduction: uvicorn `--no-access-log` (access lines duplicate structured logs/`/metrics`; entrypoint stays single-worker since each worker would hold its own in-memory state) and `routing_decision` candidate-array detail gated to `WARNING`/debug (production `INFO` keeps request id, model, backend, reason, estimate only).
 
-## Replica guard (interim)
+## Distributed State
 
-`maxReplicas` carries `@maxValue(1)` and every committed parameter file sets `1` because the app runs only in-memory credit, health and rate-limit state (`src/foundry_router/main.py`). `activeRevisionsMode: 'Single'` is explicit so no second revision serves traffic. Residual window: during a single-revision rollout the old and new revisions briefly run together until traffic switches and the old drains, and each new revision restarts in-memory credit from configured initial balances. Multi-replica is lifted only by Phase 11 (`stateBackend: table` + Storage wiring); Phase 11 replaces the decorator with an `assert` tied to `stateBackend`.
+Table resources, role assignments and endpoint settings are emitted only when `stateBackend: table`. The table endpoint is read from `primaryEndpoints.table`, not synthesized. The app uses token authentication only; no storage key or connection string is passed to it. New accounts disable shared-key access, require TLS 1.2/HTTPS, and disable blob public access. Existing accounts are not mutated.
 
-Deployed multi-replica shared state (Table Storage across replicas) is `Partially implemented`: the adapter code and unit tests are `Implemented`, but no deployment provisions or consumes them yet (storage provisioning, client wiring and multi-replica deployment are `Planned` in Phase 11).
+| App setting | Bicep source | App setting field | Default |
+|---|---|---|---|
+| `FOUNDRY_STATE_BACKEND` | `stateBackend` parameter | `Settings.state_backend` | `memory` |
+| `FOUNDRY_AZURE_CLIENT_ID` | `routerIdentity.properties.clientId` | `AzureTableEntityClient` managed-identity credential selection | UAMI client ID |
+| `FOUNDRY_TABLE_ENDPOINT` | `storageAccount.properties.primaryEndpoints.table` | `Settings.table_endpoint` | empty in memory mode |
+| `FOUNDRY_TABLE_HEALTH_NAME` | `tablePrefix` + `health` | `Settings.table_health_name` | app-derived |
+| `FOUNDRY_TABLE_CREDIT_NAME` | `tablePrefix` + `credit` | `Settings.table_credit_name` | app-derived |
+| `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` | `maxReplicas` | `Settings.rate_limit_replica_share` | `1` |
+
+`maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
+
+State adapter, concrete identity-only client, conditional storage template, startup wiring, and Azurite coverage are implemented in code. Deployment validation and a two-replica Azure deployment are still pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica.
 
 ## Validation
 
@@ -102,7 +117,7 @@ curl https://$FQDN/health/ready
 az containerapp revision list --name <app> --resource-group $RESOURCE_GROUP --query '[].{name:name,active:properties.active,traffic:properties.trafficWeight}'
 ```
 
-Expect exactly one active revision receiving 100% of traffic.
+Before raising replicas, validate table-mode and verify all configured backend balance rows are present and `/health/ready` is green. Do not switch production until starting balances are reconciled and the previous memory-backed revision is drained; no in-memory state migrates.
 
 ## Cleanup
 

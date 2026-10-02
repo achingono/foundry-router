@@ -7,11 +7,11 @@
 | Mode-parameterised template | `infra/main.bicep` supporting `registryMode` and `keyVaultMode` across `new` and `existing` | Bicep |
 | Assertion configuration | `infra/bicepconfig.json` enabling assertions, with the minimum Bicep / Azure CLI version recorded | JSON |
 | Existing-resource declarations | `existing` registry and vault symbols with explicit scope | Bicep |
-| Registry pull wiring | `configuration.registries` plus `AcrPull` role assignment for the system-assigned identity | Bicep |
+| Registry pull wiring | `configuration.registries` plus `AcrPull` role assignment for the pre-created user-assigned runtime identity | Bicep |
 | Vault secret wiring | `configuration.secrets` with `keyVaultReference`, `secretRef` env entries, and `Key Vault Secrets User` assignment | Bicep |
 | Name validation | Length and shape decorators plus `assert` statements covering the vault and registry limits | Bicep |
 | Ingestion cap and alert | `dailyCapGb` parameter wired to `workspaceCapping.dailyQuotaGb`, plus a 90%-of-cap scheduled query alert over the `Usage` table | Bicep |
-| Console-log table plan | `consoleLogsPlan` parameter defaulting to `Basic` for `ContainerAppConsoleLogs`, retention held at 30 days | Bicep |
+| Console-log table plan | `consoleLogsPlan` parameter defaulting to `Basic` for `ContainerAppConsoleLogs_CL`, retention held at 30 days | Bicep |
 | Source-volume reduction | `--no-access-log` on the uvicorn entrypoint; candidate-array detail in `routing_decision` gated behind `WARNING`/debug with focused tests | Dockerfile, Python, tests |
 | Measured log baseline | Per-request stdout volume recorded from a load run, with the cap-sizing calculation shown | Evidence log |
 | Split parameter files | Committed placeholder-only parameter files, a placeholder-only `infra/parameters.example.json`, and a gitignored `*.local.json` convention | JSON, `.gitignore` |

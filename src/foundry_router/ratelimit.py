@@ -42,7 +42,9 @@ def effective_quota_limits(
     exemptions are the protected emergency fallback (explicit
     ``allow_over_limit``) and brief single-revision rollout overlap.
     """
-    share = max(1, int(replica_share))
+    share = int(replica_share)
+    if share <= 0:
+        return {group: dict.fromkeys(limits, 0) for group, limits in quota_limits.items()}
     return {
         group: {dim: limit // share for dim, limit in limits.items()}
         for group, limits in quota_limits.items()
@@ -138,7 +140,7 @@ class InMemoryRateLimitStore:
             group: dict(group_limits)
             for group, group_limits in getattr(settings, "quota_group_rate_limits", {}).items()
         }
-        share = int(getattr(settings, "rate_limit_replica_share", 1) or 1)
+        share = int(getattr(settings, "rate_limit_replica_share", 1))
         async with self._lock:
             # D6 option B: each replica enforces its per-replica share locally.
             self._quota_limits = effective_quota_limits(raw_limits, share)

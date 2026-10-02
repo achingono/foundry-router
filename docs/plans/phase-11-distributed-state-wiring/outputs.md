@@ -8,7 +8,7 @@
 | Storage account modes | `storageMode` `new`/`existing` with cross-resource-group scope, name validation and hardened `new` defaults | Bicep |
 | State backend switch | `stateBackend` parameter; storage resources conditional on `table`; `assert` replacing the Phase 10 `@maxValue(1)` | Bicep |
 | Provisioned tables | Health and credit tables with a validated, namespaced prefix; cross-resource-group module for `existing` accounts in another group | Bicep |
-| Data-plane role assignments | Table-scoped `Storage Table Data Contributor` for the system-assigned identity, deterministic names | Bicep |
+| Data-plane role assignments | Table-scoped `Storage Table Data Contributor` for the pre-created user-assigned runtime identity, deterministic names | Bicep |
 | App settings wiring | Non-secret `env` entries for the contract; endpoint read from `primaryEndpoints.table` | Bicep |
 | State settings | `state_backend`, `table_endpoint`, table names, timeouts with conditional validation | Python |
 | Concrete Table client | Async `TableEntityClient` on `azure.data.tables.aio` with token credential, SDK ETag normalisation, operation-specific conflict mapping and prefix queries | Python |

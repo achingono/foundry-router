@@ -7,13 +7,13 @@
 - [ ] No free-text image reference parameter remains; every image reference is derived from either a resource login server or the validated `registryServer` parameter.
 - [ ] `az deployment group validate` passes for secret-mode pull against an external server value.
 - [ ] The daily cap parameter validates; the 90% alert query runs cleanly against the `Usage` schema; a cap-hit drill (what to check, in what order) is documented.
-- [ ] `ContainerAppConsoleLogs` is on the `Basic` plan with 30-day retention; pay-as-you-go SKU is unchanged; the revert-to-Analytics path is documented.
+- [ ] `ContainerAppConsoleLogs_CL` is on the `Basic` plan with 30-day retention; pay-as-you-go SKU is unchanged; the revert-to-Analytics path is documented.
 - [ ] Per-request stdout volume is measured from a load run and recorded; the cap value traces to that baseline plus headroom.
 - [ ] Uvicorn access logs are off in the deployed image; production `INFO` no longer contains per-request candidate arrays; focused tests cover the level gating and the 80% coverage bar holds.
 - [ ] Over-length vault name, malformed registry name, and managed-identity pull against a non-Azure registry each fail validation with an actionable message.
-- [ ] Registry pull succeeds with the system-assigned identity and no registry credential stored in the template.
+- [ ] Registry pull succeeds with the pre-created user-assigned runtime identity and no registry credential stored in the template.
 - [ ] Secret-mode deployments source the credential only from a gitignored override or workflow secret; no credential value appears in any committed file.
-- [ ] Key Vault secret references resolve (full entry shape including `identity: 'system'`) and the app starts with secrets injected via `secretRef`.
+- [ ] Key Vault secret references resolve with the pre-created user-assigned runtime identity and the app starts with secrets injected via `secretRef`.
 - [ ] Role assignments are idempotent across a second deployment of the same template, and are scoped to the registry and vault resources rather than their resource groups.
 - [ ] A clean first deploy into an empty resource group converges without manual retry; any transient `ImagePullBackOff` is documented and distinguished from a true crash loop.
 - [ ] No secret value appears in any template, parameter file, or workflow file.
