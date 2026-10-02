@@ -15,7 +15,7 @@ The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api
 | `GET /openai/v1/models` | Required; list configured logical models |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
-| `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics (backed by `AzureTableCreditStore`/`AzureTableHealthStore` for multi-replica) |
+| `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics (Table-backed diagnostics Partially implemented for multi-replica; storage provisioning and client wiring Planned in Phase 11) |
 | `GET /metrics` | Implemented (single-process Prometheus text via `InMemoryMetricsStore`); multi-process aggregation Planned |
 | `POST /openai/v1/chat/completions` | Optional **Planned**; must not delay Responses support |
 

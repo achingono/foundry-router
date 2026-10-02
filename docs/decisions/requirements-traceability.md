@@ -82,7 +82,7 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | --- | --- | --- | --- |
 | `CreditStore` protocol interface with swappable implementation boundary | Implemented | `src/foundry_router/credit.py` | `tests/unit/test_credit.py`, `tests/unit/test_state.py` (protocol conformance tests) |
 | `HealthStore` protocol with in-memory implementation and Azure Table adapter | Implemented | `src/foundry_router/health/`, `src/foundry_router/state/table.py` | `tests/unit/test_state.py` (19 health store tests, 96.25% coverage) |
-| Azure Table Storage authoritative credit and reservation adapter using same-partition ETag transactional batch | Implemented | `src/foundry_router/state/table.py` | `tests/unit/test_state.py` (40 credit store tests, 89.17% state module coverage, concurrent reservation/release/ETag-conflict/recovery tests) |
+| Azure Table Storage authoritative credit and reservation adapter using same-partition ETag transactional batch | Implemented (adapter code + unit tests); deployed multi-replica shared state Partially implemented — storage provisioning, client wiring and multi-replica deployment Planned in Phase 11 | `src/foundry_router/state/table.py` | `tests/unit/test_state.py` (40 credit store tests, 89.17% state module coverage, concurrent reservation/release/ETag-conflict/recovery tests) |
 | Optional Redis hot-state cache after a concrete latency requirement and separate approval | Planned | Future scope | `docs/decisions/adr/005-state-management.md` |
 | Enriched `/admin/status` live diagnostics (health cooldowns, spendable credit, reset dates) | Implemented | `src/foundry_router/main.py` | `tests/unit/test_main.py` |
 | Prometheus `/metrics` exporter (single-process in-process collection) | Implemented | `src/foundry_router/metrics/`, `src/foundry_router/main.py` | `tests/unit/test_main.py` |
@@ -123,3 +123,12 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 | Homogeneous non-metered free-tier credit opt-out and zero pricing for free model pools | Implemented | `src/foundry_router/config/`, `src/foundry_router/api/routes/health.py`, `src/foundry_router/routing/` | `tests/unit/test_main.py`, `tests/unit/test_config.py` |
 | Per-key/group quota diagnostics and budget/cooldown metrics | Implemented | `src/foundry_router/api/routes/admin.py`, `src/foundry_router/metrics/` | `tests/unit/test_main.py`, `tests/unit/test_metrics.py` |
 | Cross-replica quota consistency and multi-worker quota/metrics aggregation | Planned | Future distributed rate-limit store | Phase 09 plan; no distributed quota adapter is implemented |
+
+## Phase 10 Bicep Existing-Resource Support Traceability (Implemented as template code)
+
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Mode-parameterised registry/vault (`new`/`existing`), derived image coordinates, external `registryServer`, no free-text image reference | Implemented | `infra/main.bicep`, `infra/bicepconfig.json`, `infra/modules/` | `az bicep build`/`lint` clean (pre-existing BCP036/BCP037 only); `infra/parameters.example.json` |
+| Registry pull + vault secret wiring with least-privilege role assignments and cross-RG modules | Implemented | `infra/main.bicep`, `infra/modules/registryPullRole.bicep`, `infra/modules/vaultSecretsRole.bicep` | Template + `infra/README.md` (first-deploy convergence, deployer permissions) |
+| Name validation, daily ingestion cap + 90% alert, `Basic` console-log plan, source-volume reduction | Implemented | `infra/main.bicep`, `Dockerfile`, `src/foundry_router/routing/` | `tests/unit/test_routing_log_volume.py`; `infra/README.md` (cap sizing, revert path) |
+| Interim `maxReplicas: 1` guard with explicit single-revision mode and documented rollout overlap | Implemented | `infra/main.bicep`, `infra/parameters.*.json` | `infra/README.md`; deployed multi-replica shared state Partially implemented, Phase 11 Planned |
