@@ -17,7 +17,7 @@ Make multi-replica deployment actually safe, end to end. The ADR-005 Azure Table
 - **Template** (`infra/main.bicep`):
   - `Microsoft.Storage/storageAccounts` with `storageMode` (`new` | `existing`), following the Phase 10 mode, cross-resource-group `scope`, name-validation and `assert` patterns.
   - Tables provisioned through `tableServices/tables`; the app never creates tables at runtime. For an `existing` account in another resource group, tables and role assignments deploy through a module scoped to that group.
-  - `Storage Table Data Contributor` granted to the container app's system-assigned identity, scoped to each router table rather than the account or resource group.
+  - `Storage Table Data Contributor` granted to the pre-created user-assigned runtime identity, scoped to each router table rather than the account or resource group.
   - Hardened `new` accounts: `allowSharedKeyAccess: false`, `minimumTlsVersion: 'TLS1_2'`, `supportsHttpsTrafficOnly: true`, `allowBlobPublicAccess: false`. `existing` accounts are detected and documented, never mutated.
   - A `stateBackend` parameter (`memory` | `table`, default `memory`). An `assert` requires `stateBackend == 'table'` whenever `maxReplicas > 1`, replacing the Phase 10 `@maxValue(1)` decorator.
   - Non-secret app settings (`FOUNDRY_STATE_BACKEND`, `FOUNDRY_TABLE_ENDPOINT`, table names) built from `primaryEndpoints.table` and the table resources, never by string concatenation.

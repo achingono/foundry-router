@@ -314,9 +314,14 @@ class AzureTableCreditStore:
         self._max_retries = max_retries
         self._retry_backoff_ms = retry_backoff_ms
         self._lock = asyncio.Lock()
+        self._partition_locks: dict[str, asyncio.Lock] = {}
         self._balance_cache: dict[str, tuple[float, _BalanceRow]] = {}
+        self._configured_backend_ids: set[str] = set()
         self._last_synced_settings_id: int | None = None
         self._logger = logger or _logger
+
+    def _partition_lock(self, backend_id: str) -> asyncio.Lock:
+        return self._partition_locks.setdefault(backend_id, asyncio.Lock())
 
     async def sync_from_settings(self, settings: Any) -> None:
         """Initialize balance rows for all configured backends from settings.
@@ -331,15 +336,19 @@ class AzureTableCreditStore:
             return
         now = datetime.now(UTC)
         async with self._lock:
+            self._configured_backend_ids = set(settings.backends)
+            sync_complete = True
             for backend_id in settings.backends:
                 allowance = settings.backend_cycle_allowance_usd.get(backend_id)
                 remaining = settings.backend_initial_estimated_remaining_usd.get(backend_id)
                 cycle_start_day = settings.backend_cycle_start_day.get(backend_id)
                 if allowance is None or remaining is None or cycle_start_day is None:
+                    sync_complete = False
                     continue
                 if not _valid_non_negative_finite(allowance) or not _valid_non_negative_finite(
                     remaining
                 ):
+                    sync_complete = False
                     continue
                 cycle = calculate_cycle_window(now, cycle_start_day)
                 desired = _BalanceRow(
@@ -350,13 +359,23 @@ class AzureTableCreditStore:
                     reserved_inflight_usd=0.0,
                     cycle_start_utc=cycle.current_cycle_start_utc,
                 )
-                try:
-                    stored = await self._create_balance_if_absent(backend_id, desired)
-                except TableEntityCreditStoreError:
-                    continue
-                if stored is not None:
-                    self._balance_cache[backend_id] = (time.monotonic(), stored)
-            self._last_synced_settings_id = id(settings)
+                async with self._partition_lock(backend_id):
+                    try:
+                        stored = await self._create_balance_if_absent(backend_id, desired)
+                    except Exception as exc:
+                        sync_complete = False
+                        self._logger.warning(
+                            "credit_balance_sync_failed",
+                            backend_id=backend_id,
+                            error_type=type(exc).__name__,
+                        )
+                        continue
+                    if stored is not None:
+                        self._balance_cache[backend_id] = (time.monotonic(), stored)
+                    else:
+                        sync_complete = False
+            if sync_complete:
+                self._last_synced_settings_id = id(settings)
 
     async def _create_balance_if_absent(  # noqa: PLR0911, PLR0912
         self, backend_id: str, desired: _BalanceRow
@@ -365,12 +384,16 @@ class AzureTableCreditStore:
         existing = await self._client.get_entity(backend_id, self._BALANCE_ROW_KEY)
         if existing is None:
             create = getattr(self._client, "try_create_entity", None)
+            if create is None:
+                raise TableEntityCreditStoreError(
+                    "Table client must support create-if-absent balance initialization"
+                )
             try:
-                if create is not None:
-                    if await create(self._balance_to_entity(desired)):
-                        return desired
-                else:  # pragma: no cover - legacy clients without try_create_entity
-                    await self._sync_balance_to_storage(backend_id, desired)
+                if await create(self._balance_to_entity(desired)):
+                    # Re-read to get the ETag assigned by the service.
+                    fresh = await self._client.get_entity(backend_id, self._BALANCE_ROW_KEY)
+                    if fresh is not None:
+                        return self._entity_to_balance(fresh)
                     return desired
             except TableEntityCreditStoreError:
                 raise
@@ -458,7 +481,7 @@ class AzureTableCreditStore:
             backend_id=backend_id,
             error_type="batch_exhausted",
         )
-        return stored
+        return None
 
     async def assess_with_context(
         self,
@@ -475,7 +498,7 @@ class AzureTableCreditStore:
         """
         _ = context.reservation_max_age_seconds
         now = context.now_utc or datetime.now(UTC)
-        async with self._lock:
+        async with self._partition_lock(backend_id):
             balance = await self._get_balance_locked(backend_id, now)
             if balance is None:
                 return CreditAssessment(
@@ -538,7 +561,7 @@ class AzureTableCreditStore:
         now = context.now_utc or datetime.now(UTC)
         for attempt in range(self._max_retries):
             try:
-                async with self._lock:
+                async with self._partition_lock(backend_id):
                     # Fresh read per attempt: a conflict invalidates the cache so
                     # retries recompute from another replica's committed state.
                     balance = await self._get_balance_fresh_locked(backend_id, now)
@@ -594,11 +617,11 @@ class AzureTableCreditStore:
                         return True
                     self._invalidate_balance_locked(backend_id)
             except TableEntityCreditStoreError:
-                async with self._lock:
+                async with self._partition_lock(backend_id):
                     self._invalidate_balance_locked(backend_id)
                 return False
             except Exception as exc:
-                async with self._lock:
+                async with self._partition_lock(backend_id):
                     self._invalidate_balance_locked(backend_id)
                 self._logger.warning(
                     "table_reserve_transient_error",
@@ -646,7 +669,7 @@ class AzureTableCreditStore:
             request_id, backend_id, estimated_request_cost_usd, context
         )
 
-    async def finalize_request(  # noqa: PLR0911, PLR0912
+    async def finalize_request(  # noqa: PLR0912
         self,
         request_id: str,
         *,
@@ -665,20 +688,21 @@ class AzureTableCreditStore:
         storage and recomputes the delta from those fresh values, so a settle
         can never overwrite another replica's reservation or debit.
         """
-        async with self._lock:
-            resolved_backend_id = backend_id
+        resolved_backend_id = backend_id
+        if resolved_backend_id is None:
+            async with self._lock:
+                cached_backend_ids = list(self._balance_cache)
+            for cached_backend_id in cached_backend_ids:
+                entity = await self._client.get_entity(
+                    cached_backend_id, f"{self._RESERVATION_ROW_PREFIX}{request_id}"
+                )
+                if entity is not None:
+                    resolved_backend_id = cached_backend_id
+                    break
             if resolved_backend_id is None:
-                # Scan all backends to find which one owns this reservation (legacy path)
-                for cached_backend_id in list(self._balance_cache):
-                    entity = await self._client.get_entity(
-                        cached_backend_id, f"{self._RESERVATION_ROW_PREFIX}{request_id}"
-                    )
-                    if entity is not None:
-                        resolved_backend_id = cached_backend_id
-                        break
-                if resolved_backend_id is None:
-                    return
+                return
 
+        async with self._partition_lock(resolved_backend_id):
             for attempt in range(self._max_retries):
                 reservation_entity = await self._client.get_entity(
                     resolved_backend_id, f"{self._RESERVATION_ROW_PREFIX}{request_id}"
@@ -686,10 +710,7 @@ class AzureTableCreditStore:
                 if reservation_entity is None:
                     return
                 reservation = self._entity_to_reservation(reservation_entity)
-                if reservation is None:
-                    return
-                # N3: avoid re-processing already-settled rows
-                if reservation.state != "pending":
+                if reservation is None or reservation.state != "pending":
                     return
 
                 balance = await self._get_balance_fresh_locked(
@@ -698,14 +719,12 @@ class AzureTableCreditStore:
                 if balance is None:
                     return
 
-                # Compute the charge amount from the freshly read reservation.
                 charge = 0.0
                 if charged_cost_usd is not None and _valid_non_negative_finite(charged_cost_usd):
                     charge = charged_cost_usd
                 elif charge_reserved:
                     charge = reservation.estimated_cost_usd
 
-                # Update balance: release inflight, debit charge.
                 new_balance = _BalanceRow(
                     backend_id=balance.backend_id,
                     cycle_start_day=balance.cycle_start_day,
@@ -717,7 +736,6 @@ class AzureTableCreditStore:
                     cycle_start_utc=balance.cycle_start_utc,
                     etag=balance.etag,
                 )
-
                 ops = [
                     _TransactionEntity(
                         partition_key=resolved_backend_id,
@@ -752,7 +770,6 @@ class AzureTableCreditStore:
                 self._invalidate_balance_locked(resolved_backend_id)
                 if attempt < self._max_retries - 1:
                     await asyncio.sleep(self._retry_backoff_ms * (2**attempt) / 1000.0)
-            # N5: retries exhausted without success - stranded reservation
             self._logger.warning(
                 "credit_finalize_failed",
                 backend_id=resolved_backend_id,
@@ -764,6 +781,7 @@ class AzureTableCreditStore:
         """Clear only local cache; never delete shared state on shutdown."""
         async with self._lock:
             self._balance_cache.clear()
+            self._configured_backend_ids.clear()
             self._last_synced_settings_id = None
 
     async def apply_reconciled_remaining(
@@ -775,17 +793,17 @@ class AzureTableCreditStore:
         """Apply authoritative credit updates from reconciliation."""
         now = now_utc or datetime.now(UTC)
         updated = 0
-        async with self._lock:
-            for backend_id, amount in authoritative_remaining_usd.items():
-                if isinstance(amount, bool):
-                    continue
-                try:
-                    amount_float = float(amount)
-                except (TypeError, ValueError):
-                    continue
-                if not _valid_non_negative_finite(amount_float):
-                    continue
+        for backend_id, amount in authoritative_remaining_usd.items():
+            if isinstance(amount, bool):
+                continue
+            try:
+                amount_float = float(amount)
+            except (TypeError, ValueError):
+                continue
+            if not _valid_non_negative_finite(amount_float):
+                continue
 
+            async with self._partition_lock(backend_id):
                 for attempt in range(self._max_retries):
                     balance = await self._get_balance_fresh_locked(backend_id, now)
                     if balance is None:
@@ -910,9 +928,9 @@ class AzureTableCreditStore:
         now = now_utc or datetime.now(UTC)
         cutoff = now.timestamp() - max_age_seconds
         if backend_ids is None:
-            # Copy keys while unlocked to avoid holding lock across I/O
+            # Reap configured partitions even if initial sync has not completed.
             async with self._lock:
-                backend_ids = list(self._balance_cache.keys())
+                backend_ids = list(self._configured_backend_ids)
         if not hasattr(self._client, "query_entities"):
             self._logger.warning("reaper_query_unsupported", error_type="missing_query")
             return 0
@@ -937,7 +955,7 @@ class AzureTableCreditStore:
                     continue
                 # Transactionally delete expired reservation and adjust balance.
                 # Retries re-read fresh balance state and recompute the delta.
-                async with self._lock:
+                async with self._partition_lock(backend_id):
                     success = False
                     for attempt in range(self._max_retries):
                         balance = await self._get_balance_fresh_locked(backend_id, now)
@@ -1055,13 +1073,6 @@ class AzureTableCreditStore:
         self._balance_cache[backend_id] = (time.monotonic(), fetched_balance)
         return fetched_balance
 
-    async def _sync_balance_to_storage(self, backend_id: str, balance: _BalanceRow) -> None:
-        """Write initial balance to storage."""
-        try:
-            await self._client.upsert_entity(self._balance_to_entity(balance))
-        except Exception as exc:
-            raise TableEntityCreditStoreError(f"failed to sync balance for {backend_id}") from exc
-
     def _rollover_if_needed(self, balance: _BalanceRow, now_utc: datetime) -> None:
         """Reset remaining credit if a new cycle has started."""
         cycle = calculate_cycle_window(now_utc, balance.cycle_start_day)
@@ -1176,9 +1187,13 @@ class AzureTableCreditStore:
     def _entity_to_reservation(self, entity: Mapping[str, Any]) -> _ReservationRow | None:
         """Convert table entity to reservation."""
         try:
-            request_id = str(entity.get("request_id", ""))
+            row_key = str(entity.get("RowKey", ""))
+            if not row_key.startswith(self._RESERVATION_ROW_PREFIX):
+                return None
+            request_id = row_key[len(self._RESERVATION_ROW_PREFIX) :]
+            stored_request_id = str(entity.get("request_id", request_id))
             backend_id = str(entity.get("backend_id", ""))
-            if not request_id or not backend_id:
+            if not request_id or not backend_id or stored_request_id != request_id:
                 return None
             estimated_cost = _parse_float(entity.get("estimated_cost_usd"))
             created_at = _parse_float(entity.get("created_at_utc"))

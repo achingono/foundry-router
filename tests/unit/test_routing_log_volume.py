@@ -93,9 +93,7 @@ async def test_select_candidate_success_emits_gated_detail() -> None:
 
     class Health:
         async def snapshot_backend_health(self, ids):
-            return {
-                i: BackendHealthSnapshot(BackendHealthState.ACTIVE, 0.0) for i in ids
-            }
+            return {i: BackendHealthSnapshot(BackendHealthState.ACTIVE, 0.0) for i in ids}
 
     class Credit:
         async def sync_from_settings(self, s):

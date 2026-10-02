@@ -20,9 +20,9 @@ Extend `infra/main.bicep` so a single template can either provision a new contai
 - Derived image coordinates (`imageRepository` + `imageTag`) so the container image reference cannot drift from the configured registry.
 - Two registry authentication modes: managed identity pull (`AcrPull`) and registry-secret pull.
 - Explicit external-registry path: a validated `registryServer` parameter for registries outside Azure Container Registry, so no free-text image reference is needed. `containerImageUri` is removed, not retained as an override.
-- Key Vault RBAC role assignment for the container app's system-assigned identity (least privilege) and `keyVaultReference` secret wiring on the container app.
+- Pre-created user-assigned runtime identity with least-privilege registry/vault role assignments before app provisioning, plus `keyVaultReference` secret wiring.
 - Name-length and name-shape validation, including the Key Vault global name limit that currently fails late in deployment.
-- Log Analytics cost guardrails: a parameterised daily ingestion cap with a 90%-of-cap alert, a `Basic` table plan for `ContainerAppConsoleLogs`, an explicit decision to hold pay-as-you-go SKU and 30-day retention, and source-volume reduction (uvicorn access logs off; per-request candidate-array detail gated behind `WARNING`/debug).
+- Log Analytics cost guardrails: a parameterised daily ingestion cap with a 90%-of-cap alert, a `Basic` table plan for `ContainerAppConsoleLogs_CL`, an explicit decision to hold pay-as-you-go SKU and 30-day retention, and source-volume reduction (uvicorn access logs off; per-request candidate-array detail gated behind `WARNING`/debug).
 - Environment-specific parameter override files excluded from version control; committed parameter files limited to placeholders.
 - Interim single-replica guard: `maxReplicas` constrained to `1` in the template and in every committed parameter file, because the deployed app runs only in-memory credit, health and rate-limit state (`src/foundry_router/main.py:55-58`). Lifted only by [Phase 11](../phase-11-distributed-state-wiring/index.md).
 - Status correction for documents that describe Azure Table Storage multi-replica state as deployed or verified (activities step 16).

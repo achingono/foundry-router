@@ -15,7 +15,7 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
 - Structured explainable routing decision logging. **Implemented**
 - Persistent or externally reconciled usage/cost state via periodic reconciliation loop (`reconciliation_interval_minutes` + `InMemoryCreditStore.apply_reconciled_remaining` / `AzureTableCreditStore.apply_reconciled_remaining`). **Implemented**
-- `CreditStore`, `HealthStore`, and the injected-client Azure Table health and credit adapters for multi-replica support. Adapter code **Implemented** (see `src/foundry_router/state/table.py`); deployed multi-replica shared state across replicas is **Partially implemented** (storage provisioning, client wiring and multi-replica deployment **Planned** in Phase 11).
+- `CreditStore`, `HealthStore`, injected-client Azure Table adapters, the identity-only Table client, and conditional state wiring. Code and Azurite tests are **Implemented**; deployed multi-replica shared state is **Partially implemented** until Azure validation and a two-replica deployment pass.
 - Liveness/readiness, structured logs, and Prometheus metrics (single-process). **Implemented**; multi-process aggregation via `prometheus_client` multiprocess or OpenTelemetry remains **Planned**.
 - Secure credentials, IaC (Bicep), automated deployment, local mocked-backend development, and tests. **Implemented**
 

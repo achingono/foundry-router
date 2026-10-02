@@ -74,6 +74,9 @@
     "dailyCapGb": {
       "value": 1
     },
+    "alertEmailAddress": {
+      "value": "alerts@example.test"
+    },
     "consoleLogsPlan": {
       "value": "Basic"
     },
@@ -81,7 +84,7 @@
       "value": {
         "environment": "placeholder",
         "project": "foundry-router",
-        "phase": "10",
+        "phase": "11",
         "managedBy": "bicep"
       }
     }

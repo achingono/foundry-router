@@ -162,7 +162,7 @@ async def select_candidate_backend(
     # store enforces, so the re-sync below cannot silently revert the share.
     effective_limits = effective_quota_limits(
         {group: dict(limits) for group, limits in quota_limits.items()},
-        int(getattr(settings, "rate_limit_replica_share", 1) or 1),
+        int(getattr(settings, "rate_limit_replica_share", 1)),
     )
     configured_groups = sorted(
         {

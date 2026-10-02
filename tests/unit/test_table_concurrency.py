@@ -51,6 +51,52 @@ async def test_second_instance_start_preserves_reservations_and_spend() -> None:
 
 
 @pytest.mark.asyncio
+async def test_failed_initial_sync_retries_same_settings_object() -> None:
+    client = FakeTableClient()
+    original_create = client.try_create_entity
+    attempts = 0
+
+    async def fail_once(entity):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise ConnectionError("temporary storage outage")
+        return await original_create(entity)
+
+    client.try_create_entity = fail_once
+    store = AzureTableCreditStore(client)
+    settings = _settings()
+
+    await store.sync_from_settings(settings)
+    assert ("b1", "balance") not in client.entities
+    await store.sync_from_settings(settings)
+
+    assert ("b1", "balance") in client.entities
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_config_merge_retries_same_settings_object() -> None:
+    client = FakeTableClient()
+    store = AzureTableCreditStore(client, max_retries=1)
+    await store.sync_from_settings(_settings())
+    attempts = 0
+
+    async def conflict(_operations):
+        nonlocal attempts
+        attempts += 1
+        return False
+
+    client.try_batch_transaction = conflict
+    changed_settings = _settings(allowance=200.0, remaining=200.0)
+    await store.sync_from_settings(changed_settings)
+    await store.sync_from_settings(changed_settings)
+
+    assert attempts == 2
+    assert client.entities[("b1", "balance")]["cycle_allowance_usd"] == 100.0
+
+
+@pytest.mark.asyncio
 async def test_config_drift_merge_preserves_live_credit() -> None:
     client = FakeTableClient()
     s1 = AzureTableCreditStore(client)
@@ -103,9 +149,7 @@ async def test_settle_recomputes_from_fresh_state_on_conflict() -> None:
         )
     # Both settle concurrently; each retry recomputes from fresh storage reads.
     await s1.finalize_request("req-a", backend_id="b1", charge_reserved=True, charged_cost_usd=8.0)
-    await s2.finalize_request(
-        "req-b", backend_id="b1", charge_reserved=True, charged_cost_usd=15.0
-    )
+    await s2.finalize_request("req-b", backend_id="b1", charge_reserved=True, charged_cost_usd=15.0)
     balance = client.entities[("b1", "balance")]
     assert balance["reserved_inflight_usd"] == 0.0
     assert balance["reserved_inflight_usd"] == _live_sum(client)
