@@ -23,14 +23,35 @@
     "containerRegistryName": {
       "value": "placeholderacr0001"
     },
+    "registryResourceGroupName": {
+      "value": "placeholder-registry-rg"
+    },
     "keyVaultName": {
       "value": "placeholder-kv"
+    },
+    "keyVaultResourceGroupName": {
+      "value": "placeholder-vault-rg"
     },
     "imageRepository": {
       "value": "foundry-router"
     },
     "imageTag": {
       "value": "latest"
+    },
+    "registryServer": {
+      "value": ""
+    },
+    "registryUsername": {
+      "value": ""
+    },
+    "secretNamePrefix": {
+      "value": "foundry-router"
+    },
+    "clientKeysSecretName": {
+      "value": "client-api-keys"
+    },
+    "adminKeysSecretName": {
+      "value": "admin-api-keys"
     },
     "containerPort": {
       "value": 8000
@@ -41,6 +62,15 @@
     "maxReplicas": {
       "value": 1
     },
+    "logAnalyticsWorkspaceName": {
+      "value": "placeholder-logs"
+    },
+    "containerAppEnvName": {
+      "value": "placeholder-env"
+    },
+    "containerAppName": {
+      "value": "placeholder-app"
+    },
     "dailyCapGb": {
       "value": 1
     },
@@ -49,7 +79,7 @@
     },
     "tags": {
       "value": {
-        "environment": "staging",
+        "environment": "placeholder",
         "project": "foundry-router",
         "phase": "10",
         "managedBy": "bicep"
