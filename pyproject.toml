@@ -117,6 +117,9 @@ unfixable = ["T10", "TCH", "INT", "ASYNC"]
 "src/foundry_router/main.py" = [
     "PLW0603",
 ]
+"src/foundry_router/state/azure.py" = [
+    "PLC0415",
+]
 "src/foundry_router/main_compat.py" = [
     "PLR0913",
 ]
