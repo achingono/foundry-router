@@ -8,7 +8,8 @@ from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 
 
-def build_router(*, load_settings_fn: Any) -> APIRouter:
+def build_router(*, load_settings_fn: Any, extra_checks_fn: Any | None = None) -> APIRouter:
+    router = APIRouter(tags=["Health"])
     router = APIRouter(tags=["Health"])
 
     @router.get("/health/live")
@@ -46,6 +47,9 @@ def build_router(*, load_settings_fn: Any) -> APIRouter:
             "backend_credit_config_complete": backend_credit_config_complete,
             "model_pricing_complete": model_pricing_complete,
         }
+        if extra_checks_fn is not None:
+            extra = await extra_checks_fn()
+            checks = {**checks, **dict(extra)}
         ready = all(checks.values())
         return JSONResponse(
             status_code=200 if ready else 503,

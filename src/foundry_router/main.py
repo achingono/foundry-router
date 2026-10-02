@@ -7,7 +7,7 @@ import re
 import sys
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import TYPE_CHECKING, Any, cast
 
 import structlog
@@ -44,7 +44,7 @@ from foundry_router.main_compat import (
     _stream_response,
 )
 from foundry_router.metrics import InMemoryMetricsStore
-from foundry_router.ratelimit import InMemoryRateLimitStore, RateLimitStore
+from foundry_router.ratelimit import InMemoryRateLimitStore, RateLimitStore, zero_share_dimensions
 from foundry_router.reconciliation import (
     ReconciliationLoop,
     ReconciliationProvider,
@@ -58,6 +58,137 @@ _metrics_store = InMemoryMetricsStore()
 _rate_limit_store: RateLimitStore = InMemoryRateLimitStore()
 _reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
 _reconciliation_loop: ReconciliationLoop | None = None
+# Phase 11: Table clients owned by the lifespan when state_backend == "table".
+_table_clients: tuple[Any, ...] = ()
+# Phase 11: bounded readiness probe cache (at most 5 seconds stale).
+_STATE_PROBE_CACHE_SECONDS = 5.0
+_state_probe_cache: dict[str, Any] = {"at": 0.0, "ok": True}
+
+
+class _LiveStore:
+    """Indirection so lifespan-built stores reach already-assembled routers.
+
+    Routers are assembled at import time with these proxies; the lifespan store
+    factory rebinds the module globals for ``table`` backends and the proxies
+    delegate to the current instances. Routing, reconciliation and
+    ``/admin/status`` therefore always share the same store instances.
+    """
+
+    def __init__(self, attr: str) -> None:
+        self._attr = attr
+
+    def _target(self) -> Any:
+        return sys.modules[__name__].__dict__[self._attr]
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return getattr(self._target(), name)
+
+
+def build_stores(settings: Any) -> tuple[Any, Any, Any, tuple[Any, ...]]:
+    """Build health/credit/rate-limit stores from settings (Phase 11 step 10).
+
+    Returns ``(health_store, credit_store, rate_limit_store, table_clients)``.
+    The ``memory`` backend returns the module-level in-memory singletons so
+    existing behaviour and fixtures are unchanged; the ``table`` backend
+    constructs shared Azure Table stores with identity-only clients.
+    """
+    module = sys.modules[__name__]
+    if getattr(settings, "state_backend", "memory") != "table":
+        return (
+            module.__dict__["_health_store"],
+            module.__dict__["_credit_store"],
+            module.__dict__["_rate_limit_store"],
+            (),
+        )
+    from foundry_router.state.azure import AzureTableEntityClient
+    from foundry_router.state.table import AzureTableCreditStore, AzureTableHealthStore
+
+    timeout = float(getattr(settings, "table_request_timeout_seconds", 5.0))
+    health_client = AzureTableEntityClient(
+        endpoint=settings.table_endpoint,
+        table_name=settings.table_health_name,
+        request_timeout_seconds=timeout,
+    )
+    credit_client = AzureTableEntityClient(
+        endpoint=settings.table_endpoint,
+        table_name=settings.table_credit_name,
+        request_timeout_seconds=timeout,
+    )
+    return (
+        AzureTableHealthStore(health_client),
+        AzureTableCreditStore(credit_client),
+        module.__dict__["_rate_limit_store"],
+        (health_client, credit_client),
+    )
+
+
+def _table_client_for(table: str) -> Any | None:
+    for client in _table_clients:
+        if getattr(client, "_table_name", None) == table:
+            return client
+    return None
+
+
+async def _probe_state_stores(settings: Any) -> bool:
+    """Bounded table-reachability probe, cached for at most 5 seconds."""
+    now = time.monotonic()
+    if now - float(_state_probe_cache.get("at", 0.0)) <= _STATE_PROBE_CACHE_SECONDS:
+        return bool(_state_probe_cache.get("ok", True))
+    backend_ids = list(getattr(settings, "backends", {}).keys())
+    timeout = float(getattr(settings, "table_request_timeout_seconds", 5.0))
+    ok = True
+    if not backend_ids:
+        ok = False
+    else:
+        target = backend_ids[0]
+        pairs = (
+            (settings.table_credit_name, "balance"),
+            (settings.table_health_name, "health"),
+        )
+        for table_name, row_key in pairs:
+            client = _table_client_for(table_name)
+            if client is None:
+                ok = False
+                break
+            try:
+                reachable = await client.probe_reachable(target, row_key, timeout_seconds=timeout)
+            except Exception:
+                reachable = False
+            if not reachable:
+                ok = False
+                break
+    _state_probe_cache.update(at=now, ok=ok)
+    return ok
+
+
+async def _extra_readiness_checks() -> dict[str, bool]:
+    """Phase 11 readiness additions: table reachability + replica-share validity."""
+    settings = _current_load_settings()
+    checks: dict[str, bool] = {}
+    try:
+        bad = zero_share_dimensions(
+            {group: dict(limits) for group, limits in settings.quota_group_rate_limits.items()},
+            int(getattr(settings, "rate_limit_replica_share", 1) or 1),
+        )
+    except Exception:
+        bad = []
+    if bad:
+        group, dim = bad[0]
+        logger.warning(
+            "rate_limit_share_invalid",
+            quota_group=group,
+            dimension=dim,
+            share=getattr(settings, "rate_limit_replica_share", 1),
+        )
+        checks["rate_limit_share_valid"] = False
+    else:
+        checks["rate_limit_share_valid"] = True
+    if getattr(settings, "state_backend", "memory") == "table":
+        checks["state_store_reachable"] = await _probe_state_stores(settings)
+    return checks
+
 
 # Phase 07: Graceful shutdown with request draining
 _active_requests = 0
@@ -175,6 +306,9 @@ async def lifespan(_app: FastAPI) -> Any:
         models=list(settings.models.keys()),
     )
     get_backend_client()
+    # Phase 11: build lifespan-owned stores (memory singletons or Table stores).
+    global _health_store, _credit_store, _rate_limit_store, _table_clients
+    _health_store, _credit_store, _rate_limit_store, _table_clients = build_stores(settings)
     await _credit_store.sync_from_settings(settings)
     await _rate_limit_store.sync_from_settings(settings)
     global _reconciliation_loop
@@ -193,6 +327,11 @@ async def lifespan(_app: FastAPI) -> Any:
     await _drain_active_requests(settings.graceful_shutdown_timeout_seconds)
     await _reset_reconciliation_state()
     await close_backend_client()
+    # Phase 11: close Table clients after streams have drained.
+    for table_client in _table_clients:
+        with suppress(Exception):
+            await table_client.close()
+    _table_clients = ()
     await _reset_backend_health_state()
     await _reset_credit_state()
     await _reset_metrics_state()
@@ -315,14 +454,19 @@ async def _current_sleep(seconds: float) -> None:
     await sleeper(seconds)
 
 
-app.include_router(build_health_router(load_settings_fn=_current_load_settings))
+app.include_router(
+    build_health_router(
+        load_settings_fn=_current_load_settings,
+        extra_checks_fn=_extra_readiness_checks,
+    )
+)
 app.include_router(
     build_admin_router(
         load_settings_fn=_current_load_settings,
-        health_store=_health_store,
-        credit_store=_credit_store,
+        health_store=_LiveStore("_health_store"),
+        credit_store=_LiveStore("_credit_store"),
         metrics_store=_metrics_store,
-        rate_limit_store=_rate_limit_store,
+        rate_limit_store=_LiveStore("_rate_limit_store"),
         reconciliation_status_snapshot=_reconciliation_status_snapshot,
     )
 )
@@ -331,11 +475,11 @@ app.include_router(
         load_settings_fn=_current_load_settings,
         get_backend_client_fn=_current_get_backend_client,
         sleep_fn=_current_sleep,
-        health_store=_health_store,
-        credit_store=_credit_store,
+        health_store=_LiveStore("_health_store"),
+        credit_store=_LiveStore("_credit_store"),
         metrics_store=_metrics_store,
         logger=logger,
-        rate_limit_store=_rate_limit_store,
+        rate_limit_store=_LiveStore("_rate_limit_store"),
     )
 )
 
@@ -370,6 +514,7 @@ __all__ = [
     "_snapshot_backend_health",
     "_stream_response",
     "app",
+    "build_stores",
     "close_backend_client",
     "get_backend_client",
     "global_exception_handler",

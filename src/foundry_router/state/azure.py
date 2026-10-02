@@ -243,6 +243,32 @@ class AzureTableEntityClient:
         else:
             return True
 
+    async def probe_reachable(
+        self, partition_key: str, row_key: str, *, timeout_seconds: float = 5.0
+    ) -> bool:
+        """Bounded reachability probe for readiness (one read, cached by callers).
+
+        Returns True when the table is reachable (row present or row absent),
+        False for a missing table, missing RBAC (403), or timeout. Only the
+        check name is surfaced by readiness; errors are logged by type only.
+        """
+        import asyncio as _asyncio
+
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            await _asyncio.wait_for(
+                self._get_client().get_entity(partition_key=partition_key, row_key=row_key),
+                timeout=timeout_seconds,
+            )
+        except Exception as exc:
+            code = _error_code(exc)
+            if code == "TableNotFound":
+                return False
+            return bool(isinstance(exc, ResourceNotFoundError))
+        else:
+            return True
+
     async def query_entities(
         self, partition_key: str, row_key_prefix: str | None = None
     ) -> list[Mapping[str, Any]]:
