@@ -16,6 +16,8 @@
 | Measured log baseline | Per-request stdout volume recorded from a load run, with the cap-sizing calculation shown | Evidence log |
 | Split parameter files | Committed placeholder-only parameter files, a placeholder-only `infra/parameters.example.json`, and a gitignored `*.local.json` convention | JSON, `.gitignore` |
 | Pipeline alignment | Updated `.github/workflows/deploy.yml` for the new parameter surface, referencing variables and secrets by name only | YAML |
+| Interim replica guard | `@maxValue(1)` on `maxReplicas`; `infra/parameters.prod.json` set to `1` | Bicep, JSON |
+| Multi-replica status correction | Documents listed in activities step 16 relabelled `Partially implemented` with a Phase 11 reference | Markdown |
 | Infrastructure documentation | `infra/README.md` covering both modes, secret provisioning, and cost boundaries | Markdown |
 | Traceability update | Requirements traceability and operational documentation updated for the design change | Markdown |
 

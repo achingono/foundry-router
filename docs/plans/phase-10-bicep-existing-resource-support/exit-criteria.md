@@ -25,6 +25,10 @@
 - [ ] Focused tests, full verification suite, lint, format, type check and Docker build all pass.
 - [ ] `scripts/quality/sonarqube-scan.sh` executed if present, with all `Blocker`, `Critical` and `Major` findings addressed.
 - [ ] Deep review executed if the prompt exists, with findings addressed.
+- [ ] `maxReplicas` is capped at `1` by decorator; `az deployment group validate` with `maxReplicas=2` fails with a message referencing Phase 11; every committed parameter file sets `1`.
+- [ ] `activeRevisionsMode: 'Single'` is explicit; after a deployment, `az containerapp revision list` shows exactly one active revision receiving 100% of traffic; the Dockerfile entrypoint stays single-worker; the rollout-overlap window and per-revision credit reset are documented in `infra/README.md`.
+- [ ] Role assignments on `existing` resources in another resource group deploy through a module scoped to that group, validated cross-group, with deployer permissions documented.
+- [ ] Every document listed in activities step 16 labels the deployed multi-replica capability `Partially implemented` with a Phase 11 reference, while adapter code stays `Implemented`; a repository search finds no remaining claim that Table Storage multi-replica state is deployed or verified.
 - [ ] Documentation and traceability updated, with no unsupported present-tense claims.
 - [ ] Plan reviewed by an independent session before implementation began.
 

@@ -44,6 +44,7 @@ The repository is **Implemented** through Phase 09 within its planned single-pro
 - [Phase 08 credit-integrity and boundary hardening plan](plans/phase-08-credit-integrity-hardening/index.md)
 - [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
 - [Phase 10 Bicep existing-resource support plan](plans/phase-10-bicep-existing-resource-support/index.md)
+- [Phase 11 distributed state wiring plan](plans/phase-11-distributed-state-wiring/index.md)
 
 ## Reading Convention
 
