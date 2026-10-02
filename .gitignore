@@ -64,3 +64,8 @@ temp/
 
 # Docker
 .docker/
+
+# Environment-specific Bicep parameter overrides. These carry subscription, tenant,
+# resource group, registry and vault names for a real environment - keep them local.
+# Committed parameter files under infra/ must contain placeholders only.
+*.local.json
