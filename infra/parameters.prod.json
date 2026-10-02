@@ -11,8 +11,26 @@
     "appName": {
       "value": "foundry-router"
     },
-    "containerImageUri": {
-      "value": "foundry-router:latest"
+    "registryMode": {
+      "value": "new"
+    },
+    "keyVaultMode": {
+      "value": "new"
+    },
+    "registryAuthMode": {
+      "value": "managedIdentity"
+    },
+    "containerRegistryName": {
+      "value": "placeholderacr0001"
+    },
+    "keyVaultName": {
+      "value": "placeholder-kv"
+    },
+    "imageRepository": {
+      "value": "foundry-router"
+    },
+    "imageTag": {
+      "value": "latest"
     },
     "containerPort": {
       "value": 8000
@@ -21,13 +39,19 @@
       "value": 1
     },
     "maxReplicas": {
-      "value": 2
+      "value": 1
+    },
+    "dailyCapGb": {
+      "value": 1
+    },
+    "consoleLogsPlan": {
+      "value": "Basic"
     },
     "tags": {
       "value": {
         "environment": "production",
         "project": "foundry-router",
-        "phase": "07",
+        "phase": "10",
         "managedBy": "bicep"
       }
     }
