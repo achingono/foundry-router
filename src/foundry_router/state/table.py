@@ -70,6 +70,15 @@ class TableEntityClient(Protocol):
 
     async def upsert_entity(self, entity: Mapping[str, object]) -> None: ...
 
+    async def try_create_entity(self, entity: Mapping[str, object]) -> bool:
+        """Create an entity only if absent.
+
+        Returns True when created, False when the row already exists.
+        Used for create-if-absent balance sync so a restarting replica never
+        resets shared reservations or spend.
+        """
+        ...
+
     async def try_batch_transaction(self, operations: list[_TransactionEntity]) -> bool:
         """Attempt a transactional batch within one partition.
 
@@ -82,9 +91,8 @@ class TableEntityClient(Protocol):
     ) -> list[Mapping[str, object]]:
         """List entities in a partition, optionally filtered by RowKey prefix.
 
-        Implementations should return at most the partition's reservation rows;
-        used for reaping and diagnostics (N2/N4). Default protocol fallback
-        returns empty list if not implemented by the client.
+        Implementations return the partition's reservation rows for the prefix;
+        used for reaping and diagnostics (N2/N4).
         """
         ...
 
@@ -387,13 +395,11 @@ class AzureTableCreditStore:
         Note: ``reservation_max_age_seconds`` is intentionally not used by the
         Table-backed store. ``InMemoryCreditStore`` piggybacks a bounded sweep of
         expired reservations on ``assess``/``try_assign`` because it can iterate
-        an in-process dict. ``AzureTableCreditStore`` cannot efficiently scan
-        reservation rows via ``TableEntityClient`` (no list/query is exposed), so
-        aging/reaping is intentionally not piggybacked here. Expired reservations
-        are expected to be reclaimed by an explicit external reaper or Table TTL
-        policy; if callers rely on inline aging, they should use the in-memory
-        store or invoke a dedicated ``reap_expired_reservations`` operation.
-        The parameter is retained in the signature for ``CreditStore`` Protocol
+        an in-process dict. ``AzureTableCreditStore`` reaps through the explicit
+        ``reap_expired_reservations`` operation (partition-scoped
+        ``TableEntityClient.query_entities``), invoked from the reconciliation
+        loop, rather than piggybacking scans on the request path. The parameter
+        is retained in the signature for ``CreditStore`` Protocol
         compatibility and to avoid implying unsupported inline semantics.
         Delegates to ``assess_with_context`` via ``CreditAssessmentContext``.
         """

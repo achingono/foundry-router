@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from functools import lru_cache
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -286,7 +288,7 @@ class Settings(BaseSettings):
     rate_limit_replica_share: Annotated[int, Field(ge=1, le=1000)] = Field(
         default=1,
         validation_alias="FOUNDRY_RATE_LIMIT_REPLICA_SHARE",
-        description="Replica divisor for per-replica quota shares (emitted by Bicep from maxReplicas)",
+        description="Replica divisor for per-replica quota shares (from maxReplicas)",
     )
 
     # Backend local credit-cycle allowance estimates (JSON string)
@@ -553,9 +555,6 @@ class Settings(BaseSettings):
         # Phase 11: conditional state-backend validation (memory ignores storage fields
         # so existing Settings(...) fixtures keep passing).
         if self.state_backend == "table":
-            import re
-            from urllib.parse import urlsplit
-
             endpoint = (self.table_endpoint or "").strip()
             if not endpoint:
                 raise ValueError("FOUNDRY_TABLE_ENDPOINT is required when state_backend is table")
@@ -585,9 +584,7 @@ class Settings(BaseSettings):
                 ("FOUNDRY_TABLE_CREDIT_NAME", self.table_credit_name),
             ):
                 if not isinstance(value, str) or not name_pattern.match(value):
-                    raise ValueError(
-                        f"{label} must be 3-63 alphanumerics starting with a letter"
-                    )
+                    raise ValueError(f"{label} must be 3-63 alphanumerics starting with a letter")
 
         return self
 
