@@ -24,6 +24,8 @@ Extend `infra/main.bicep` so a single template can either provision a new contai
 - Name-length and name-shape validation, including the Key Vault global name limit that currently fails late in deployment.
 - Log Analytics cost guardrails: a parameterised daily ingestion cap with a 90%-of-cap alert, a `Basic` table plan for `ContainerAppConsoleLogs`, an explicit decision to hold pay-as-you-go SKU and 30-day retention, and source-volume reduction (uvicorn access logs off; per-request candidate-array detail gated behind `WARNING`/debug).
 - Environment-specific parameter override files excluded from version control; committed parameter files limited to placeholders.
+- Interim single-replica guard: `maxReplicas` constrained to `1` in the template and in every committed parameter file, because the deployed app runs only in-memory credit, health and rate-limit state (`src/foundry_router/main.py:55-58`). Lifted only by [Phase 11](../phase-11-distributed-state-wiring/index.md).
+- Status correction for documents that describe Azure Table Storage multi-replica state as deployed or verified (activities step 16).
 - Documentation and requirements-traceability updates.
 
 ### Out of Scope
@@ -34,6 +36,7 @@ Extend `infra/main.bicep` so a single template can either provision a new contai
 - Populating secret *values* in the template; values remain operator-supplied out of band.
 - Ingestion-time DCR transformations for log filtering. Complexity and the over-50%-filter billing quirk make this a last resort, only if source-volume reduction and table plans prove insufficient.
 - Commitment-tier reservation. The deployment is new with no measured baseline; pay-as-you-go stands until sustained ingestion approaches commitment thresholds, at which point a separate decision is recorded.
+- Azure Storage account, tables, `Storage Table Data Contributor` assignment, and the application-side Table client wiring. These ship together in [Phase 11](../phase-11-distributed-state-wiring/index.md) so the template and its only consumer are verified end to end; provisioning storage here would be unconsumed and unverifiable infrastructure.
 - Application-code changes except one telemetry-local exception: gating the per-request candidate-array log detail behind `WARNING`/debug (activities step 14). No routing, credit, forwarding, or API behaviour changes.
 
 ## Entry Criteria
