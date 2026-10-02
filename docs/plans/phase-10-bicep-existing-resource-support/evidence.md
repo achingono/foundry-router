@@ -1,0 +1,19 @@
+# Phase 10 Evidence
+
+## Evidence Log
+
+| Item | Reference | Notes |
+|---|---|---|
+| Plan | `docs/plans/phase-10-bicep-existing-resource-support/` | Scope, activities, risks and gate checklist for existing-resource support |
+| Baseline template state | `infra/main.bicep` | Resource-group scoped; registry and secret collections are empty; vault provisioned without RBAC authorisation; image reference is a single free-text parameter |
+| Baseline parameter state | `infra/parameters.staging.json`, `infra/parameters.prod.json` | Placeholder image reference; no registry or vault parameters |
+| Pipeline baseline | `.github/workflows/deploy.yml` | Builds to an external registry and overrides the image reference at deploy time; validation job runs against the committed staging parameters |
+| Naming constraint research | Microsoft resource-name-rules reference | Registry 5-50 lowercase alphanumerics, globally unique; vault 3-24 alphanumerics and hyphens, global scope, starts with a letter, ends alphanumeric, no consecutive hyphens |
+| Template build check | `az bicep build --file infra/main.bicep` | Passes at baseline with exactly two pre-existing warnings: BCP036 (`cpu` typed as string at `main.bicep:114`) and BCP037 (`ports` not allowed on `Container` at `main.bicep:117`); both recorded as out of scope for this phase |
+| Status-skew note | `docs/index.md:7` vs `AGENTS.md:7` | Pre-existing skew: the docs hub claims `Implemented` through Phase 09 while the agent guide claims through Phase 08. This plan uses `Planned` for all Phase 10 behaviour until the gates pass, and does not resolve the skew |
+| Independent plan review | Completed (fresh reviewer session) | Verdict: approve with changes; 3 blockers and 9 majors applied to this plan (no `@pattern` decorator, `bicepconfig.json` for assertions, registry-type guard, least-privilege assignment scoping, `keyVaultReference` identity field, `@secure()` credential source, mixed mode combinations, login-server read rule, first-deploy convergence, CI auth and workflow overrides) |
+| Phase 10 decisions | `risk-register.md` Decisions section | Ten decisions approved: remove `containerImageUri`, first-class external-registry `registryServer`, default `new`, RBAC switch for new vaults, `appName`-derived secret prefix, split pull-mode default, parameterised daily cap, `Basic` console-log plan, hold pay-as-you-go and 30-day retention, telemetry-local log reduction |
+| LAW cost baseline | `infra/main.bicep:36-46` | Workspace is pay-as-you-go with 30-day retention and no daily cap; both console and system tables flow at Analytics rates; diagnosis query recorded in activities step 12 |
+| Post-change validation runs | Pending | All four mode combinations, secret-mode external-server validation, plus the negative cases in the exit criteria |
+| Post-change diff scan | Pending | Confirms no live-environment names, IDs, tenants or endpoints were introduced |
+| Post-change test and quality gates | Pending | Focused tests, full suite, lint, format, type check, Docker build, SonarQube, deep review |
