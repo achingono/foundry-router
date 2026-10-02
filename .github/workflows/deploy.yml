@@ -76,17 +76,20 @@ jobs:
       - name: Build Bicep template
         run: az bicep build --file infra/main.bicep
 
-      - name: Validate Bicep template
+      - name: Lint Bicep template
+        run: az bicep lint --file infra/main.bicep
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS_STAGING }}
+
+      - name: Validate Bicep template (new/new hermetic)
         run: |
           az deployment group validate \
             --template-file infra/main.bicep \
             --parameters infra/parameters.staging.json \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_STAGING }}
 
   deploy-staging:
     runs-on: ubuntu-latest
@@ -113,7 +116,7 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_STAGING }} \
             --template-file infra/main.bicep \
             --parameters infra/parameters.staging.json \
-            --parameters containerImageUri=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}
+            --parameters imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }}
 
   smoke-test-staging:
     runs-on: ubuntu-latest
@@ -169,7 +172,7 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
             --template-file infra/main.bicep \
             --parameters infra/parameters.prod.json \
-            --parameters containerImageUri=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }}
+            --parameters imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }}
 
   smoke-test-production:
     runs-on: ubuntu-latest

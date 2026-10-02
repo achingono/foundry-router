@@ -52,6 +52,57 @@ def select_backend(settings: Any, model: str) -> str | None:
     return ranked[0]
 
 
+def _emit_routing_decision(
+    logger: Any,
+    *,
+    model: str,
+    operation: str,
+    request_id: str,
+    selected_backend: str | None,
+    reason: str,
+    estimated_request_cost_usd: float | None,
+    candidates: list[dict[str, Any]],
+    protected_quota_fallback: bool | None = None,
+) -> None:
+    """Emit a low-volume INFO summary plus a gated candidate-detail event.
+
+    Production ``INFO`` carries only the decision (request id, model, backend,
+    reason, estimate). The full per-backend candidate array is emitted at
+    ``DEBUG`` on success and ``WARNING`` on failure, so per-request candidate
+    detail never reaches production ``INFO`` output. No routing, credit,
+    forwarding, or API behaviour changes.
+    """
+    summary: dict[str, Any] = {
+        "model": model,
+        "operation": operation,
+        "request_id": request_id,
+        "selected_backend": selected_backend,
+        "reason": reason,
+        "estimated_request_cost_usd": estimated_request_cost_usd,
+    }
+    if protected_quota_fallback is not None:
+        summary["protected_quota_fallback"] = protected_quota_fallback
+    logger.info("routing_decision", **summary)
+    detail = {
+        "request_id": request_id,
+        "reason": reason,
+        "candidates": candidates,
+    }
+    # Test doubles may only implement info(); prefer level-gated methods with fallback.
+    if selected_backend is None:
+        warn = getattr(logger, "warning", None)
+        if callable(warn):
+            warn("routing_decision_detail", **detail)
+        else:
+            logger.info("routing_decision_detail", **detail)
+    else:
+        debug = getattr(logger, "debug", None)
+        if callable(debug):
+            debug("routing_decision_detail", **detail)
+        else:
+            logger.info("routing_decision_detail", **detail)
+
+
 async def select_candidate_backend(
     settings: Any,
     model: str,
@@ -79,8 +130,8 @@ async def select_candidate_backend(
         pricing=settings.pricing,
     )
     if estimate is None:
-        logger.info(
-            "routing_decision",
+        _emit_routing_decision(
+            logger,
             model=model,
             operation=operation,
             request_id=request_id,
@@ -200,8 +251,8 @@ async def select_candidate_backend(
         quota_eligible = health_eligible
 
     if not quota_eligible:
-        logger.info(
-            "routing_decision",
+        _emit_routing_decision(
+            logger,
             model=model,
             operation=operation,
             request_id=request_id,
@@ -325,8 +376,8 @@ async def select_candidate_backend(
         candidate_details.append(candidate_detail)
 
     if not scored_candidates:
-        logger.info(
-            "routing_decision",
+        _emit_routing_decision(
+            logger,
             model=model,
             operation=operation,
             request_id=request_id,
@@ -408,8 +459,8 @@ async def select_candidate_backend(
                             charged_cost_usd=None,
                         )
                     continue
-            logger.info(
-                "routing_decision",
+            _emit_routing_decision(
+                logger,
                 model=model,
                 operation=operation,
                 request_id=request_id,
@@ -421,8 +472,8 @@ async def select_candidate_backend(
             )
             return BackendSelectionResult(backend_id, ranked_candidates, snapshots, False)
 
-    logger.info(
-        "routing_decision",
+    _emit_routing_decision(
+        logger,
         model=model,
         operation=operation,
         request_id=request_id,
