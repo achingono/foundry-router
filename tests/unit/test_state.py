@@ -51,6 +51,15 @@ class FakeTableClient:
         self.entities[key] = saved
         self.upserted.append(saved)
 
+    async def try_create_entity(self, entity: Mapping[str, object]) -> bool:
+        saved = dict(entity)
+        key = (str(saved["PartitionKey"]), str(saved["RowKey"]))
+        if key in self.entities:
+            return False
+        saved["odata.etag"] = f"v{len(self.entities)}"
+        self.entities[key] = saved
+        return True
+
     async def try_batch_transaction(self, operations: list[_TransactionEntity]) -> bool:
         if self.fail_batch:
             raise RuntimeError("batch failed")
