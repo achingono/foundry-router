@@ -691,8 +691,19 @@ class AzureTableCreditStore:
         resolved_backend_id = backend_id
         if resolved_backend_id is None:
             async with self._lock:
+                # Prefer configured partitions over the TTL cache: a replica
+                # may have evicted the backend from cache while the shared
+                # reservation row still exists.
+                configured_backend_ids = list(self._configured_backend_ids)
                 cached_backend_ids = list(self._balance_cache)
-            for cached_backend_id in cached_backend_ids:
+            candidates: list[str] = []
+            for candidate_id in configured_backend_ids:
+                if candidate_id not in candidates:
+                    candidates.append(candidate_id)
+            for candidate_id in cached_backend_ids:
+                if candidate_id not in candidates:
+                    candidates.append(candidate_id)
+            for cached_backend_id in candidates:
                 entity = await self._client.get_entity(
                     cached_backend_id, f"{self._RESERVATION_ROW_PREFIX}{request_id}"
                 )
@@ -860,52 +871,67 @@ class AzureTableCreditStore:
         now = now_utc or datetime.now(UTC)
         now_ts = now.timestamp()
         snapshots: dict[str, BackendCreditLiveSnapshot] = {}
-        async with self._lock:
-            for backend_id in backend_ids:
-                balance = await self._get_balance_locked(backend_id, now)
-                if balance is None:
+        # Fetch balances with only short cache-lock holds so network I/O in
+        # query_entities below never blocks sync/reset on the global lock.
+        balances: dict[str, _BalanceRow] = {}
+        for backend_id in backend_ids:
+            async with self._lock:
+                cached = self._balance_cache.get(backend_id)
+                if cached is not None and time.monotonic() - cached[0] <= self._cache_ttl_seconds:
+                    self._rollover_if_needed(cached[1], now)
+                    balances[backend_id] = cached[1]
                     continue
+            entity = await self._client.get_entity(backend_id, self._BALANCE_ROW_KEY)
+            if entity is None:
+                continue
+            fetched = self._entity_to_balance(entity)
+            if fetched is None:
+                continue
+            self._rollover_if_needed(fetched, now)
+            async with self._lock:
+                self._balance_cache[backend_id] = (time.monotonic(), fetched)
+            balances[backend_id] = fetched
+        for backend_id, balance in balances.items():
+            cycle = calculate_cycle_window(now, balance.cycle_start_day)
+            assessment = self._compute_assessment(
+                balance, 0.0, min_credit_reserve_usd, min_credit_reserve_percent, now
+            )
 
-                cycle = calculate_cycle_window(now, balance.cycle_start_day)
-                assessment = self._compute_assessment(
-                    balance, 0.0, min_credit_reserve_usd, min_credit_reserve_percent, now
-                )
-
-                # N4: real counts via query when available
+            # N4: real counts via query when available
+            active_reservations = 0
+            oldest_age: float | None = None
+            if hasattr(self._client, "query_entities"):
+                try:
+                    entities = await self._client.query_entities(
+                        backend_id, self._RESERVATION_ROW_PREFIX
+                    )
+                except Exception:
+                    entities = []
+                pending = []
+                for ent in entities:
+                    res = self._entity_to_reservation(ent)
+                    if res is not None and res.state == "pending":
+                        pending.append(res)
+                active_reservations = len(pending)
+                if pending:
+                    oldest_created = min(r.created_at_utc for r in pending)
+                    oldest_age = max(0.0, now_ts - oldest_created)
+            else:
+                # No query support - cannot determine; surface as 0/None with limitation
                 active_reservations = 0
-                oldest_age: float | None = None
-                if hasattr(self._client, "query_entities"):
-                    try:
-                        entities = await self._client.query_entities(
-                            backend_id, self._RESERVATION_ROW_PREFIX
-                        )
-                    except Exception:
-                        entities = []
-                    pending = []
-                    for ent in entities:
-                        res = self._entity_to_reservation(ent)
-                        if res is not None and res.state == "pending":
-                            pending.append(res)
-                    active_reservations = len(pending)
-                    if pending:
-                        oldest_created = min(r.created_at_utc for r in pending)
-                        oldest_age = max(0.0, now_ts - oldest_created)
-                else:
-                    # No query support - cannot determine; surface as 0/None with limitation
-                    active_reservations = 0
-                    oldest_age = None
+                oldest_age = None
 
-                snapshots[backend_id] = BackendCreditLiveSnapshot(
-                    state=assessment.state,
-                    available_credit_usd=assessment.available_credit_usd,
-                    reserved_inflight_usd=balance.reserved_inflight_usd,
-                    estimated_remaining_usd=balance.estimated_remaining_usd,
-                    cycle_allowance_usd=balance.cycle_allowance_usd,
-                    current_cycle_start_utc=cycle.current_cycle_start_utc,
-                    next_reset_utc=cycle.next_reset_utc,
-                    active_reservations=active_reservations,
-                    oldest_reservation_age_seconds=oldest_age,
-                )
+            snapshots[backend_id] = BackendCreditLiveSnapshot(
+                state=assessment.state,
+                available_credit_usd=assessment.available_credit_usd,
+                reserved_inflight_usd=balance.reserved_inflight_usd,
+                estimated_remaining_usd=balance.estimated_remaining_usd,
+                cycle_allowance_usd=balance.cycle_allowance_usd,
+                current_cycle_start_utc=cycle.current_cycle_start_utc,
+                next_reset_utc=cycle.next_reset_utc,
+                active_reservations=active_reservations,
+                oldest_reservation_age_seconds=oldest_age,
+            )
 
         return snapshots
 

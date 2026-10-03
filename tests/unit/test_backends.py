@@ -83,6 +83,51 @@ class TestAllowedBackendClient:
         assert response.status_code == 200
         assert response.json() == {"ok": True}
 
+    @respx.mock
+    async def test_google_ai_studio_substitutes_deployment_and_maps_responses(self, monkeypatch):
+        settings = Settings(
+            backends_json='{"gemini_a": {"provider": "google_ai_studio", "endpoint": "https://generativelanguage.googleapis.com", "credential": "AIza-test-key", "deployment": "gemini-2.5-flash", "quota_group": "project-a"}}',
+            models_json='{"my-alias": {"backends": {"gemini_a": 1.0}}}',
+            client_api_keys_json='["client-key"]',
+            admin_api_keys_json='["admin-key"]',
+            pricing_json="{}",
+            backend_cycle_start_day_json="{}",
+        )
+        monkeypatch.setattr("foundry_router.backends.load_settings", lambda: settings)
+        monkeypatch.setattr("foundry_router.config.load_settings", lambda: settings)
+
+        captured: dict = {}
+
+        def capture(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["json"] = __import__("json").loads(request.content.decode())
+            return httpx.Response(200, json={"ok": True})
+
+        respx.post(
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        ).mock(side_effect=capture)
+
+        client = AllowedBackendClient()
+        # Logical alias in body must be rewritten to the Google deployment id.
+        assert (
+            client.prepare_upstream_payload("gemini_a", {"model": "my-alias", "input": "hi"})[
+                "model"
+            ]
+            == "gemini-2.5-flash"
+        )
+        # Responses operation maps onto Google-supported chat/completions.
+        assert client._backend_url("gemini_a", "responses").path.endswith(
+            "/v1beta/openai/chat/completions"
+        )
+        response = await client.request_backend(
+            "gemini_a",
+            "responses",
+            json={"model": "my-alias", "input": "hi"},
+        )
+        assert response.status_code == 200
+        assert captured["json"]["model"] == "gemini-2.5-flash"
+        assert captured["url"].endswith("/v1beta/openai/chat/completions")
+
     async def test_google_ai_studio_backend_rejects_non_https_or_unapproved_host(
         self, test_settings
     ):

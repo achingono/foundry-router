@@ -96,6 +96,24 @@ param clientKeysSecretName string = 'client-api-keys'
 @description('Secret name (without vault URI) holding the admin API keys JSON.')
 param adminKeysSecretName string = 'admin-api-keys'
 
+@description('Secret name (without vault URI) holding the backends topology JSON (FOUNDRY_BACKENDS_JSON). Required: app crashes without at least one backend.')
+param backendsJsonSecretName string = 'backends-json'
+
+@description('Secret name (without vault URI) holding the models topology JSON (FOUNDRY_MODELS_JSON).')
+param modelsJsonSecretName string = 'models-json'
+
+@description('Secret name (without vault URI) holding the pricing JSON (FOUNDRY_PRICING_JSON).')
+param pricingJsonSecretName string = 'pricing-json'
+
+@description('Secret name (without vault URI) holding the backend cycle-start-day JSON (FOUNDRY_BACKEND_CYCLE_START_DAY_JSON).')
+param backendCycleStartDaySecretName string = 'backend-cycle-start-day'
+
+@description('Secret name (without vault URI) holding the backend cycle-allowance JSON (FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON).')
+param backendCycleAllowanceSecretName string = 'backend-cycle-allowance'
+
+@description('Secret name (without vault URI) holding the backend initial-remaining JSON (FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON).')
+param backendInitialRemainingSecretName string = 'backend-initial-remaining'
+
 // --- App tuning ---
 @description('Container port.')
 param containerPort int = 8000
@@ -220,6 +238,12 @@ var effectiveVaultUri = keyVaultMode == 'new' ? newVaultUri : existingVaultUri
 
 var clientSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${clientKeysSecretName}'
 var adminSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${adminKeysSecretName}'
+var backendsSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendsJsonSecretName}'
+var modelsSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${modelsJsonSecretName}'
+var pricingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${pricingJsonSecretName}'
+var cycleStartDaySecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendCycleStartDaySecretName}'
+var cycleAllowanceSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendCycleAllowanceSecretName}'
+var initialRemainingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendInitialRemainingSecretName}'
 
 // --- Log Analytics with cost guardrails ---
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
@@ -377,6 +401,36 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
             keyVaultUrl: adminSecretUrl
             identity: routerIdentity.id
           }
+          {
+            name: '${secretNamePrefix}-backends-json'
+            keyVaultUrl: backendsSecretUrl
+            identity: routerIdentity.id
+          }
+          {
+            name: '${secretNamePrefix}-models-json'
+            keyVaultUrl: modelsSecretUrl
+            identity: routerIdentity.id
+          }
+          {
+            name: '${secretNamePrefix}-pricing-json'
+            keyVaultUrl: pricingSecretUrl
+            identity: routerIdentity.id
+          }
+          {
+            name: '${secretNamePrefix}-backend-cycle-start-day'
+            keyVaultUrl: cycleStartDaySecretUrl
+            identity: routerIdentity.id
+          }
+          {
+            name: '${secretNamePrefix}-backend-cycle-allowance'
+            keyVaultUrl: cycleAllowanceSecretUrl
+            identity: routerIdentity.id
+          }
+          {
+            name: '${secretNamePrefix}-backend-initial-remaining'
+            keyVaultUrl: initialRemainingSecretUrl
+            identity: routerIdentity.id
+          }
         ]
       )
       registries: registryAuthMode == 'managedIdentity'
@@ -450,6 +504,30 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
             {
               name: 'FOUNDRY_ADMIN_API_KEYS_JSON'
               secretRef: '${secretNamePrefix}-admin-keys'
+            }
+            {
+              name: 'FOUNDRY_BACKENDS_JSON'
+              secretRef: '${secretNamePrefix}-backends-json'
+            }
+            {
+              name: 'FOUNDRY_MODELS_JSON'
+              secretRef: '${secretNamePrefix}-models-json'
+            }
+            {
+              name: 'FOUNDRY_PRICING_JSON'
+              secretRef: '${secretNamePrefix}-pricing-json'
+            }
+            {
+              name: 'FOUNDRY_BACKEND_CYCLE_START_DAY_JSON'
+              secretRef: '${secretNamePrefix}-backend-cycle-start-day'
+            }
+            {
+              name: 'FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON'
+              secretRef: '${secretNamePrefix}-backend-cycle-allowance'
+            }
+            {
+              name: 'FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON'
+              secretRef: '${secretNamePrefix}-backend-initial-remaining'
             }
             {
               name: 'FOUNDRY_STATE_BACKEND'

@@ -96,7 +96,7 @@ class TestFullFlow:
 
         asyncio.run(seed_quota_usage())
         route = respx.post(
-            "https://generativelanguage.googleapis.com/v1beta/openai/responses"
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
         ).mock(
             return_value=httpx.Response(
                 200,

@@ -151,6 +151,7 @@ jobs:
         run: |
           ./scripts/operations/smoke-test.sh \
             --url "${{ steps.fqdn.outputs.app_url }}" \
+            --client-key "${{ secrets.CLIENT_API_KEY_STAGING }}" \
             --max-retries 30 \
             --retry-delay 10
 
@@ -214,4 +215,5 @@ jobs:
         run: |
           ./scripts/operations/smoke-test.sh \
             --url "${{ steps.fqdn.outputs.app_url }}" \
-            --admin-key "${{ secrets.ADMIN_API_KEY_PRODUCTION }}"
+            --admin-key "${{ secrets.ADMIN_API_KEY_PRODUCTION }}" \
+            --client-key "${{ secrets.CLIENT_API_KEY_PRODUCTION }}"

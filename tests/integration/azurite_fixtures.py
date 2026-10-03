@@ -9,6 +9,11 @@ from __future__ import annotations
 import uuid
 from contextlib import suppress
 
+import pytest
+
+pytest.importorskip("azure.core.credentials")
+pytest.importorskip("azure.data.tables")
+
 from azure.core.credentials import AzureNamedKeyCredential
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 from azure.data.tables import TableServiceClient

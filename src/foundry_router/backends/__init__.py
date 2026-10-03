@@ -107,6 +107,35 @@ class AllowedBackendClient:
 
         return {k: v for k, v in headers.items() if k.lower() not in sensitive}
 
+    def _google_operation(self, operation: str) -> str:
+        """Map router operations onto Google's OpenAI-compatible surface.
+
+        Google AI Studio implements ``chat/completions``, ``embeddings`` and
+        ``models`` but not OpenAI's proprietary ``responses`` endpoint. Route
+        ``responses`` to ``chat/completions`` as the closest compatible
+        operation; payload shape differences beyond ``model`` remain a
+        documented limitation.
+        """
+        normalized = operation.lstrip("/").replace("//", "/")
+        if normalized == "responses":
+            return "chat/completions"
+        return normalized
+
+    def prepare_upstream_payload(self, backend_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Return a copy of ``body`` with the provider deployment substituted.
+
+        The router routes on the logical model alias (e.g. ``gpt-5.4``); the
+        upstream provider must receive its own deployment/model id
+        (e.g. ``gemini-1.5-flash`` in ``config.deployment``).
+        """
+        config = self._settings.backends.get(backend_id)
+        if config is None:
+            raise ValueError(f"Unknown backend '{backend_id}'")
+        out = dict(body)
+        if config.provider == "google_ai_studio" and config.deployment:
+            out["model"] = config.deployment
+        return out
+
     def _backend_url(self, backend_id: str, operation: str) -> httpx.URL:
         config = self._settings.backends.get(backend_id)
         if config is None:
@@ -115,7 +144,8 @@ class AllowedBackendClient:
         if config.provider == "google_ai_studio":
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
-            path = f"{base.path.rstrip('/')}/v1beta/openai/{operation.lstrip('/')}"
+            effective_operation = self._google_operation(operation)
+            path = f"{base.path.rstrip('/')}/v1beta/openai/{effective_operation.lstrip('/')}"
             return base.copy_with(path=path)
 
         if not config.deployment:
@@ -150,6 +180,8 @@ class AllowedBackendClient:
         url = self._backend_url(backend_id, operation)
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
+        if isinstance(kwargs.get("json"), dict):
+            kwargs = {**kwargs, "json": self.prepare_upstream_payload(backend_id, kwargs["json"])}
         return await self._client.request(
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )
@@ -167,6 +199,8 @@ class AllowedBackendClient:
         url = self._backend_url(backend_id, operation)
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
+        if isinstance(kwargs.get("json"), dict):
+            kwargs = {**kwargs, "json": self.prepare_upstream_payload(backend_id, kwargs["json"])}
         return self._client.stream(
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )

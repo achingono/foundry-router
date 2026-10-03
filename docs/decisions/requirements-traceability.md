@@ -131,4 +131,19 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 | Mode-parameterised registry/vault (`new`/`existing`), derived image coordinates, external `registryServer`, no free-text image reference | Implemented | `infra/main.bicep`, `infra/bicepconfig.json`, `infra/modules/` | `az bicep build`/`lint` clean (pre-existing BCP036/BCP037 only); `infra/parameters.example.json` |
 | Registry pull + vault secret wiring with least-privilege role assignments and cross-RG modules | Implemented | `infra/main.bicep`, `infra/modules/registryPullRole.bicep`, `infra/modules/vaultSecretsRole.bicep` | Template + `infra/README.md` (first-deploy convergence, deployer permissions) |
 | Name validation, daily ingestion cap + 90% alert, `Basic` console-log plan, source-volume reduction | Implemented | `infra/main.bicep`, `Dockerfile`, `src/foundry_router/routing/` | `tests/unit/test_routing_log_volume.py`; `infra/README.md` (cap sizing, revert path) |
-| Interim `maxReplicas: 1` guard with explicit single-revision mode and documented rollout overlap | Implemented | `infra/main.bicep`, `infra/parameters.*.json` | `infra/README.md`; deployed multi-replica shared state Partially implemented, Phase 11 Planned |
+| Interim `maxReplicas: 1` guard with explicit single-revision mode and documented rollout overlap | Implemented | `infra/main.bicep`, `infra/parameters.*.json` | `infra/README.md`; deployed multi-replica shared state Partially implemented, Phase 11 Partially implemented |
+| Backend/model/pricing/cycle topology wired via Key Vault secret references (`FOUNDRY_BACKENDS_JSON`, `FOUNDRY_MODELS_JSON`, `FOUNDRY_PRICING_JSON`, cycle/allowance/remaining) | Implemented (template code) | `infra/main.bicep` | Deep-review remediation; secret values remain operator-supplied out of band |
+
+## Phase 11 Distributed State Wiring Traceability (Partially implemented)
+
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Conditional Azure Table provisioning, identity-only client wiring, `memory`/`table` state-backend validation | Implemented (template + settings code) | `infra/main.bicep`, `src/foundry_router/config/`, `src/foundry_router/state/azure.py` | `tests/unit/test_distributed_wiring.py`, `tests/unit/test_config.py` |
+| Table health/credit adapters with create-if-absent sync, ETag-guarded transactions, recompute-on-conflict | Implemented | `src/foundry_router/state/table.py` | `tests/unit/test_table_concurrency.py`, `tests/unit/test_table_client.py` |
+| Failover releases first-backend reservation before second selection (no cross-partition orphan) | Implemented | `src/foundry_router/routing/` | Deep-review Finding 1; `tests/unit/test_main.py` failover tests |
+| `finalize_request(backend_id=None)` scans configured partitions (not only TTL cache) | Implemented | `src/foundry_router/state/table.py` | Deep-review Finding 6 |
+| Google payload substitutes `config.deployment` for logical model; `responses` maps to Google-supported `chat/completions` | Implemented | `src/foundry_router/backends/` | Deep-review Finding 3; `tests/unit/test_backends.py` |
+| Azurite integration + unit collection without optional `azure` extra | Implemented | `tests/integration/azurite_fixtures.py`, `tests/unit/test_table_client.py` | `pytest -m "not azurite"` collection clean; azurite-marked tests skip without emulator |
+| Rate-limit replica share wiring and per-replica effective limits | Implemented | `src/foundry_router/ratelimit.py`, `src/foundry_router/routing/` | `tests/unit/test_distributed_wiring.py` |
+| Azure deployment validation and two-replica cut-over | Planned | `infra/`, operations | Production remains memory-backed with `maxReplicas: 1` until gates pass |
+| Multi-worker metrics aggregation via multiprocess mode or OpenTelemetry | Planned | `src/foundry_router/metrics/` | Single-process Prometheus implemented; multiprocess planned |
