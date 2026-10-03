@@ -102,6 +102,7 @@ def test_prefix_upper_bound_excludes_prefix_sibling() -> None:
 
 
 def test_container_apps_credential_uses_configured_user_identity(monkeypatch) -> None:
+    pytest.importorskip("azure.identity.aio")
     monkeypatch.setattr("foundry_router.state.azure._is_container_apps", lambda: True)
     monkeypatch.setenv("FOUNDRY_AZURE_CLIENT_ID", "test-client-id")
     monkeypatch.setattr("azure.identity.aio.ManagedIdentityCredential", lambda **kwargs: kwargs)
@@ -110,6 +111,7 @@ def test_container_apps_credential_uses_configured_user_identity(monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_balance_update_without_etag_fails_closed() -> None:
+    pytest.importorskip("azure.data.tables")
     client = _client_with(_FakeAioClient())
     with pytest.raises(TableEntityMissingEtagError):
         await client.try_batch_transaction([_balance_update(None)])
@@ -117,7 +119,8 @@ async def test_balance_update_without_etag_fails_closed() -> None:
 
 @pytest.mark.asyncio
 async def test_balance_412_maps_to_false_on_expected_operation() -> None:
-    from azure.data.tables import TableTransactionError
+    azure_tables = pytest.importorskip("azure.data.tables")
+    TableTransactionError = azure_tables.TableTransactionError  # noqa: N806
 
     fake = _FakeAioClient()
     err = TableTransactionError(message="0: The update condition is not satisfied.")
@@ -129,7 +132,8 @@ async def test_balance_412_maps_to_false_on_expected_operation() -> None:
 
 @pytest.mark.asyncio
 async def test_reservation_409_maps_to_false_on_create() -> None:
-    from azure.data.tables import TableTransactionError
+    azure_tables = pytest.importorskip("azure.data.tables")
+    TableTransactionError = azure_tables.TableTransactionError  # noqa: N806
 
     fake = _FakeAioClient()
     err = TableTransactionError(message="0: The specified entity already exists.")
@@ -142,7 +146,8 @@ async def test_reservation_409_maps_to_false_on_create() -> None:
 
 @pytest.mark.asyncio
 async def test_unexpected_error_code_raises_fail_closed() -> None:
-    from azure.data.tables import TableTransactionError
+    azure_tables = pytest.importorskip("azure.data.tables")
+    TableTransactionError = azure_tables.TableTransactionError  # noqa: N806
 
     fake = _FakeAioClient()
     err = TableTransactionError(message="0: Internal error.")
@@ -156,7 +161,8 @@ async def test_unexpected_error_code_raises_fail_closed() -> None:
 @pytest.mark.asyncio
 async def test_409_on_balance_update_raises() -> None:
     """A 409 on an unexpected operation must not be masked as a conflict."""
-    from azure.data.tables import TableTransactionError
+    azure_tables = pytest.importorskip("azure.data.tables")
+    TableTransactionError = azure_tables.TableTransactionError  # noqa: N806
 
     fake = _FakeAioClient()
     err = TableTransactionError(message="0: Entity already exists.")
@@ -169,7 +175,8 @@ async def test_409_on_balance_update_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_transaction_conflict_without_explicit_index_raises() -> None:
-    from azure.data.tables import TableTransactionError
+    azure_tables = pytest.importorskip("azure.data.tables")
+    TableTransactionError = azure_tables.TableTransactionError  # noqa: N806
 
     fake = _FakeAioClient()
     err = TableTransactionError(message="The update condition is not satisfied.")
@@ -194,7 +201,8 @@ async def test_query_uses_parameterised_prefix_range() -> None:
 
 @pytest.mark.asyncio
 async def test_try_create_false_on_exists() -> None:
-    from azure.core.exceptions import HttpResponseError
+    azure_core = pytest.importorskip("azure.core.exceptions")
+    HttpResponseError = azure_core.HttpResponseError  # noqa: N806
 
     fake = _FakeAioClient()
     err = HttpResponseError(message="EntityAlreadyExists: exists")
@@ -206,7 +214,8 @@ async def test_try_create_false_on_exists() -> None:
 
 @pytest.mark.asyncio
 async def test_probe_reachable_fails_for_forbidden_and_timeout() -> None:
-    from azure.core.exceptions import HttpResponseError
+    azure_core = pytest.importorskip("azure.core.exceptions")
+    HttpResponseError = azure_core.HttpResponseError  # noqa: N806
 
     class ForbiddenClient:
         async def get_entity(self, **kwargs):

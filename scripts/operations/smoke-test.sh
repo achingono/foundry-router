@@ -8,6 +8,7 @@ set -euo pipefail
 # Configuration
 APP_URL="${1:-}"
 ADMIN_KEY="${2:-}"
+CLIENT_KEY=""
 MAX_RETRIES=30
 RETRY_DELAY=5
 
@@ -37,13 +38,14 @@ Usage: smoke-test.sh [OPTIONS]
 Options:
   --url URL                 Application URL (required)
   --admin-key KEY          Admin API key for authenticated endpoints
+  --client-key KEY         Client API key for /openai/v1/models check (required for Step 4)
   --max-retries N          Maximum retry attempts (default: 30)
   --retry-delay SECONDS    Delay between retries (default: 5)
   --help                   Show this help message
 
 Examples:
-  ./scripts/operations/smoke-test.sh --url https://app.example.com
-  ./scripts/operations/smoke-test.sh --url https://app.example.com --admin-key secret123
+  ./scripts/operations/smoke-test.sh --url https://app.example.com --client-key client123
+  ./scripts/operations/smoke-test.sh --url https://app.example.com --admin-key secret123 --client-key client123
 EOF
   exit 1
 }
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --admin-key)
       ADMIN_KEY="$2"
+      shift 2
+      ;;
+    --client-key)
+      CLIENT_KEY="$2"
       shift 2
       ;;
     --max-retries)
@@ -173,19 +179,24 @@ main() {
     log_warn "Step 3: Skipping admin tests (no --admin-key provided)"
   fi
   
-  # Step 4: Model listing (requires credentials but not admin)
+  # Step 4: Model listing (requires client authentication per Phase 01)
   log_info "Step 4: Checking model availability..."
-  local models_response
-  models_response=$(curl -s -X GET \
-    -H "Content-Type: application/json" \
-    "$APP_URL/openai/v1/models" 2>&1)
-  
-  if echo "$models_response" | grep -q "data"; then
-    log_info "✓ Models endpoint returned valid response"
+  if [[ -z "$CLIENT_KEY" ]]; then
+    log_warn "Step 4: Skipping models check (no --client-key provided)"
   else
-    log_error "✗ Models endpoint failed"
-    echo "  Response: $models_response"
-    exit 1
+    local models_response
+    models_response=$(curl -s -X GET \
+      -H "Content-Type: application/json" \
+      -H "api-key: $CLIENT_KEY" \
+      "$APP_URL/openai/v1/models" 2>&1)
+
+    if echo "$models_response" | grep -q '"data"'; then
+      log_info "✓ Models endpoint returned valid response"
+    else
+      log_error "✗ Models endpoint failed"
+      echo "  Response: $models_response"
+      exit 1
+    fi
   fi
   
   # Step 5: Verify logging and metrics collection

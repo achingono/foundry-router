@@ -34,6 +34,7 @@ def test_build_stores_memory_returns_singletons() -> None:
 
 
 def test_build_stores_table_returns_shared_table_stores() -> None:
+    pytest.importorskip("azure.data.tables")
     settings = SimpleNamespace(
         state_backend="table",
         table_endpoint="https://placeholder.table.core.windows.net",

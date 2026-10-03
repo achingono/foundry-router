@@ -625,6 +625,33 @@ async def execute_with_single_failover(
             reservation_closed_or_transferred = True
             return await record_and_return(first_result.response, backend_id=first_backend_id)
 
+        # Release the first backend's credit reservation without debiting spend
+        # before branching into the second partition. The second selection
+        # creates an independent reservation; without this release the first
+        # partition's req-* row would orphan until the reaper runs.
+        try:
+            await credit_store.finalize_request(
+                request_id,
+                backend_id=first_backend_id,
+                charge_reserved=False,
+                charged_cost_usd=None,
+            )
+        except TypeError as exc:
+            if "backend_id" not in str(exc):
+                raise
+            await credit_store.finalize_request(
+                request_id,
+                charge_reserved=False,
+                charged_cost_usd=None,
+            )
+        except Exception:
+            warn = getattr(logger, "warning", None)
+            if callable(warn):
+                warn(
+                    "routing_failover_release_failed",
+                    request_id=request_id,
+                    backend_id=first_backend_id,
+                )
         second_selection = await select_candidate_backend(
             settings,
             model,
