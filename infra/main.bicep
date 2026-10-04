@@ -196,42 +196,37 @@ resource existingVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (eff
 }
 
 // --- Provisioned resources ---
-resource newRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = if (effectiveRegistryMode == 'new' && registryServer == '') {
-  name: containerRegistryName
-  location: location
-  tags: tags
-  sku: {
-    name: 'Basic'
-  }
-  properties: {
-    adminUserEnabled: false
-    anonymousPullEnabled: false
+module newRegistry './modules/registry.bicep' = if (effectiveRegistryMode == 'new' && registryServer == '') {
+  name: 'registry-${uniqueString(resourceGroup().id, containerRegistryName)}'
+  params: {
+    config: {
+      name: containerRegistryName
+      location: location
+      tags: tags
+      grantPull: effectiveRegistryAuthMode == 'managedIdentity'
+    }
+    identityResourceId: routerIdentityResourceId
+    principalId: routerIdentity.principalId
   }
 }
 
-resource newVault 'Microsoft.KeyVault/vaults@2023-02-01' = if (effectiveKeyVaultMode == 'new') {
-  name: keyVaultName
-  location: location
-  tags: tags
-  properties: {
-    tenantId: subscription().tenantId
-    sku: {
-      family: 'A'
-      name: 'standard'
+module newVault './modules/key-vault.bicep' = if (effectiveKeyVaultMode == 'new') {
+  name: 'vault-${uniqueString(resourceGroup().id, keyVaultName)}'
+  params: {
+    config: {
+      name: keyVaultName
+      location: location
+      tags: tags
     }
-    enabledForDeployment: true
-    enabledForTemplateDeployment: true
-    enableSoftDelete: true
-    softDeleteRetentionInDays: 90
-    // Phase 10 step 7: RBAC-authorised vault so the container app managed identity can be granted access.
-    enableRbacAuthorization: true
+    identityResourceId: routerIdentityResourceId
+    principalId: routerIdentity.principalId
   }
 }
 
 // --- Resolve login server from the resource reference, never by concatenation ---
 // External registries: server comes from the validated registryServer parameter; the two sources are never mixed.
 var isExternalRegistry = registryServer != ''
-var acrLoginServer = isExternalRegistry ? '' : (effectiveRegistryMode == 'new' ? newRegistry!.properties.loginServer : existingRegistry!.properties.loginServer)
+var acrLoginServer = isExternalRegistry ? '' : (effectiveRegistryMode == 'new' ? newRegistry!.outputs.registryRef.loginServer : existingRegistry!.properties.loginServer)
 var effectiveRegistryServer = isExternalRegistry ? registryServer : acrLoginServer
 
 // Guard: managed-identity pull is only available for Azure Container Registry.
@@ -248,7 +243,7 @@ assert minReplicasDoesNotExceedMaxReplicas = minReplicas <= maxReplicas
 var containerImage = '${effectiveRegistryServer}/${imageRepository}:${imageTag}'
 
 // --- Vault URI resolved by mode ---
-var newVaultUri = effectiveKeyVaultMode == 'new' ? newVault!.properties.vaultUri : ''
+var newVaultUri = effectiveKeyVaultMode == 'new' ? newVault!.outputs.vaultRef.uri : ''
 var existingVaultUri = effectiveKeyVaultMode == 'existing' ? existingVault!.properties.vaultUri : ''
 var effectiveVaultUri = effectiveKeyVaultMode == 'new' ? newVaultUri : existingVaultUri
 
@@ -308,7 +303,7 @@ module runtimeIdentity './modules/identity.bicep' = {
   }
 }
 
-// Identity keys and inline role names must be deployment-start evaluable.
+// Identity keys and new-resource role names must be deployment-start evaluable.
 var routerIdentityResourceId = resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', '${containerAppName}-runtime')
 var routerIdentity RuntimeIdentityRef = {
   id: routerIdentityResourceId
@@ -355,9 +350,7 @@ var routerConfig RouterConfig = {
 module containerApp './modules/containers/router.bicep' = {
   name: 'router-${uniqueString(resourceGroup().id, containerAppName)}'
   dependsOn: [
-    acrPullNew
     acrPullExisting
-    vaultSecretsUserNew
     vaultSecretsUserExisting
     storageTablesExisting
   ]
@@ -369,17 +362,6 @@ module containerApp './modules/containers/router.bicep' = {
 }
 
 // --- Least-privilege role assignments ---
-// AcrPull on the provisioned registry (same-RG inline, scoped to the registry resource).
-resource acrPullNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveRegistryMode == 'new' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
-  name: guid(resourceGroup().id, newRegistry.id, routerIdentityResourceId, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  scope: newRegistry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: routerIdentity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // AcrPull on an existing registry via a module scoped to its resource group (covers cross-RG attach).
 module acrPullExisting './modules/registryPullRole.bicep' = if (effectiveRegistryMode == 'existing' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
   name: 'acr-pull-${uniqueString(resourceGroup().id, containerRegistryName)}'
@@ -389,17 +371,6 @@ module acrPullExisting './modules/registryPullRole.bicep' = if (effectiveRegistr
         registryName: containerRegistryName
       }
     principalId: routerIdentity.principalId
-  }
-}
-
-// Key Vault Secrets User on the provisioned vault (same-RG inline, scoped to the vault).
-resource vaultSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveKeyVaultMode == 'new') {
-  name: guid(resourceGroup().id, newVault.id, routerIdentityResourceId, '4633458b-17de-408a-b874-0445c86b69e6')
-  scope: newVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: routerIdentity.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 

@@ -20,4 +20,6 @@ Reconcile authoritative Azure usage/cost data every 5–15 minutes, not on every
 
 ## Failure Handling
 
+All new infrastructure resource families now have typed module owners; the root preserves existing-resource lookups and the flat deployment interface. Registry/vault combinations are template-validated, with the synthetic existing/existing memory path redeployed and smoke-tested. New-resource runtime convergence, real inference and Table runtime remain separate verification gates; see [registry/vault evidence](../plans/bicep-registry-vault/evidence.md).
+
 Fail over an unavailable backend, cooldown 429 and repeated 5xx failures, return a clear error when all backends are unavailable or protected, clamp negative usable credit to zero, reject unknown models and malformed requests without outbound calls, and never intentionally cross a safety reserve. Operational priority is safety, availability, quota efficiency, minimizing cycle-end waste, then balancing.

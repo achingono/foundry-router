@@ -17,6 +17,8 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 - `types/containers.bicep`: sealed environment/router contracts, explicit eight secret URL bindings and non-secret resource refs
 - `modules/containers/environment.bicep`: managed environment with internal workspace key lookup
 - `modules/containers/router.bicep`: single-revision router, secure pull password, Key Vault references and state/runtime settings
+- `types/resources.bicep`: new registry/vault configuration and non-secret refs
+- `modules/registry.bicep`, `modules/key-vault.bicep`: new resource provisioning plus original scoped runtime grants
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
 - `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
@@ -32,7 +34,9 @@ Public deployment parameters remain flat strings with their existing allowed val
 
 The environment module keeps logging-key lookup internal; its root invocation waits for observability. Runtime identity client/principal IDs come from its module; deployment-start ACA identity keys and role names use the identical deterministic resource ID. Module outputs contain no workspace keys or credential values.
 
-Environment and router extraction is **Implemented** and [verified](../docs/plans/bicep-container-modules/evidence.md). The router receives a sealed config, a separate identity resource ID and a separate secure registry password. Its config requires all eight secret URLs and explicit registry provenance; direct callers must preserve grant ordering and match registry provenance to the supplied source. The root waits for registry/vault/table access grants and environment/identity provisioning. Root parameters and output names/types remain compatible. Registry/vault extraction and a public discriminated deployment API remain **Design target**.
+Environment and router extraction is **Implemented** and [verified](../docs/plans/bicep-container-modules/evidence.md). The router receives a sealed config, a separate identity resource ID and a separate secure registry password. Its config requires all eight secret URLs and explicit registry provenance; direct callers must preserve grant ordering and match registry provenance to the supplied source. The root waits for registry/vault/table access grants and environment/identity provisioning. Root parameters and output names/types remain compatible.
+
+New registry/vault provisioning and scoped grants are **Implemented** in typed modules; existing cross-resource-group attachment and grant formulas remain unchanged. The [registry/vault evidence](../docs/plans/bicep-registry-vault/evidence.md) records all four mode validations and synthetic existing/existing redeployment. New-resource runtime convergence is not established by template validation. A public discriminated deployment API remains **Design target**.
 
 | Parameter | Values | Default | Meaning |
 |---|---|---|---|
@@ -50,7 +54,7 @@ An `existing` reference can read across resource groups via `registryResourceGro
 
 No free-text image reference remains. The image is derived, never concatenated:
 
-- `new` -> `<newRegistry.properties.loginServer>/<imageRepository>:<imageTag>`
+- `new` -> `<newRegistry.outputs.registryRef.loginServer>/<imageRepository>:<imageTag>`
 - `existing` -> `<existingRegistry.properties.loginServer>/<imageRepository>:<imageTag>`
 
 Reading the login server from the resource keeps the pull target correct even for non-default suffixes. For registries outside ACR, the server comes from the explicit `registryServer` parameter (hostname only, no scheme/path), used only with secret-mode pull. `containerImageUri` is removed; deploy jobs override `imageRepository`/`imageTag` (and `registryServer` for external registries).
