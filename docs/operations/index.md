@@ -1,10 +1,12 @@
 # Operations and Deployment
 
-## Status: Implemented (Bicep IaC, connection-pool tuning, graceful shutdown, CI/CD + smoke tests; multi-replica Azure deployment verification pending)
+## Status: Implemented (IaC and synthetic Table verification); production cut-over Partially implemented
 
-IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`. Azure template validation and one-replica synthetic Table deployment passed using operator credentials. Existing-account runtime, two deployed replicas and production cut-over remain pending, so deployed multi-replica shared state remains **Partially implemented**. Production remains `stateBackend: memory` with `maxReplicas: 1`.
+IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`. Azure template validation and one/two-replica synthetic Table verification passed using operator credentials. Existing-account cross-RG runtime and production cut-over remain pending, so overall shared-state cut-over remains **Partially implemented**. Production remains `stateBackend: memory` with `maxReplicas: 1`.
 
 ## Initial Container App
+
+Two-replica synthetic Table verification is **Implemented** in the isolated test app: replica-targeted managed-identity reservation checks, shared app diagnostics and individual container restart persistence passed. Production remains memory-backed with one replica until existing-account runtime and cut-over requirements are fulfilled. This evidence does not cover real inference, provider quota admission traffic or metrics aggregation. See [two-replica evidence](../plans/table-two-replica/evidence.md).
 
 Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, and minimum replicas 0. `stateBackend` defaults to `memory`; `table` mode uses the configured HTTPS endpoint and table names with a user-assigned managed identity. Table-mode readiness requires every configured backend balance row. Startup sync retries failed initialization when routing calls sync again; storage failures fail closed. Scale-to-zero startup latency is expected. Connection-pool/keep-alive/HTTP/2 tuning and graceful shutdown draining are implemented. Do not add always-on infrastructure, API Management, Front Door, Kubernetes, Redis, SQL, or other services without a concrete requirement.
 
@@ -14,7 +16,7 @@ Memory-mode Azure validation and a single-replica synthetic baseline deployment 
 
 ## Reconciliation
 
-One-replica synthetic Table runtime verification is **Implemented**: token-only managed-identity readiness, independent adapter reservation/settlement/reconciliation/cooldown checks and balance persistence across app restart passed. The Azure extra includes aiohttp and the Table data-role ID is corrected. Production remains memory-backed with one replica; deployed two-replica verification and real inference are pending. See [Table runtime evidence](../plans/table-runtime-validation/evidence.md).
+One-replica synthetic Table runtime verification is **Implemented**: token-only managed-identity readiness, independent adapter reservation/settlement/reconciliation/cooldown checks and balance persistence across app restart passed. Two-replica synthetic checks also passed as recorded above. The Azure extra includes aiohttp and the Table data-role ID is corrected. Production remains memory-backed with one replica; real inference and remaining cut-over gates are pending. See [Table runtime evidence](../plans/table-runtime-validation/evidence.md).
 
 The Bicep typing foundation, identity/observability and environment/router modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects and preserve access-grant dependencies. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and the infrastructure guide.
 

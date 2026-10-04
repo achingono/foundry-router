@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains Azure Bicep Infrastructure as Code (IaC) templates for deploying Foundry Router on Azure Container Apps (ACA). Phase 10 adds existing-resource modes and operational guardrails. Phase 11 adds conditional Azure Table Storage provisioning and app wiring. The multi-replica deployment gate remains pending until Azure validation and a two-replica deployment pass.
+This directory contains typed Azure Bicep IaC for Foundry Router on Azure Container Apps. Template validation and one/two-replica synthetic Table verification passed. Existing-account cross-RG runtime and production cut-over remain pending; production stays memory-backed with one replica.
 
 Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` enables assertions. Build/lint compile the assertions; Azure validation evaluates parameter-dependent assertions.
 
@@ -140,9 +140,11 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 
 `maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
 
-Table/new template validation and a one-replica synthetic Table runtime deployment have passed, including managed-identity readiness, two independent token-authenticated adapter instances and persistence across app restart. Remaining attach-path runtime validation and a two-replica Azure deployment are pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica. See [Table runtime evidence](../docs/plans/table-runtime-validation/evidence.md).
+Table/new validation and one/two-replica synthetic runtime verification passed, including managed-identity readiness/accounting and persistence across app/container restart. Remaining attach-path runtime and production cut-over are pending, so overall shared-state cut-over remains **Partially implemented** and production stays memory-backed with one replica. See [Table runtime evidence](../docs/plans/table-runtime-validation/evidence.md) and [two-replica evidence](../docs/plans/table-two-replica/evidence.md).
 
 Install `.[azure]` for Table mode; it includes `aiohttp>=3.9,<4` required by the async SDK. Storage Table Data Contributor uses built-in role ID `0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3`. Azure deployment rejected the earlier invalid role ID, now corrected in both new/existing modules. Runtime grants remain table-scoped. Operator verification used a temporary grant on the isolated test account, removed afterward.
+
+Two test replicas subsequently converged and passed synchronized managed-identity adapter reservations, matching shared totals and replica-local diagnostics. Terminating the app process on one replica caused automatic container restart while the other stayed running; the balance and live reservation persisted. See [two-replica evidence](../docs/plans/table-two-replica/evidence.md). Existing-account cross-RG runtime, real inference and production cut-over remain pending; production parameters are unchanged. The test app remains scaled to two for inspection.
 
 ## Validation
 

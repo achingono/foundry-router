@@ -4,7 +4,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Repository Status
 
-Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation and one-replica synthetic Table runtime verification passed, including managed-identity readiness, adapter accounting and persistence across restart. Deployed multi-replica shared state remains **Partially implemented** pending existing-account runtime checks, two deployed replicas and production cut-over. Production stays memory-backed with one replica until those gates pass. Google quota accounting remains process-local; real inference validation and multi-worker metrics aggregation remain pending. Configuration, authentication, forwarding, health/credit routing, reconciliation adapter, graceful shutdown and CI/CD remain **Implemented**. See [Table runtime evidence](plans/table-runtime-validation/evidence.md) for exact verification scope.
+Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation, one-replica Table runtime and two-replica synthetic verification passed, including managed-identity accounting, shared diagnostics and individual container restart persistence. Overall shared-state cut-over remains **Partially implemented** pending existing-account cross-RG runtime and production cut-over. Production stays memory-backed with one replica until remaining gates pass. Real inference, provider admission traffic and multi-worker metrics aggregation remain unverified. See [Table runtime evidence](plans/table-runtime-validation/evidence.md) and [two-replica evidence](plans/table-two-replica/evidence.md) for exact scope.
 
 ## Start Here
 
@@ -52,6 +52,7 @@ Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**.
 - [Typed registry and vault provisioning](plans/bicep-registry-vault/index.md)
 - [Public typed deployment interface](plans/bicep-public-interface/index.md)
 - [Table runtime validation](plans/table-runtime-validation/index.md)
+- [Two-replica synthetic Table verification](plans/table-two-replica/index.md)
 
 ## Reading Convention
 
