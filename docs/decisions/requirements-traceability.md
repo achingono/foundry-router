@@ -152,5 +152,6 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 | Google payload substitutes `config.deployment` for logical model; `responses` maps to Google-supported `chat/completions` | Implemented | `src/foundry_router/backends/` | Deep-review Finding 3; `tests/unit/test_backends.py` |
 | Azurite integration + unit collection without optional `azure` extra | Implemented | `tests/integration/azurite_fixtures.py`, `tests/unit/test_table_client.py` | `pytest -m "not azurite"` collection clean; azurite-marked tests skip without emulator |
 | Rate-limit replica share wiring and per-replica effective limits | Implemented | `src/foundry_router/ratelimit.py`, `src/foundry_router/routing/` | `tests/unit/test_distributed_wiring.py` |
-| Azure deployment validation and two-replica cut-over | Planned | `infra/`, operations | Production remains memory-backed with `maxReplicas: 1` until gates pass |
+| Azure template validation and one-replica synthetic Table runtime | Implemented | `infra/`, `pyproject.toml`, state adapters | [Table runtime evidence](../plans/table-runtime-validation/evidence.md); token-only readiness and restart persistence verified |
+| Two-replica deployment and production cut-over | Planned | `infra/`, operations | Production remains memory-backed with `maxReplicas: 1` until gates pass |
 | Multi-worker metrics aggregation via multiprocess mode or OpenTelemetry | Planned | `src/foundry_router/metrics/` | Single-process Prometheus implemented; multiprocess planned |

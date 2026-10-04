@@ -2,7 +2,7 @@
 
 ## Status: Implemented (Bicep IaC, connection-pool tuning, graceful shutdown, CI/CD + smoke tests; multi-replica Azure deployment verification pending)
 
-IaC is **Implemented** in `infra/main.bicep` (resource group scope, Container Apps environment + app, Key Vault, Log Analytics, pre-created user-assigned runtime identity, conditional Table Storage, and parameterized deployment – no hard-coded IDs). CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`; Azure validation and environment deployment checks still require operator credentials. Table adapter, client, startup wiring, readiness checks and Azurite coverage are implemented in code, but deployed multi-replica shared state remains **Partially implemented** until Azure validation and a two-replica deployment pass. Production remains `stateBackend: memory` with `maxReplicas: 1`.
+IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`. Azure template validation and one-replica synthetic Table deployment passed using operator credentials. Existing-account runtime, two deployed replicas and production cut-over remain pending, so deployed multi-replica shared state remains **Partially implemented**. Production remains `stateBackend: memory` with `maxReplicas: 1`.
 
 ## Initial Container App
 
@@ -13,6 +13,8 @@ Production cut-over requires reconciled starting balances, deployment in table m
 Memory-mode Azure validation and a single-replica synthetic baseline deployment are **Implemented** and verified in the [validation evidence](../plans/memory-mode-validation/evidence.md). The synthetic baseline covers health, authentication, model discovery, admin and metrics, not inference. New-workspace logging bootstrap requires `configureConsoleLogsPlan=false` until ingestion creates the console table, followed by `true`. The current Classic console table uses Analytics with 30-day retention; Basic/DCR migration remains **Planned**. See the [infrastructure deployment guide](../../infra/README.md) for tenant checks and partial-deployment recovery.
 
 ## Reconciliation
+
+One-replica synthetic Table runtime verification is **Implemented**: token-only managed-identity readiness, independent adapter reservation/settlement/reconciliation/cooldown checks and balance persistence across app restart passed. The Azure extra includes aiohttp and the Table data-role ID is corrected. Production remains memory-backed with one replica; deployed two-replica verification and real inference are pending. See [Table runtime evidence](../plans/table-runtime-validation/evidence.md).
 
 The Bicep typing foundation, identity/observability and environment/router modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects and preserve access-grant dependencies. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and the infrastructure guide.
 

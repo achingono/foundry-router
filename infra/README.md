@@ -140,7 +140,9 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 
 `maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
 
-State adapter, concrete identity-only client, conditional storage template, startup wiring, and Azurite coverage are implemented in code. Table/new template validation has passed; Table runtime deployment, remaining attach-path validation and a two-replica Azure deployment are still pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica.
+Table/new template validation and a one-replica synthetic Table runtime deployment have passed, including managed-identity readiness, two independent token-authenticated adapter instances and persistence across app restart. Remaining attach-path runtime validation and a two-replica Azure deployment are pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica. See [Table runtime evidence](../docs/plans/table-runtime-validation/evidence.md).
+
+Install `.[azure]` for Table mode; it includes `aiohttp>=3.9,<4` required by the async SDK. Storage Table Data Contributor uses built-in role ID `0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3`. Azure deployment rejected the earlier invalid role ID, now corrected in both new/existing modules. Runtime grants remain table-scoped. Operator verification used a temporary grant on the isolated test account, removed afterward.
 
 ## Validation
 

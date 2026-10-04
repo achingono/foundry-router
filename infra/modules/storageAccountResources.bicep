@@ -11,7 +11,7 @@ param identityResourceId string
 
 var tableDataContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  '0a9a7e1f-b9d0-4cc4-a60d-0319b160acf8'
+  '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 )
 
 resource account 'Microsoft.Storage/storageAccounts@2023-01-01' = {

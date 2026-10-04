@@ -4,7 +4,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Repository Status
 
-Phase 10 Bicep existing-resource support and Phase 11 distributed-state code are **Implemented** in the repository. Phase 09 adds Google AI Studio provider support, per-project quota groups, process-local RPM/input-TPM/RPD tracking, quota-aware scoring, free-tier credit opt-out, and admin/Prometheus quota diagnostics. Azure Table provisioning, identity-only client wiring, startup selection, readiness checks, adapter hardening and Azurite tests are present, but deployed multi-replica shared state remains **Partially implemented** pending Azure validation and a two-replica deployment. Production stays memory-backed with one replica until those gates and the cut-over runbook pass. Configuration, authentication, request safety, Responses/embeddings forwarding, health-aware retry/cooldown/failover, credit-aware scheduling, existing reconciliation adapter, Bicep infrastructure, graceful shutdown, and CI/CD automation remain **Implemented** as previously documented. Statements such as “must,” “should,” and “will” describe target behavior unless explicitly marked otherwise.
+Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation and one-replica synthetic Table runtime verification passed, including managed-identity readiness, adapter accounting and persistence across restart. Deployed multi-replica shared state remains **Partially implemented** pending existing-account runtime checks, two deployed replicas and production cut-over. Production stays memory-backed with one replica until those gates pass. Google quota accounting remains process-local; real inference validation and multi-worker metrics aggregation remain pending. Configuration, authentication, forwarding, health/credit routing, reconciliation adapter, graceful shutdown and CI/CD remain **Implemented**. See [Table runtime evidence](plans/table-runtime-validation/evidence.md) for exact verification scope.
 
 ## Start Here
 
@@ -51,6 +51,7 @@ Phase 10 Bicep existing-resource support and Phase 11 distributed-state code are
 - [Typed Container Apps modules](plans/bicep-container-modules/index.md)
 - [Typed registry and vault provisioning](plans/bicep-registry-vault/index.md)
 - [Public typed deployment interface](plans/bicep-public-interface/index.md)
+- [Table runtime validation](plans/table-runtime-validation/index.md)
 
 ## Reading Convention
 

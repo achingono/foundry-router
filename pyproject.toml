@@ -48,6 +48,7 @@ dev = [
     "mypy>=1.10.0,<2.0.0",
 ]
 azure = [
+    "aiohttp>=3.9,<4",
     "azure-data-tables>=12.4.0,<13.0.0",
     "azure-identity>=1.17.0,<2.0.0",
 ]
