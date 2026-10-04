@@ -140,9 +140,12 @@ param containerAppName string = '${appName}-${environment}'
 @maxValue(1000)
 param dailyCapGb int = 1
 
-@description('Table plan for ContainerAppConsoleLogs. Basic is the cost default; revert to Analytics if query/alert needs emerge (one plan switch per table per week, per-query scan charges and reduced alerting apply on Basic).')
-@allowed(['Basic', 'Analytics'])
-param consoleLogsPlan string = 'Basic'
+@description('Console-log table plan. The current ACA Log Analytics integration creates a Classic custom-log table, which supports Analytics; Basic requires a separate DCR-based ingestion migration.')
+@allowed(['Analytics'])
+param consoleLogsPlan string = 'Analytics'
+
+@description('Apply the console-log table plan after the ingestion-created table exists. Set false only for first-workspace bootstrap, then redeploy with true after confirming ingestion.')
+param configureConsoleLogsPlan bool = true
 
 @description('Email recipient for the daily ingestion cap alert.')
 param alertEmailAddress string
@@ -264,7 +267,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06
 }
 
 // Console-log table plan (Usage table stays on Analytics as the alert source).
-resource consoleLogsTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01' = {
+resource consoleLogsTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01' = if (configureConsoleLogsPlan) {
   parent: logAnalyticsWorkspace
   name: 'ContainerAppConsoleLogs_CL'
   properties: {
@@ -362,8 +365,6 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
     acrPullExisting
     vaultSecretsUserNew
     vaultSecretsUserExisting
-    healthTableRoleNew
-    creditTableRoleNew
     storageTablesExisting
   ]
   properties: {
@@ -458,12 +459,6 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
             cpu: '0.25'
             memory: '0.5Gi'
           }
-          ports: [
-            {
-              containerPort: containerPort
-              protocol: 'TCP'
-            }
-          ]
           env: [
             {
               name: 'FOUNDRY_LOG_LEVEL'
@@ -617,56 +612,18 @@ resource existingStorage 'Microsoft.Storage/storageAccounts@2023-01-01' existing
   scope: resourceGroup(storageResourceGroupName)
 }
 
-resource newStorage 'Microsoft.Storage/storageAccounts@2023-01-01' = if (stateBackend == 'table' && storageMode == 'new') {
-  name: storageAccountName
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-  properties: {
-    // Hardened new accounts; existing accounts are detected and never mutated.
-    allowSharedKeyAccess: false
-    minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
-    allowBlobPublicAccess: false
-  }
-}
-
-resource newHealthTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = if (stateBackend == 'table' && storageMode == 'new') {
-  name: '${storageAccountName}/default/${healthTableName}'
-  dependsOn: [newStorage]
-}
-
-resource newCreditTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = if (stateBackend == 'table' && storageMode == 'new') {
-  name: '${storageAccountName}/default/${creditTableName}'
-  dependsOn: [newStorage]
-}
-
-// Storage Table Data Contributor built-in role (tenant-independent GUID).
-var tableDataContributorRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '0a9a7e1f-b9d0-4cc4-a60d-0319b160acf8'
-)
-
-resource healthTableRoleNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (stateBackend == 'table' && storageMode == 'new') {
-  name: guid(resourceGroup().id, newHealthTable.id, routerIdentity.id, tableDataContributorRoleId)
-  scope: newHealthTable
-  properties: {
-    roleDefinitionId: tableDataContributorRoleId
+// ARM validates disabled storage child/extension references in the root template.
+// Keep the complete new-account branch inside a Table-only nested deployment.
+module storageResourcesNew './modules/storageAccountResources.bicep' = if (stateBackend == 'table' && storageMode == 'new') {
+  name: 'storage-resources-${uniqueString(resourceGroup().id, storageAccountName)}'
+  params: {
+    storageAccountName: storageAccountName
+    location: location
+    tags: tags
+    healthTableName: healthTableName
+    creditTableName: creditTableName
     principalId: routerIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource creditTableRoleNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (stateBackend == 'table' && storageMode == 'new') {
-  name: guid(resourceGroup().id, newCreditTable.id, routerIdentity.id, tableDataContributorRoleId)
-  scope: newCreditTable
-  properties: {
-    roleDefinitionId: tableDataContributorRoleId
-    principalId: routerIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
+    identityResourceId: routerIdentity.id
   }
 }
 
@@ -685,7 +642,7 @@ module storageTablesExisting './modules/storageTableResources.bicep' = if (state
 
 // Non-secret app settings: endpoint read from primaryEndpoints, never concatenated;
 // no keys, SAS tokens or connection strings are emitted anywhere.
-var tableEndpointNew = (stateBackend == 'table' && storageMode == 'new') ? newStorage!.properties.primaryEndpoints.table : ''
+var tableEndpointNew = (stateBackend == 'table' && storageMode == 'new') ? storageResourcesNew!.outputs.tableEndpoint : ''
 var tableEndpointExisting = (stateBackend == 'table' && storageMode == 'existing') ? existingStorage!.properties.primaryEndpoints.table : ''
 var tableEndpoint = stateBackend == 'table' ? (storageMode == 'new' ? tableEndpointNew : tableEndpointExisting) : ''
 

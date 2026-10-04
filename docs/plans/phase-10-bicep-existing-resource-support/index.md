@@ -1,5 +1,9 @@
 # Phase 10 Bicep Existing-Resource Support
 
+## Subsequent Azure validation correction
+
+This historical plan's Basic console-log decision is superseded by the [memory-mode baseline evidence](../memory-mode-validation/evidence.md): Azure rejected Basic on the ACA-created Classic table. The current template supports Analytics; DCR-based Basic ingestion remains Planned. The unsupported container ports block was also removed following Azure deployment rejection.
+
 ## Companion Documents
 - [Inputs](inputs.md)
 - [Activities](activities.md)

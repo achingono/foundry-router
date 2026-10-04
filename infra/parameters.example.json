@@ -78,7 +78,7 @@
       "value": "alerts@example.test"
     },
     "consoleLogsPlan": {
-      "value": "Basic"
+      "value": "Analytics"
     },
     "tags": {
       "value": {

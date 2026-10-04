@@ -10,6 +10,8 @@ Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, and minimum replicas 
 
 Production cut-over requires reconciled starting balances, deployment in table mode with one replica, a green readiness check, and draining all memory-backed revisions before raising the replica count. In-memory state is not migrated. Rollback is to `memory` with one replica; retain Table data.
 
+Memory-mode Azure validation and a single-replica synthetic baseline deployment are **Implemented** and verified in the [validation evidence](../plans/memory-mode-validation/evidence.md). The synthetic baseline covers health, authentication, model discovery, admin and metrics, not inference. New-workspace logging bootstrap requires `configureConsoleLogsPlan=false` until ingestion creates the console table, followed by `true`. The current Classic console table uses Analytics with 30-day retention; Basic/DCR migration remains **Planned**. See the [infrastructure deployment guide](../../infra/README.md) for tenant checks and partial-deployment recovery.
+
 ## Reconciliation
 
 Reconcile authoritative Azure usage/cost data every 5–15 minutes, not on every request. Expose `last_cost_reconciliation` and `cost_data_age`. If unavailable, continue with labeled local estimates, mark the state stale, and optionally route more conservatively. Never treat stale estimates as authoritative.

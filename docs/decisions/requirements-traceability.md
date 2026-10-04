@@ -128,9 +128,11 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
-| Mode-parameterised registry/vault (`new`/`existing`), derived image coordinates, external `registryServer`, no free-text image reference | Implemented | `infra/main.bicep`, `infra/bicepconfig.json`, `infra/modules/` | `az bicep build`/`lint` clean (pre-existing BCP036/BCP037 only); `infra/parameters.example.json` |
+| Mode-parameterised registry/vault (`new`/`existing`), derived image coordinates, external `registryServer`, no free-text image reference | Implemented | `infra/main.bicep`, `infra/bicepconfig.json`, `infra/modules/` | Build/lint pass with remaining BCP036 warning; BCP037 field removed after Azure rejection; `infra/parameters.example.json` |
 | Registry pull + vault secret wiring with least-privilege role assignments and cross-RG modules | Implemented | `infra/main.bicep`, `infra/modules/registryPullRole.bicep`, `infra/modules/vaultSecretsRole.bicep` | Template + `infra/README.md` (first-deploy convergence, deployer permissions) |
-| Name validation, daily ingestion cap + 90% alert, `Basic` console-log plan, source-volume reduction | Implemented | `infra/main.bicep`, `Dockerfile`, `src/foundry_router/routing/` | `tests/unit/test_routing_log_volume.py`; `infra/README.md` (cap sizing, revert path) |
+| Name validation, daily ingestion cap + 90% alert, Analytics Classic console-log plan, source-volume reduction | Implemented | `infra/main.bicep`, `Dockerfile`, `src/foundry_router/routing/` | `tests/unit/test_routing_log_volume.py`; `infra/README.md`; Azure rejected Basic on the Classic table |
+| Basic console-log plan through DCR-based ingestion migration | Planned | Current ACA integration is Classic and supports Analytics | Separate migration required; not deployed |
+| Memory-mode conditional storage isolation and synthetic baseline smoke deployment | Implemented | `infra/modules/storageAccountResources.bicep`, `infra/main.bicep` | [Validation evidence](../plans/memory-mode-validation/evidence.md); real inference and Table runtime remain unverified |
 | Interim `maxReplicas: 1` guard with explicit single-revision mode and documented rollout overlap | Implemented | `infra/main.bicep`, `infra/parameters.*.json` | `infra/README.md`; deployed multi-replica shared state Partially implemented, Phase 11 Partially implemented |
 | Backend/model/pricing/cycle topology wired via Key Vault secret references (`FOUNDRY_BACKENDS_JSON`, `FOUNDRY_MODELS_JSON`, `FOUNDRY_PRICING_JSON`, cycle/allowance/remaining) | Implemented (template code) | `infra/main.bicep` | Deep-review remediation; secret values remain operator-supplied out of band |
 

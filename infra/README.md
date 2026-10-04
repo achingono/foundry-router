@@ -13,6 +13,7 @@ Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `asse
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
 - `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
+- `modules/storageAccountResources.bicep`: new account, tables and table-scoped roles inside a conditional deployment; avoids ARM validating disabled storage references in memory mode
 - `parameters.staging.json`: Placeholder-only staging parameters (`new`/`new`, hermetic CI)
 - `parameters.prod.json`: Placeholder-only production parameters (`new`/`new`, `maxReplicas: 1` interim guard)
 - `parameters.example.json`: Placeholder-only full parameter surface
@@ -76,7 +77,8 @@ Required repository variables/secrets by name only (values never committed):
   ```
 - A rolling-24-hour scheduled query alert fires at 90% of the cap and sends email through its action group. `alertEmailAddress` is required; committed parameter files use a placeholder and deployment workflows must set `FOUNDRY_ALERT_EMAIL`. Cap-hit drill: check the alert, run the triage query grouped by `DataType`, identify the spiking table, then check `ContainerAppConsoleLogs_CL` volume and revision count before raising the cap.
 - Subscription Advisor cost alerts and resource-group budget alerts are operator runbook steps (permissions the template may not hold), not template resources.
-- `consoleLogsPlan` defaults to `Basic` for `ContainerAppConsoleLogs_CL` (retention 30 days; pay-as-you-go SKU unchanged). Trade-offs: per-query scan charges, reduced alerting, one plan switch per table per week. Revert to `Analytics` if query/alert needs emerge.
+- `consoleLogsPlan` supports `Analytics` for `ContainerAppConsoleLogs_CL` (retention 30 days; pay-as-you-go SKU unchanged). Azure deployment confirmed the current ACA integration creates a Classic custom-log table and rejects Basic. Basic requires a separately planned DCR-based ingestion migration. Change any old local overrides supplying Basic to Analytics.
+- New-workspace bootstrap requires two incremental deployments: first set `configureConsoleLogsPlan=false`, start the app and confirm ingestion creates `ContainerAppConsoleLogs_CL`; then redeploy with `configureConsoleLogsPlan=true` (the default). False leaves the plan unmanaged; the ingestion-created table initially uses Analytics. A plan update before the table exists fails with `ResourceNotFound`. Reuse the same names on partial-deployment retries.
 - Source-volume reduction: uvicorn `--no-access-log` (access lines duplicate structured logs/`/metrics`; entrypoint stays single-worker since each worker would hold its own in-memory state) and `routing_decision` candidate-array detail gated to `WARNING`/debug (production `INFO` keeps request id, model, backend, reason, estimate only).
 
 ## Distributed State
@@ -94,7 +96,7 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 
 `maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
 
-State adapter, concrete identity-only client, conditional storage template, startup wiring, and Azurite coverage are implemented in code. Deployment validation and a two-replica Azure deployment are still pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica.
+State adapter, concrete identity-only client, conditional storage template, startup wiring, and Azurite coverage are implemented in code. Table/new template validation has passed; Table runtime deployment, remaining attach-path validation and a two-replica Azure deployment are still pending, so deployed multi-replica shared state remains **Partially implemented** and production parameters remain memory-backed with one replica.
 
 ## Validation
 
@@ -104,7 +106,11 @@ az bicep lint --file infra/main.bicep
 az deployment group validate --resource-group <disposable-rg> --template-file infra/main.bicep --parameters infra/parameters.staging.json
 ```
 
-Cover all four mode combinations (`new`/`new`, `new`/`existing`, `existing`/`new`, `existing`/`existing`) against a disposable resource group. Negative cases must fail with actionable messages: over-length vault name, invalid registry name, `managedIdentity` against a non-Azure registry, secret-mode external-server validation, and `maxReplicas=2` (fails referencing Phase 11). Known pre-existing warnings: `BCP036` (`cpu` typed as string) and `BCP037` (`ports` on `Container`); no new warnings introduced. The experimental-assertions notice comes from the required `bicepconfig.json`.
+Cover all four mode combinations (`new`/`new`, `new`/`existing`, `existing`/`new`, `existing`/`existing`) against a disposable resource group. Negative cases must fail with actionable messages: over-length vault name, invalid registry name, `managedIdentity` against a non-Azure registry, secret-mode external-server validation, and memory mode with `maxReplicas=2`. Remaining warning: `BCP036` (`cpu` typed as string). The unsupported container `ports` block was removed after Azure rejected it; ingress targetPort must match the image listener (8000 in the supplied image). The experimental-assertions notice comes from the required `bicepconfig.json`.
+
+Memory/new, memory/existing-storage and Table/new Azure validation passed after isolating new storage in its module. A memory-backed single-replica synthetic baseline deployed successfully with an existing cross-resource-group ACR and a dedicated RBAC vault. Health, authentication, models, admin and metrics checks passed; this does not verify real inference or deployed Table state. See [validation evidence](../docs/plans/memory-mode-validation/evidence.md).
+
+For attached vaults, verify `properties.tenantId` matches the subscription tenant as well as RBAC/network access. The baseline encountered `AKV10032` on a shared vault left in another tenant and used a dedicated compatible vault without changing the shared vault. Secret writers need explicit data-plane permission; the runtime receives only Secrets User. After configuration-secret changes, ensure a fresh revision has loaded the updated values.
 
 ## Health Checks
 
