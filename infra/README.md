@@ -11,6 +11,9 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 - `main.bicep`: Main orchestration template (mode-parameterised)
 - `bicepconfig.json`: Enables assertion evaluation
 - `types/common.bicep`, `types/access.bicep`, `types/state.bicep`: exported literal aliases and sealed access/storage configuration contracts
+- `types/identity.bicep`, `types/observability.bicep`: sealed resource configuration and non-secret reference contracts
+- `modules/identity.bicep`: runtime user-assigned identity
+- `modules/observability.bicep`: workspace, console plan, daily cap action group and query alert
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
 - `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
@@ -22,7 +25,9 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 
 ## Modes
 
-Public deployment parameters remain flat strings with their existing allowed values and defaults. Typed internal mode variables and config objects feed the existing module boundaries. The four internal modules now accept sealed `config` objects; direct module callers must adopt those contracts. New-storage output is `endpoints.tableEndpoint`; the public root `tableEndpoint` output stays a string. Resource scopes, role GUID inputs and secure registry password handling are preserved. See the [typing plan](../docs/plans/bicep-typing/index.md). Broader module extraction and a public discriminated deployment API remain **Design target**.
+Public deployment parameters remain flat strings with their existing allowed values and defaults. Typed internal mode variables and config objects feed the module boundaries; direct module callers supply sealed `config` objects. New-storage output is `endpoints.tableEndpoint`; the public root `tableEndpoint` output stays a string. Resource scopes, role GUID inputs and secure registry password handling are preserved. See the [typing plan](../docs/plans/bicep-typing/index.md). Observability and identity extraction is **Implemented** and [verified](../docs/plans/bicep-module-extraction/evidence.md). Further environment/workload extraction and a public discriminated deployment API remain **Design target**.
+
+The root keeps Container Apps environment logging-key lookup internal and explicitly waits for the observability module. Runtime identity client/principal IDs come from its module; deployment-start ACA identity keys and role names use the identical deterministic resource ID. Module outputs contain no workspace keys or credential values.
 
 | Parameter | Values | Default | Meaning |
 |---|---|---|---|
@@ -91,7 +96,7 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 | App setting | Bicep source | App setting field | Default |
 |---|---|---|---|
 | `FOUNDRY_STATE_BACKEND` | `stateBackend` parameter | `Settings.state_backend` | `memory` |
-| `FOUNDRY_AZURE_CLIENT_ID` | `routerIdentity.properties.clientId` | `AzureTableEntityClient` managed-identity credential selection | UAMI client ID |
+| `FOUNDRY_AZURE_CLIENT_ID` | `runtimeIdentity.outputs.identityRef.clientId` | `AzureTableEntityClient` managed-identity credential selection | UAMI client ID |
 | `FOUNDRY_TABLE_ENDPOINT` | `storageAccount.properties.primaryEndpoints.table` | `Settings.table_endpoint` | empty in memory mode |
 | `FOUNDRY_TABLE_HEALTH_NAME` | `tablePrefix` + `health` | `Settings.table_health_name` | app-derived |
 | `FOUNDRY_TABLE_CREDIT_NAME` | `tablePrefix` + `credit` | `Settings.table_credit_name` | app-derived |

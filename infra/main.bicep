@@ -10,6 +10,7 @@ targetScope = 'resourceGroup'
 
 import { ResourceMode, RegistryAuthMode } from './types/common.bicep'
 import { StateBackend, StorageTableNames } from './types/state.bicep'
+import { RuntimeIdentityRef } from './types/identity.bicep'
 
 // --- Mode contract (Phase 10 step 1: default new keeps CI hermetic) ---
 @description('Whether to provision a new Azure Container Registry or attach to an existing one.')
@@ -260,89 +261,34 @@ var cycleAllowanceSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-$
 var initialRemainingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendInitialRemainingSecretName}'
 
 // --- Log Analytics with cost guardrails ---
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
+module observability './modules/observability.bicep' = {
+  name: 'observability-${uniqueString(resourceGroup().id, logAnalyticsWorkspaceName)}'
+  params: {
+    config: {
+      workspaceName: logAnalyticsWorkspaceName
+      actionGroupName: '${appName}-cost-alerts-${environment}'
+      alertName: '${appName}-daily-cap-90pct-${environment}'
+      alertDisplayName: '${appName} daily ingestion at 90% of cap (${environment})'
+      location: location
+      tags: tags
+      dailyCapGb: dailyCapGb
+      alertEmailAddress: alertEmailAddress
+      consoleLogsPlan: consoleLogsPlan
+      configureConsoleLogsPlan: configureConsoleLogsPlan
+    }
+  }
+}
+
+// Keys are read only by the environment after the observability deployment.
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' existing = {
   name: logAnalyticsWorkspaceName
-  location: location
-  tags: tags
-  properties: {
-    sku: {
-      // Pay-as-you-go held as decided non-change until a measured baseline justifies commitment tiers.
-      name: 'PerGB2018'
-    }
-    // 30-day retention held (inside the free window).
-    retentionInDays: 30
-    workspaceCapping: {
-      dailyQuotaGb: dailyCapGb
-    }
-  }
-}
-
-// Console-log table plan (Usage table stays on Analytics as the alert source).
-resource consoleLogsTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01' = if (configureConsoleLogsPlan) {
-  parent: logAnalyticsWorkspace
-  name: 'ContainerAppConsoleLogs_CL'
-  properties: {
-    plan: consoleLogsPlan
-    // Retention stays at 30 days.
-    totalRetentionInDays: 30
-  }
-}
-
-resource dailyCapActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
-  name: '${appName}-cost-alerts-${environment}'
-  location: 'global'
-  tags: tags
-  properties: {
-    groupShortName: 'routercost'
-    enabled: true
-    emailReceivers: [
-      {
-        name: 'daily-cap-owner'
-        emailAddress: alertEmailAddress
-        useCommonAlertSchema: true
-      }
-    ]
-  }
-}
-
-// 90%-of-cap scheduled query alert over the Usage table.
-resource dailyCapAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
-  name: '${appName}-daily-cap-90pct-${environment}'
-  location: location
-  tags: tags
-  properties: {
-    displayName: '${appName} daily ingestion at 90% of cap (${environment})'
-    description: 'Fires when billable ingestion approaches the daily cap so the cause can be investigated before the cap stops ingestion.'
-    severity: 2
-    enabled: true
-    evaluationFrequency: 'PT1H'
-    windowSize: 'P1D'
-    scopes: [logAnalyticsWorkspace.id]
-    criteria: {
-      allOf: [
-        {
-          query: 'Usage | where IsBillable and TimeGenerated >= ago(1d) | summarize BillableGB = sum(Quantity) / 1000 | where BillableGB >= ${dailyCapGb} * 0.9'
-          timeAggregation: 'Count'
-          operator: 'GreaterThanOrEqual'
-          threshold: 1
-          failingPeriods: {
-            numberOfEvaluationPeriods: 1
-            minFailingPeriodsToAlert: 1
-          }
-        }
-      ]
-    }
-    actions: {
-      actionGroups: [dailyCapActionGroup.id]
-      customProperties: {}
-    }
-  }
 }
 
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-04-01-preview' = {
   name: containerAppEnvName
   location: location
   tags: tags
+  dependsOn: [observability]
   properties: {
     appLogsConfiguration: {
       destination: 'log-analytics'
@@ -355,10 +301,23 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-04-01-preview' 
 }
 
 // --- Container App (single-revision mode explicit; single worker via image entrypoint) ---
-resource routerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${containerAppName}-runtime'
-  location: location
-  tags: tags
+module runtimeIdentity './modules/identity.bicep' = {
+  name: 'identity-${uniqueString(resourceGroup().id, containerAppName)}'
+  params: {
+    config: {
+      name: '${containerAppName}-runtime'
+      location: location
+      tags: tags
+    }
+  }
+}
+
+// Identity keys and inline role names must be deployment-start evaluable.
+var routerIdentityResourceId = resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', '${containerAppName}-runtime')
+var routerIdentity RuntimeIdentityRef = {
+  id: routerIdentityResourceId
+  clientId: runtimeIdentity.outputs.identityRef.clientId
+  principalId: runtimeIdentity.outputs.identityRef.principalId
 }
 
 resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
@@ -368,7 +327,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
-      '${routerIdentity.id}': {}
+      '${routerIdentityResourceId}': {}
     }
   }
   dependsOn: [
@@ -541,7 +500,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
             }
             {
               name: 'FOUNDRY_AZURE_CLIENT_ID'
-              value: routerIdentity.properties.clientId
+              value: routerIdentity.clientId
             }
             {
               name: 'FOUNDRY_TABLE_ENDPOINT'
@@ -573,11 +532,11 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
 // --- Least-privilege role assignments ---
 // AcrPull on the provisioned registry (same-RG inline, scoped to the registry resource).
 resource acrPullNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveRegistryMode == 'new' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
-  name: guid(resourceGroup().id, newRegistry.id, routerIdentity.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  name: guid(resourceGroup().id, newRegistry.id, routerIdentityResourceId, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   scope: newRegistry
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -590,17 +549,17 @@ module acrPullExisting './modules/registryPullRole.bicep' = if (effectiveRegistr
       config: {
         registryName: containerRegistryName
       }
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
   }
 }
 
 // Key Vault Secrets User on the provisioned vault (same-RG inline, scoped to the vault).
 resource vaultSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveKeyVaultMode == 'new') {
-  name: guid(resourceGroup().id, newVault.id, routerIdentity.id, '4633458b-17de-408a-b874-0445c86b69e6')
+  name: guid(resourceGroup().id, newVault.id, routerIdentityResourceId, '4633458b-17de-408a-b874-0445c86b69e6')
   scope: newVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -613,7 +572,7 @@ module vaultSecretsUserExisting './modules/vaultSecretsRole.bicep' = if (effecti
       config: {
         keyVaultName: keyVaultName
       }
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
   }
 }
 
@@ -643,7 +602,7 @@ module storageResourcesNew './modules/storageAccountResources.bicep' = if (effec
       location: location
       tags: tags
     }
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
     identityResourceId: routerIdentity.id
   }
 }
@@ -657,7 +616,7 @@ module storageTablesExisting './modules/storageTableResources.bicep' = if (effec
     config: {
       names: storageTableNames
     }
-    principalId: routerIdentity.properties.principalId
+    principalId: routerIdentity.principalId
   }
 }
 
@@ -670,7 +629,7 @@ var tableEndpoint = effectiveStateBackend == 'table' ? (effectiveStorageMode == 
 // --- Outputs ---
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output keyVaultUri string = effectiveVaultUri
-output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
+output logAnalyticsWorkspaceId string = observability.outputs.workspaceRef.workspaceId
 output containerAppEnvId string = containerAppEnv.id
 output containerImage string = containerImage
 output effectiveRegistryServer string = effectiveRegistryServer

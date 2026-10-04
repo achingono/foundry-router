@@ -34,6 +34,10 @@ foundry-router/
 │   ├── unit/
 │   └── integration/
 ├── .github/workflows/ci.yml
+├── infra/
+│   ├── main.bicep
+│   ├── types/                 # Shared sealed configuration and reference contracts
+│   └── modules/               # Identity, observability, scoped grants, conditional Storage
 ├── Dockerfile
 └── pyproject.toml
 ```
@@ -41,6 +45,8 @@ foundry-router/
 Configuration, authentication, health checks, model listing, backend allow-listing, streaming/non-streaming forwarding, health cooldowns, credit-aware scheduling, Phase 05 modular decomposition, Phase 06 distributed state adapters, Phase 07 IaC, Phase 08 credit-integrity hardening, Phase 10 existing-resource Bicep support, and Phase 11 conditional Storage provisioning/client wiring/Azurite tests are implemented in code. Deployed multi-replica shared state remains Partially implemented pending Azure validation and a two-replica deployment. Multi-worker metrics aggregation remains Planned.
 
 ## Target Structure
+
+Typed identity and observability modules are **Implemented**, along with conditional Storage and scoped access modules. The root retains registry/vault resources, the managed environment and router workload. Further module extraction is **Design target**; [incremental extraction evidence](../plans/bicep-module-extraction/evidence.md) records synthetic redeployment verification.
 
 The modular implementation decomposes `src/foundry_router/` and adds infrastructure:
 

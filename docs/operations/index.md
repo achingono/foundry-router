@@ -14,7 +14,7 @@ Memory-mode Azure validation and a single-replica synthetic baseline deployment 
 
 ## Reconciliation
 
-The Bicep typing foundation is **Implemented** at existing module boundaries; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers now supply sealed config objects. See [typing evidence](../plans/bicep-typing/evidence.md) and the infrastructure guide.
+The Bicep typing foundation and identity/observability modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md) and the infrastructure guide.
 
 Reconcile authoritative Azure usage/cost data every 5–15 minutes, not on every request. Expose `last_cost_reconciliation` and `cost_data_age`. If unavailable, continue with labeled local estimates, mark the state stale, and optionally route more conservatively. Never treat stale estimates as authoritative.
 
