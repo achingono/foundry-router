@@ -1,14 +1,16 @@
 // Scoped registry pull role assignment for an existing registry in another resource group.
 targetScope = 'resourceGroup'
 
+import { RegistryPullConfig } from '../types/access.bicep'
+
 @description('Name of the existing container registry.')
-param registryName string
+param config RegistryPullConfig
 
 @description('Principal ID of the pre-created container app runtime identity.')
 param principalId string
 
 @description('Deterministic suffix for the role assignment name.')
-param assignmentSuffix string = uniqueString(resourceGroup().id, registryName, principalId)
+param assignmentSuffix string = uniqueString(resourceGroup().id, config.registryName, principalId)
 
 // Azure Container Registry Pull built-in role (tenant-independent GUID).
 var acrPullRoleId = subscriptionResourceId(
@@ -17,7 +19,7 @@ var acrPullRoleId = subscriptionResourceId(
 )
 
 resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = {
-  name: registryName
+  name: config.registryName
 }
 
 resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

@@ -1,12 +1,15 @@
 // Phase 10: Mode-parameterised IaC for Foundry Router on Azure Container Apps.
 // Supports provisioning new or attaching to existing Container Registry and Key Vault,
 // wires image pull + Key Vault secret references, and enforces interim single-replica guard.
-// Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (assertions evaluated by build, lint and validate).
+// Minimum Bicep v0.47.16 / Azure CLI 2.60.0 (verified typed variables/imported contracts).
 
 metadata description = 'Azure Container Apps deployment for Foundry Router (Phase 10 existing-resource support + Phase 11 distributed state wiring)'
 metadata version = '0.3.0'
 
 targetScope = 'resourceGroup'
+
+import { ResourceMode, RegistryAuthMode } from './types/common.bicep'
+import { StateBackend, StorageTableNames } from './types/state.bicep'
 
 // --- Mode contract (Phase 10 step 1: default new keeps CI hermetic) ---
 @description('Whether to provision a new Azure Container Registry or attach to an existing one.')
@@ -63,6 +66,14 @@ param storageAccountName string = 'foundryrouterst'
 
 @description('Resource group containing the Storage account when storageMode is existing. Defaults to the deployment resource group.')
 param storageResourceGroupName string = resourceGroup().name
+
+// Keep the flat deployment parameter contract and its allowed-value validation.
+// Typed internal choices are shared with the module-contract type library.
+var effectiveRegistryMode ResourceMode = registryMode
+var effectiveKeyVaultMode ResourceMode = keyVaultMode
+var effectiveStorageMode ResourceMode = storageMode
+var effectiveRegistryAuthMode RegistryAuthMode = registryAuthMode
+var effectiveStateBackend StateBackend = stateBackend
 
 @description('Prefix for the router tables in a shared Storage account (3-63 alphanumerics starting with a letter, no hyphens). Health and credit tables append fixed suffixes.')
 @minLength(3)
@@ -169,21 +180,21 @@ assert registryLowercaseAlphanumeric = length(filter(range(0, length(containerRe
 assert registryServerHostnameOnly = registryServer == '' || (!contains(registryServer, '://') && !contains(registryServer, '/') && !contains(registryServer, ':') && !contains(registryServer, '@') && !contains(registryServer, '?') && !contains(registryServer, '#'))
 assert registryServerCharactersValid = length(filter(range(0, length(registryServer)), i => !contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-', substring(registryServer, i, 1)))) == 0
 // Secret mode requires a credential source note (value itself never committed).
-assert secretModeHasUsername = registryAuthMode != 'secret' || length(registryUsername) > 0
+assert secretModeHasUsername = effectiveRegistryAuthMode != 'secret' || length(registryUsername) > 0
 
 // --- Existing resource declarations (explicit scope for cross-RG attach) ---
-resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = if (registryMode == 'existing' && registryServer == '') {
+resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = if (effectiveRegistryMode == 'existing' && registryServer == '') {
   name: containerRegistryName
   scope: resourceGroup(registryResourceGroupName)
 }
 
-resource existingVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (keyVaultMode == 'existing') {
+resource existingVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (effectiveKeyVaultMode == 'existing') {
   name: keyVaultName
   scope: resourceGroup(keyVaultResourceGroupName)
 }
 
 // --- Provisioned resources ---
-resource newRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = if (registryMode == 'new' && registryServer == '') {
+resource newRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = if (effectiveRegistryMode == 'new' && registryServer == '') {
   name: containerRegistryName
   location: location
   tags: tags
@@ -196,7 +207,7 @@ resource newRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview'
   }
 }
 
-resource newVault 'Microsoft.KeyVault/vaults@2023-02-01' = if (keyVaultMode == 'new') {
+resource newVault 'Microsoft.KeyVault/vaults@2023-02-01' = if (effectiveKeyVaultMode == 'new') {
   name: keyVaultName
   location: location
   tags: tags
@@ -218,26 +229,26 @@ resource newVault 'Microsoft.KeyVault/vaults@2023-02-01' = if (keyVaultMode == '
 // --- Resolve login server from the resource reference, never by concatenation ---
 // External registries: server comes from the validated registryServer parameter; the two sources are never mixed.
 var isExternalRegistry = registryServer != ''
-var acrLoginServer = isExternalRegistry ? '' : (registryMode == 'new' ? newRegistry!.properties.loginServer : existingRegistry!.properties.loginServer)
+var acrLoginServer = isExternalRegistry ? '' : (effectiveRegistryMode == 'new' ? newRegistry!.properties.loginServer : existingRegistry!.properties.loginServer)
 var effectiveRegistryServer = isExternalRegistry ? registryServer : acrLoginServer
 
 // Guard: managed-identity pull is only available for Azure Container Registry.
-assert managedIdentityRequiresAzureRegistry = registryAuthMode != 'managedIdentity' || !isExternalRegistry
+assert managedIdentityRequiresAzureRegistry = effectiveRegistryAuthMode != 'managedIdentity' || !isExternalRegistry
 
 // --- Phase 11 storage validation ---
 assert storageNameLowercaseAlphanumeric = length(filter(range(0, length(storageAccountName)), i => !contains('abcdefghijklmnopqrstuvwxyz0123456789', substring(storageAccountName, i, 1)))) == 0
 assert tablePrefixStartsWithLetter = length(tablePrefix) == 0 || contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', substring(tablePrefix, 0, 1))
 assert tablePrefixAlphanumeric = length(filter(range(0, length(tablePrefix)), i => !contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', substring(tablePrefix, i, 1)))) == 0
 // Phase 11: the Phase 10 @maxValue(1) decorator is replaced by this backend-tied assert.
-assert maxReplicasAboveOneRequiresTableStateBackend = maxReplicas <= 1 || stateBackend == 'table'
+assert maxReplicasAboveOneRequiresTableStateBackend = maxReplicas <= 1 || effectiveStateBackend == 'table'
 assert minReplicasDoesNotExceedMaxReplicas = minReplicas <= maxReplicas
 
 var containerImage = '${effectiveRegistryServer}/${imageRepository}:${imageTag}'
 
 // --- Vault URI resolved by mode ---
-var newVaultUri = keyVaultMode == 'new' ? newVault!.properties.vaultUri : ''
-var existingVaultUri = keyVaultMode == 'existing' ? existingVault!.properties.vaultUri : ''
-var effectiveVaultUri = keyVaultMode == 'new' ? newVaultUri : existingVaultUri
+var newVaultUri = effectiveKeyVaultMode == 'new' ? newVault!.properties.vaultUri : ''
+var existingVaultUri = effectiveKeyVaultMode == 'existing' ? existingVault!.properties.vaultUri : ''
+var effectiveVaultUri = effectiveKeyVaultMode == 'new' ? newVaultUri : existingVaultUri
 
 var clientSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${clientKeysSecretName}'
 var adminSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${adminKeysSecretName}'
@@ -383,7 +394,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
       }
       // Registry credentials: managed-identity pull carries no credential; secret mode references a stored secret.
       secrets: concat(
-        registryAuthMode == 'secret'
+        effectiveRegistryAuthMode == 'secret'
           ? [
               {
                 name: 'registry-password'
@@ -434,7 +445,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
           }
         ]
       )
-      registries: registryAuthMode == 'managedIdentity'
+       registries: effectiveRegistryAuthMode == 'managedIdentity'
         ? [
             {
               server: effectiveRegistryServer
@@ -526,7 +537,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
             }
             {
               name: 'FOUNDRY_STATE_BACKEND'
-              value: stateBackend
+              value: effectiveStateBackend
             }
             {
               name: 'FOUNDRY_AZURE_CLIENT_ID'
@@ -561,7 +572,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
 
 // --- Least-privilege role assignments ---
 // AcrPull on the provisioned registry (same-RG inline, scoped to the registry resource).
-resource acrPullNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (registryMode == 'new' && registryServer == '' && registryAuthMode == 'managedIdentity') {
+resource acrPullNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveRegistryMode == 'new' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
   name: guid(resourceGroup().id, newRegistry.id, routerIdentity.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
   scope: newRegistry
   properties: {
@@ -572,17 +583,19 @@ resource acrPullNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (r
 }
 
 // AcrPull on an existing registry via a module scoped to its resource group (covers cross-RG attach).
-module acrPullExisting './modules/registryPullRole.bicep' = if (registryMode == 'existing' && registryServer == '' && registryAuthMode == 'managedIdentity') {
+module acrPullExisting './modules/registryPullRole.bicep' = if (effectiveRegistryMode == 'existing' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
   name: 'acr-pull-${uniqueString(resourceGroup().id, containerRegistryName)}'
   scope: resourceGroup(registryResourceGroupName)
   params: {
-    registryName: containerRegistryName
+      config: {
+        registryName: containerRegistryName
+      }
     principalId: routerIdentity.properties.principalId
   }
 }
 
 // Key Vault Secrets User on the provisioned vault (same-RG inline, scoped to the vault).
-resource vaultSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (keyVaultMode == 'new') {
+resource vaultSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (effectiveKeyVaultMode == 'new') {
   name: guid(resourceGroup().id, newVault.id, routerIdentity.id, '4633458b-17de-408a-b874-0445c86b69e6')
   scope: newVault
   properties: {
@@ -593,11 +606,13 @@ resource vaultSecretsUserNew 'Microsoft.Authorization/roleAssignments@2022-04-01
 }
 
 // Key Vault Secrets User on an existing vault via a module scoped to its resource group.
-module vaultSecretsUserExisting './modules/vaultSecretsRole.bicep' = if (keyVaultMode == 'existing') {
+module vaultSecretsUserExisting './modules/vaultSecretsRole.bicep' = if (effectiveKeyVaultMode == 'existing') {
   name: 'vault-secrets-${uniqueString(resourceGroup().id, keyVaultName)}'
   scope: resourceGroup(keyVaultResourceGroupName)
   params: {
-    keyVaultName: keyVaultName
+      config: {
+        keyVaultName: keyVaultName
+      }
     principalId: routerIdentity.properties.principalId
   }
 }
@@ -607,21 +622,27 @@ module vaultSecretsUserExisting './modules/vaultSecretsRole.bicep' = if (keyVaul
 var healthTableName = '${tablePrefix}health'
 var creditTableName = '${tablePrefix}credit'
 
-resource existingStorage 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (stateBackend == 'table' && storageMode == 'existing') {
+var storageTableNames StorageTableNames = {
+  storageAccountName: storageAccountName
+  healthTableName: healthTableName
+  creditTableName: creditTableName
+}
+
+resource existingStorage 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (effectiveStateBackend == 'table' && effectiveStorageMode == 'existing') {
   name: storageAccountName
   scope: resourceGroup(storageResourceGroupName)
 }
 
 // ARM validates disabled storage child/extension references in the root template.
 // Keep the complete new-account branch inside a Table-only nested deployment.
-module storageResourcesNew './modules/storageAccountResources.bicep' = if (stateBackend == 'table' && storageMode == 'new') {
+module storageResourcesNew './modules/storageAccountResources.bicep' = if (effectiveStateBackend == 'table' && effectiveStorageMode == 'new') {
   name: 'storage-resources-${uniqueString(resourceGroup().id, storageAccountName)}'
   params: {
-    storageAccountName: storageAccountName
-    location: location
-    tags: tags
-    healthTableName: healthTableName
-    creditTableName: creditTableName
+    config: {
+      names: storageTableNames
+      location: location
+      tags: tags
+    }
     principalId: routerIdentity.properties.principalId
     identityResourceId: routerIdentity.id
   }
@@ -629,22 +650,22 @@ module storageResourcesNew './modules/storageAccountResources.bicep' = if (state
 
 // Tables + table-scoped roles on an existing account via a module scoped to
 // its resource group (covers cross-RG attach; the only write to an attached account).
-module storageTablesExisting './modules/storageTableResources.bicep' = if (stateBackend == 'table' && storageMode == 'existing') {
+module storageTablesExisting './modules/storageTableResources.bicep' = if (effectiveStateBackend == 'table' && effectiveStorageMode == 'existing') {
   name: 'storage-tables-${uniqueString(resourceGroup().id, storageAccountName)}'
   scope: resourceGroup(storageResourceGroupName)
   params: {
-    storageAccountName: storageAccountName
-    healthTableName: healthTableName
-    creditTableName: creditTableName
+    config: {
+      names: storageTableNames
+    }
     principalId: routerIdentity.properties.principalId
   }
 }
 
 // Non-secret app settings: endpoint read from primaryEndpoints, never concatenated;
 // no keys, SAS tokens or connection strings are emitted anywhere.
-var tableEndpointNew = (stateBackend == 'table' && storageMode == 'new') ? storageResourcesNew!.outputs.tableEndpoint : ''
-var tableEndpointExisting = (stateBackend == 'table' && storageMode == 'existing') ? existingStorage!.properties.primaryEndpoints.table : ''
-var tableEndpoint = stateBackend == 'table' ? (storageMode == 'new' ? tableEndpointNew : tableEndpointExisting) : ''
+var tableEndpointNew = (effectiveStateBackend == 'table' && effectiveStorageMode == 'new') ? storageResourcesNew!.outputs.endpoints.tableEndpoint : ''
+var tableEndpointExisting = (effectiveStateBackend == 'table' && effectiveStorageMode == 'existing') ? existingStorage!.properties.primaryEndpoints.table : ''
+var tableEndpoint = effectiveStateBackend == 'table' ? (effectiveStorageMode == 'new' ? tableEndpointNew : tableEndpointExisting) : ''
 
 // --- Outputs ---
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn

@@ -1,14 +1,16 @@
 // Scoped Key Vault Secrets User role assignment for an existing vault in another resource group.
 targetScope = 'resourceGroup'
 
+import { VaultSecretsConfig } from '../types/access.bicep'
+
 @description('Name of the existing key vault.')
-param keyVaultName string
+param config VaultSecretsConfig
 
 @description('Principal ID of the pre-created container app runtime identity.')
 param principalId string
 
 @description('Deterministic suffix for the role assignment name.')
-param assignmentSuffix string = uniqueString(resourceGroup().id, keyVaultName, principalId)
+param assignmentSuffix string = uniqueString(resourceGroup().id, config.keyVaultName, principalId)
 
 // Key Vault Secrets User built-in role (tenant-independent GUID).
 var secretsUserRoleId = subscriptionResourceId(
@@ -17,7 +19,7 @@ var secretsUserRoleId = subscriptionResourceId(
 )
 
 resource existingVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = {
-  name: keyVaultName
+  name: config.keyVaultName
 }
 
 resource secretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

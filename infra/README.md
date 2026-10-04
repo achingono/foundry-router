@@ -4,12 +4,13 @@
 
 This directory contains Azure Bicep Infrastructure as Code (IaC) templates for deploying Foundry Router on Azure Container Apps (ACA). Phase 10 adds existing-resource modes and operational guardrails. Phase 11 adds conditional Azure Table Storage provisioning and app wiring. The multi-replica deployment gate remains pending until Azure validation and a two-replica deployment pass.
 
-Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `assertions`; `az bicep build`, `az bicep lint` and `az deployment group validate` evaluate them identically).
+Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` enables assertions. Build/lint compile the assertions; Azure validation evaluates parameter-dependent assertions.
 
 ## Structure
 
 - `main.bicep`: Main orchestration template (mode-parameterised)
 - `bicepconfig.json`: Enables assertion evaluation
+- `types/common.bicep`, `types/access.bicep`, `types/state.bicep`: exported literal aliases and sealed access/storage configuration contracts
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
 - `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
@@ -20,6 +21,8 @@ Minimum Bicep v0.30.0 / Azure CLI 2.60.0 (`infra/bicepconfig.json` enables `asse
 - `*.local.json`: Gitignored environment overrides (never commit; see below)
 
 ## Modes
+
+Public deployment parameters remain flat strings with their existing allowed values and defaults. Typed internal mode variables and config objects feed the existing module boundaries. The four internal modules now accept sealed `config` objects; direct module callers must adopt those contracts. New-storage output is `endpoints.tableEndpoint`; the public root `tableEndpoint` output stays a string. Resource scopes, role GUID inputs and secure registry password handling are preserved. See the [typing plan](../docs/plans/bicep-typing/index.md). Broader module extraction and a public discriminated deployment API remain **Design target**.
 
 | Parameter | Values | Default | Meaning |
 |---|---|---|---|

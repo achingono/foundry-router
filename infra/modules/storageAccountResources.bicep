@@ -2,13 +2,12 @@
 // so ARM does not validate disabled storage references in the root deployment.
 targetScope = 'resourceGroup'
 
-param storageAccountName string
-param healthTableName string
-param creditTableName string
+import { NewStorageAccountConfig, TableEndpointOutput } from '../types/state.bicep'
+
+@description('New account and router table configuration; no credentials.')
+param config NewStorageAccountConfig
 param principalId string
 param identityResourceId string
-param location string = resourceGroup().location
-param tags object
 
 var tableDataContributorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -16,9 +15,9 @@ var tableDataContributorRoleId = subscriptionResourceId(
 )
 
 resource account 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  location: location
-  tags: tags
+  name: config.names.storageAccountName
+  location: config.location
+  tags: config.tags
   sku: {
     name: 'Standard_LRS'
   }
@@ -38,12 +37,12 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-01-0
 
 resource healthTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = {
   parent: tableService
-  name: healthTableName
+  name: config.names.healthTableName
 }
 
 resource creditTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = {
   parent: tableService
-  name: creditTableName
+  name: config.names.creditTableName
 }
 
 resource healthTableRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -68,4 +67,6 @@ resource creditTableRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 }
 
 // No storage credentials are returned; the app uses its managed identity.
-output tableEndpoint string = account.properties.primaryEndpoints.table
+output endpoints TableEndpointOutput = {
+  tableEndpoint: account.properties.primaryEndpoints.table
+}

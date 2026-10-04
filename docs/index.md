@@ -46,6 +46,7 @@ Phase 10 Bicep existing-resource support and Phase 11 distributed-state code are
 - [Phase 10 Bicep existing-resource support plan](plans/phase-10-bicep-existing-resource-support/index.md)
 - [Phase 11 distributed state wiring plan](plans/phase-11-distributed-state-wiring/index.md)
 - [Memory-mode Azure validation and baseline deployment](plans/memory-mode-validation/index.md)
+- [Bicep typing foundation](plans/bicep-typing/index.md)
 
 ## Reading Convention
 

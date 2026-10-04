@@ -1,17 +1,12 @@
 // Phase 11: tables + data-plane role assignments on a Storage account in its own resource group.
 // Used for existing accounts in another resource group (declaring child tables and
-// role assignments requires the target scope); new accounts in the deployment group
-// are wired inline in main.bicep.
+// role assignments requires the target scope); new accounts use storageAccountResources.bicep.
 targetScope = 'resourceGroup'
 
+import { ExistingStorageTablesConfig } from '../types/state.bicep'
+
 @description('Name of the Storage account holding the router tables.')
-param storageAccountName string
-
-@description('Health table name.')
-param healthTableName string
-
-@description('Credit table name.')
-param creditTableName string
+param config ExistingStorageTablesConfig
 
 @description('Principal ID of the pre-created container app runtime identity.')
 param principalId string
@@ -19,9 +14,9 @@ param principalId string
 @description('Deterministic suffix for the role assignment names.')
 param assignmentSuffix string = uniqueString(
   resourceGroup().id,
-  storageAccountName,
-  healthTableName,
-  creditTableName,
+  config.names.storageAccountName,
+  config.names.healthTableName,
+  config.names.creditTableName,
   principalId
 )
 
@@ -34,7 +29,7 @@ var tableDataContributorRoleId = subscriptionResourceId(
 )
 
 resource account 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
-  name: storageAccountName
+  name: config.names.storageAccountName
 }
 
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-01-01' existing = {
@@ -44,12 +39,12 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-01-0
 
 resource healthTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = {
   parent: tableService
-  name: healthTableName
+  name: config.names.healthTableName
 }
 
 resource creditTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-01-01' = {
   parent: tableService
-  name: creditTableName
+  name: config.names.creditTableName
 }
 
 resource healthTableRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
