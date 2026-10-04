@@ -46,7 +46,7 @@ Configuration, authentication, health checks, model listing, backend allow-listi
 
 ## Target Structure
 
-Typed identity and observability modules are **Implemented**, along with conditional Storage and scoped access modules. The root retains registry/vault resources, the managed environment and router workload. Further module extraction is **Design target**; [incremental extraction evidence](../plans/bicep-module-extraction/evidence.md) records synthetic redeployment verification.
+Typed identity, observability, managed environment and router modules are **Implemented**, along with conditional Storage and scoped access modules. The root retains registry/vault resources and orchestrates module dependencies through typed configs and non-secret refs. Registry/vault extraction is **Design target**; [incremental extraction evidence](../plans/bicep-module-extraction/evidence.md) and [container module evidence](../plans/bicep-container-modules/evidence.md) record synthetic redeployment verification.
 
 The modular implementation decomposes `src/foundry_router/` and adds infrastructure:
 

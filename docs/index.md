@@ -48,6 +48,7 @@ Phase 10 Bicep existing-resource support and Phase 11 distributed-state code are
 - [Memory-mode Azure validation and baseline deployment](plans/memory-mode-validation/index.md)
 - [Bicep typing foundation](plans/bicep-typing/index.md)
 - [Incremental Bicep module extraction](plans/bicep-module-extraction/index.md)
+- [Typed Container Apps modules](plans/bicep-container-modules/index.md)
 
 ## Reading Convention
 

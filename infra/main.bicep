@@ -11,6 +11,7 @@ targetScope = 'resourceGroup'
 import { ResourceMode, RegistryAuthMode } from './types/common.bicep'
 import { StateBackend, StorageTableNames } from './types/state.bicep'
 import { RuntimeIdentityRef } from './types/identity.bicep'
+import { EnvironmentConfig, RouterConfig } from './types/containers.bicep'
 
 // --- Mode contract (Phase 10 step 1: default new keeps CI hermetic) ---
 @description('Whether to provision a new Azure Container Registry or attach to an existing one.')
@@ -280,23 +281,18 @@ module observability './modules/observability.bicep' = {
 }
 
 // Keys are read only by the environment after the observability deployment.
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' existing = {
-  name: logAnalyticsWorkspaceName
-}
-
-resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-04-01-preview' = {
+var containerAppEnvironmentConfig EnvironmentConfig = {
   name: containerAppEnvName
   location: location
   tags: tags
+  workspaceName: logAnalyticsWorkspaceName
+}
+
+module containerAppEnv './modules/containers/environment.bicep' = {
+  name: 'environment-${uniqueString(resourceGroup().id, containerAppEnvName)}'
   dependsOn: [observability]
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalyticsWorkspace.properties.customerId
-        sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
-      }
-    }
+  params: {
+    config: containerAppEnvironmentConfig
   }
 }
 
@@ -320,16 +316,44 @@ var routerIdentity RuntimeIdentityRef = {
   principalId: runtimeIdentity.outputs.identityRef.principalId
 }
 
-resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
+var routerConfig RouterConfig = {
   name: containerAppName
+  containerName: appName
   location: location
   tags: tags
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${routerIdentityResourceId}': {}
-    }
+  environmentId: containerAppEnv.outputs.environmentRef.id
+  image: containerImage
+  clientId: routerIdentity.clientId
+  containerPort: containerPort
+  minReplicas: minReplicas
+  maxReplicas: maxReplicas
+  secretNamePrefix: secretNamePrefix
+  secretUrls: {
+    clientKeys: clientSecretUrl
+    adminKeys: adminSecretUrl
+    backends: backendsSecretUrl
+    models: modelsSecretUrl
+    pricing: pricingSecretUrl
+    cycleStartDay: cycleStartDaySecretUrl
+    cycleAllowance: cycleAllowanceSecretUrl
+    initialRemaining: initialRemainingSecretUrl
   }
+  registry: {
+    authMode: effectiveRegistryAuthMode
+    server: effectiveRegistryServer
+    username: registryUsername
+    isExternalRegistry: isExternalRegistry
+  }
+  state: {
+    backend: effectiveStateBackend
+    endpoint: tableEndpoint
+    healthTableName: healthTableName
+    creditTableName: creditTableName
+  }
+}
+
+module containerApp './modules/containers/router.bicep' = {
+  name: 'router-${uniqueString(resourceGroup().id, containerAppName)}'
   dependsOn: [
     acrPullNew
     acrPullExisting
@@ -337,195 +361,10 @@ resource containerApp 'Microsoft.App/containerApps@2023-04-01-preview' = {
     vaultSecretsUserExisting
     storageTablesExisting
   ]
-  properties: {
-    environmentId: containerAppEnv.id
-    configuration: {
-      activeRevisionsMode: 'Single'
-      ingress: {
-        external: true
-        targetPort: containerPort
-        transport: 'auto'
-        corsPolicy: {
-          allowedOrigins: ['*']
-          allowedMethods: ['POST', 'GET']
-          allowedHeaders: ['content-type', 'authorization', 'x-admin-key']
-        }
-      }
-      // Registry credentials: managed-identity pull carries no credential; secret mode references a stored secret.
-      secrets: concat(
-        effectiveRegistryAuthMode == 'secret'
-          ? [
-              {
-                name: 'registry-password'
-                value: registryPassword
-              }
-            ]
-          : [],
-        [
-          {
-            name: '${secretNamePrefix}-client-keys'
-            keyVaultUrl: clientSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-admin-keys'
-            keyVaultUrl: adminSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-backends-json'
-            keyVaultUrl: backendsSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-models-json'
-            keyVaultUrl: modelsSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-pricing-json'
-            keyVaultUrl: pricingSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-backend-cycle-start-day'
-            keyVaultUrl: cycleStartDaySecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-backend-cycle-allowance'
-            keyVaultUrl: cycleAllowanceSecretUrl
-            identity: routerIdentity.id
-          }
-          {
-            name: '${secretNamePrefix}-backend-initial-remaining'
-            keyVaultUrl: initialRemainingSecretUrl
-            identity: routerIdentity.id
-          }
-        ]
-      )
-       registries: effectiveRegistryAuthMode == 'managedIdentity'
-        ? [
-            {
-              server: effectiveRegistryServer
-              identity: routerIdentity.id
-            }
-          ]
-        : [
-            {
-              server: effectiveRegistryServer
-              username: registryUsername
-              passwordSecretRef: 'registry-password'
-            }
-          ]
-    }
-    template: {
-      revisionSuffix: ''
-      containers: [
-        {
-          name: appName
-          image: containerImage
-          resources: {
-            cpu: '0.25'
-            memory: '0.5Gi'
-          }
-          env: [
-            {
-              name: 'FOUNDRY_LOG_LEVEL'
-              value: 'INFO'
-            }
-            {
-              name: 'FOUNDRY_HTTP_MAX_CONNECTIONS'
-              value: '100'
-            }
-            {
-              name: 'FOUNDRY_HTTP_MAX_KEEPALIVE_CONNECTIONS'
-              value: '20'
-            }
-            {
-              name: 'FOUNDRY_HTTP_KEEPALIVE_EXPIRY_SECONDS'
-              value: '30'
-            }
-            {
-              name: 'FOUNDRY_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS'
-              value: '30'
-            }
-            {
-              name: 'FOUNDRY_RETRY_ATTEMPTS'
-              value: '2'
-            }
-            {
-              name: 'FOUNDRY_MIN_CREDIT_RESERVE_USD'
-              value: '10.0'
-            }
-            {
-              name: 'FOUNDRY_MIN_CREDIT_RESERVE_PERCENT'
-              value: '5.0'
-            }
-            {
-              name: 'FOUNDRY_CLIENT_API_KEYS_JSON'
-              secretRef: '${secretNamePrefix}-client-keys'
-            }
-            {
-              name: 'FOUNDRY_ADMIN_API_KEYS_JSON'
-              secretRef: '${secretNamePrefix}-admin-keys'
-            }
-            {
-              name: 'FOUNDRY_BACKENDS_JSON'
-              secretRef: '${secretNamePrefix}-backends-json'
-            }
-            {
-              name: 'FOUNDRY_MODELS_JSON'
-              secretRef: '${secretNamePrefix}-models-json'
-            }
-            {
-              name: 'FOUNDRY_PRICING_JSON'
-              secretRef: '${secretNamePrefix}-pricing-json'
-            }
-            {
-              name: 'FOUNDRY_BACKEND_CYCLE_START_DAY_JSON'
-              secretRef: '${secretNamePrefix}-backend-cycle-start-day'
-            }
-            {
-              name: 'FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON'
-              secretRef: '${secretNamePrefix}-backend-cycle-allowance'
-            }
-            {
-              name: 'FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON'
-              secretRef: '${secretNamePrefix}-backend-initial-remaining'
-            }
-            {
-              name: 'FOUNDRY_STATE_BACKEND'
-              value: effectiveStateBackend
-            }
-            {
-              name: 'FOUNDRY_AZURE_CLIENT_ID'
-              value: routerIdentity.clientId
-            }
-            {
-              name: 'FOUNDRY_TABLE_ENDPOINT'
-              value: tableEndpoint
-            }
-            {
-              name: 'FOUNDRY_TABLE_HEALTH_NAME'
-              value: healthTableName
-            }
-            {
-              name: 'FOUNDRY_TABLE_CREDIT_NAME'
-              value: creditTableName
-            }
-            {
-              name: 'FOUNDRY_RATE_LIMIT_REPLICA_SHARE'
-              value: string(maxReplicas)
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: minReplicas
-        maxReplicas: maxReplicas
-      }
-    }
+  params: {
+    config: routerConfig
+    identityResourceId: routerIdentityResourceId
+    registryPassword: registryPassword
   }
 }
 
@@ -627,10 +466,10 @@ var tableEndpointExisting = (effectiveStateBackend == 'table' && effectiveStorag
 var tableEndpoint = effectiveStateBackend == 'table' ? (effectiveStorageMode == 'new' ? tableEndpointNew : tableEndpointExisting) : ''
 
 // --- Outputs ---
-output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
+output containerAppFqdn string = containerApp.outputs.routerRef.fqdn
 output keyVaultUri string = effectiveVaultUri
 output logAnalyticsWorkspaceId string = observability.outputs.workspaceRef.workspaceId
-output containerAppEnvId string = containerAppEnv.id
+output containerAppEnvId string = containerAppEnv.outputs.environmentRef.id
 output containerImage string = containerImage
 output effectiveRegistryServer string = effectiveRegistryServer
 output tableEndpoint string = tableEndpoint

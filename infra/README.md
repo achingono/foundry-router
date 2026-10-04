@@ -14,6 +14,9 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 - `types/identity.bicep`, `types/observability.bicep`: sealed resource configuration and non-secret reference contracts
 - `modules/identity.bicep`: runtime user-assigned identity
 - `modules/observability.bicep`: workspace, console plan, daily cap action group and query alert
+- `types/containers.bicep`: sealed environment/router contracts, explicit eight secret URL bindings and non-secret resource refs
+- `modules/containers/environment.bicep`: managed environment with internal workspace key lookup
+- `modules/containers/router.bicep`: single-revision router, secure pull password, Key Vault references and state/runtime settings
 - `modules/registryPullRole.bicep`: `AcrPull` assignment scoped to an existing registry's resource group
 - `modules/vaultSecretsRole.bicep`: `Key Vault Secrets User` assignment scoped to an existing vault's resource group
 - `modules/storageTableResources.bicep`: router tables and table-scoped data roles in an existing Storage account's resource group
@@ -25,9 +28,11 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 
 ## Modes
 
-Public deployment parameters remain flat strings with their existing allowed values and defaults. Typed internal mode variables and config objects feed the module boundaries; direct module callers supply sealed `config` objects. New-storage output is `endpoints.tableEndpoint`; the public root `tableEndpoint` output stays a string. Resource scopes, role GUID inputs and secure registry password handling are preserved. See the [typing plan](../docs/plans/bicep-typing/index.md). Observability and identity extraction is **Implemented** and [verified](../docs/plans/bicep-module-extraction/evidence.md). Further environment/workload extraction and a public discriminated deployment API remain **Design target**.
+Public deployment parameters remain flat strings with their existing allowed values and defaults. Typed internal mode variables and config objects feed the module boundaries; direct module callers supply sealed `config` objects. New-storage output is `endpoints.tableEndpoint`; the public root `tableEndpoint` output stays a string. Resource scopes, role GUID inputs and secure registry password handling are preserved. See the [typing plan](../docs/plans/bicep-typing/index.md). Observability and identity extraction is **Implemented** and [verified](../docs/plans/bicep-module-extraction/evidence.md).
 
-The root keeps Container Apps environment logging-key lookup internal and explicitly waits for the observability module. Runtime identity client/principal IDs come from its module; deployment-start ACA identity keys and role names use the identical deterministic resource ID. Module outputs contain no workspace keys or credential values.
+The environment module keeps logging-key lookup internal; its root invocation waits for observability. Runtime identity client/principal IDs come from its module; deployment-start ACA identity keys and role names use the identical deterministic resource ID. Module outputs contain no workspace keys or credential values.
+
+Environment and router extraction is **Implemented** and [verified](../docs/plans/bicep-container-modules/evidence.md). The router receives a sealed config, a separate identity resource ID and a separate secure registry password. Its config requires all eight secret URLs and explicit registry provenance; direct callers must preserve grant ordering and match registry provenance to the supplied source. The root waits for registry/vault/table access grants and environment/identity provisioning. Root parameters and output names/types remain compatible. Registry/vault extraction and a public discriminated deployment API remain **Design target**.
 
 | Parameter | Values | Default | Meaning |
 |---|---|---|---|
