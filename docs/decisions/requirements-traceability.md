@@ -154,5 +154,6 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 | Rate-limit replica share wiring and per-replica effective limits | Implemented | `src/foundry_router/ratelimit.py`, `src/foundry_router/routing/` | `tests/unit/test_distributed_wiring.py` |
 | Azure template validation and one-replica synthetic Table runtime | Implemented | `infra/`, `pyproject.toml`, state adapters | [Table runtime evidence](../plans/table-runtime-validation/evidence.md); token-only readiness and restart persistence verified |
 | Two-replica synthetic deployment and individual container restart persistence | Implemented | Isolated Table test app | [Two-replica evidence](../plans/table-two-replica/evidence.md); real inference/provider admission traffic not tested |
-| Existing-account cross-RG runtime and production cut-over | Planned | `infra/`, operations | Production remains memory-backed with `maxReplicas: 1` until remaining gates pass |
+| Existing-account cross-RG synthetic runtime | Implemented | Existing-account module and isolated test app | [Cross-RG evidence](../plans/table-existing-cross-rg/evidence.md); scoped token access, redeployment and restart persistence |
+| Production cut-over | Planned | `infra/`, operations | Reconciled starting balances, real traffic verification and explicit cut-over runbook remain pending; production memory/one |
 | Multi-worker metrics aggregation via multiprocess mode or OpenTelemetry | Planned | `src/foundry_router/metrics/` | Single-process Prometheus implemented; multiprocess planned |

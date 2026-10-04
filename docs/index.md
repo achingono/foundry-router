@@ -4,7 +4,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Repository Status
 
-Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation, one-replica Table runtime and two-replica synthetic verification passed, including managed-identity accounting, shared diagnostics and individual container restart persistence. Overall shared-state cut-over remains **Partially implemented** pending existing-account cross-RG runtime and production cut-over. Production stays memory-backed with one replica until remaining gates pass. Real inference, provider admission traffic and multi-worker metrics aggregation remain unverified. See [Table runtime evidence](plans/table-runtime-validation/evidence.md) and [two-replica evidence](plans/table-two-replica/evidence.md) for exact scope.
+Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation, one/two-replica synthetic Table verification and existing-account cross-RG runtime passed, including managed-identity accounting and targeted restart persistence. Production cut-over remains **Partially implemented**; production stays memory-backed with one replica until remaining gates pass. Real inference, provider admission traffic and multi-worker metrics aggregation remain unverified. See [Table runtime](plans/table-runtime-validation/evidence.md), [two-replica](plans/table-two-replica/evidence.md) and [cross-RG](plans/table-existing-cross-rg/evidence.md) evidence for exact scope.
 
 ## Start Here
 
@@ -53,6 +53,7 @@ Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**.
 - [Public typed deployment interface](plans/bicep-public-interface/index.md)
 - [Table runtime validation](plans/table-runtime-validation/index.md)
 - [Two-replica synthetic Table verification](plans/table-two-replica/index.md)
+- [Existing-account cross-RG Table verification](plans/table-existing-cross-rg/index.md)
 
 ## Reading Convention
 

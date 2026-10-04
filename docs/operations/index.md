@@ -2,11 +2,13 @@
 
 ## Status: Implemented (IaC and synthetic Table verification); production cut-over Partially implemented
 
-IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`. Azure template validation and one/two-replica synthetic Table verification passed using operator credentials. Existing-account cross-RG runtime and production cut-over remain pending, so overall shared-state cut-over remains **Partially implemented**. Production remains `stateBackend: memory` with `maxReplicas: 1`.
+IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD is defined in `.github/workflows/ci.yml` and `deploy.yml`. Azure template validation, one/two-replica synthetic Table and existing-account cross-RG runtime verification passed. Production cut-over remains **Partially implemented** pending reconciled starting balances and real traffic gates. Production remains `stateBackend: memory` with `maxReplicas: 1`.
 
 ## Initial Container App
 
-Two-replica synthetic Table verification is **Implemented** in the isolated test app: replica-targeted managed-identity reservation checks, shared app diagnostics and individual container restart persistence passed. Production remains memory-backed with one replica until existing-account runtime and cut-over requirements are fulfilled. This evidence does not cover real inference, provider quota admission traffic or metrics aggregation. See [two-replica evidence](../plans/table-two-replica/evidence.md).
+Existing-account cross-RG synthetic Table runtime is **Implemented** and verified: table-scoped managed identity, idempotent redeployment, checked parent-setting preservation and restart persistence passed. See [cross-RG evidence](../plans/table-existing-cross-rg/evidence.md). Real inference/provider traffic and production cut-over remain unverified; production stays memory/one.
+
+Two-replica synthetic Table verification is **Implemented** in the isolated test app: replica-targeted managed-identity reservation checks, shared app diagnostics and individual container restart persistence passed. Production remains memory-backed with one replica until cut-over requirements are fulfilled. This evidence does not cover real inference, provider quota admission traffic or metrics aggregation. See [two-replica evidence](../plans/table-two-replica/evidence.md).
 
 Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, and minimum replicas 0. `stateBackend` defaults to `memory`; `table` mode uses the configured HTTPS endpoint and table names with a user-assigned managed identity. Table-mode readiness requires every configured backend balance row. Startup sync retries failed initialization when routing calls sync again; storage failures fail closed. Scale-to-zero startup latency is expected. Connection-pool/keep-alive/HTTP/2 tuning and graceful shutdown draining are implemented. Do not add always-on infrastructure, API Management, Front Door, Kubernetes, Redis, SQL, or other services without a concrete requirement.
 
