@@ -46,7 +46,7 @@ Configuration, authentication, health checks, model listing, backend allow-listi
 
 ## Target Structure
 
-Typed identity, observability, managed environment, router and new registry/vault provisioning modules are **Implemented**, along with conditional Storage and scoped access modules. The root retains existing-resource lookups and orchestrates provisioning/access dependencies through typed configs and non-secret refs. [Incremental extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and [registry/vault evidence](../plans/bicep-registry-vault/evidence.md) record verification scope. A public discriminated deployment entry point remains **Design target**.
+Typed identity, observability, managed environment, router and new registry/vault provisioning modules are **Implemented**, along with conditional Storage and scoped access modules. The flat root retains existing-resource lookups and orchestrates dependencies. The opt-in `infra/typed.bicep` public discriminated adapter is **Implemented**, forwarding to the same root with sealed registry/vault/state contracts. [Incremental extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md), [registry/vault evidence](../plans/bicep-registry-vault/evidence.md) and [public interface evidence](../plans/bicep-public-interface/evidence.md) record verification scope.
 
 The modular implementation decomposes `src/foundry_router/` and adds infrastructure:
 

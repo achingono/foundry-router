@@ -50,6 +50,7 @@ Phase 10 Bicep existing-resource support and Phase 11 distributed-state code are
 - [Incremental Bicep module extraction](plans/bicep-module-extraction/index.md)
 - [Typed Container Apps modules](plans/bicep-container-modules/index.md)
 - [Typed registry and vault provisioning](plans/bicep-registry-vault/index.md)
+- [Public typed deployment interface](plans/bicep-public-interface/index.md)
 
 ## Reading Convention
 

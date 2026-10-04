@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "registry": {
+      "value": {
+        "kind": "acr",
+        "acr": {
+          "mode": "existing",
+          "name": "placeholderacr0001",
+          "resourceGroup": "placeholder-registry-rg"
+        },
+        "auth": {
+          "mode": "managedIdentity"
+        }
+      }
+    },
+    "vault": {
+      "value": {
+        "mode": "existing",
+        "name": "placeholder-kv",
+        "resourceGroup": "placeholder-vault-rg"
+      }
+    },
+    "state": {
+      "value": {
+        "backend": "memory"
+      }
+    },
+    "location": { "value": "eastus" },
+    "environment": { "value": "staging" },
+    "appName": { "value": "foundry-router" },
+    "tablePrefix": { "value": "placeholderrouter" },
+    "imageRepository": { "value": "foundry-router" },
+    "imageTag": { "value": "placeholder-tag" },
+    "secretNamePrefix": { "value": "placeholder-router" },
+    "clientKeysSecretName": { "value": "client-api-keys" },
+    "adminKeysSecretName": { "value": "admin-api-keys" },
+    "backendsJsonSecretName": { "value": "backends-json" },
+    "modelsJsonSecretName": { "value": "models-json" },
+    "pricingJsonSecretName": { "value": "pricing-json" },
+    "backendCycleStartDaySecretName": { "value": "backend-cycle-start-day" },
+    "backendCycleAllowanceSecretName": { "value": "backend-cycle-allowance" },
+    "backendInitialRemainingSecretName": { "value": "backend-initial-remaining" },
+    "containerPort": { "value": 8000 },
+    "minReplicas": { "value": 0 },
+    "maxReplicas": { "value": 1 },
+    "logAnalyticsWorkspaceName": { "value": "placeholder-logs" },
+    "containerAppEnvName": { "value": "placeholder-env" },
+    "containerAppName": { "value": "placeholder-app" },
+    "dailyCapGb": { "value": 1 },
+    "consoleLogsPlan": { "value": "Analytics" },
+    "configureConsoleLogsPlan": { "value": false },
+    "alertEmailAddress": { "value": "alerts@example.test" },
+    "tags": {
+      "value": {
+        "environment": "placeholder",
+        "project": "foundry-router",
+        "phase": "11"
+      }
+    }
+  }
+}

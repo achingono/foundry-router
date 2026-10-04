@@ -9,6 +9,9 @@ Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` ena
 ## Structure
 
 - `main.bicep`: Main orchestration template (mode-parameterised)
+- `typed.bicep`: opt-in public typed adapter over unchanged flat orchestration
+- `types/deployment.bicep`: sealed discriminated registry/auth/lifecycle/state contracts
+- `parameters.typed.example.json`: placeholder-only typed example; replace resource references before Azure validation
 - `bicepconfig.json`: Enables assertion evaluation
 - `types/common.bicep`, `types/access.bicep`, `types/state.bicep`: exported literal aliases and sealed access/storage configuration contracts
 - `types/identity.bicep`, `types/observability.bicep`: sealed resource configuration and non-secret reference contracts
@@ -36,7 +39,31 @@ The environment module keeps logging-key lookup internal; its root invocation wa
 
 Environment and router extraction is **Implemented** and [verified](../docs/plans/bicep-container-modules/evidence.md). The router receives a sealed config, a separate identity resource ID and a separate secure registry password. Its config requires all eight secret URLs and explicit registry provenance; direct callers must preserve grant ordering and match registry provenance to the supplied source. The root waits for registry/vault/table access grants and environment/identity provisioning. Root parameters and output names/types remain compatible.
 
-New registry/vault provisioning and scoped grants are **Implemented** in typed modules; existing cross-resource-group attachment and grant formulas remain unchanged. The [registry/vault evidence](../docs/plans/bicep-registry-vault/evidence.md) records all four mode validations and synthetic existing/existing redeployment. New-resource runtime convergence is not established by template validation. A public discriminated deployment API remains **Design target**.
+New registry/vault provisioning and scoped grants are **Implemented** in typed modules; existing cross-resource-group attachment and grant formulas remain unchanged. The [registry/vault evidence](../docs/plans/bicep-registry-vault/evidence.md) records all four mode validations and synthetic existing/existing redeployment. New-resource runtime convergence is not established by template validation.
+
+## Public typed entry point
+
+`typed.bicep` is **Implemented** as an opt-in resource-group-scoped adapter invoking `main.bicep`; the existing flat template and CI remain compatible. It forwards all 40 flat parameters and nine outputs without duplicating resource implementations. See [typed interface evidence](../docs/plans/bicep-public-interface/evidence.md).
+
+Required objects:
+
+- `registry`: `kind: acr` with `acr` lifecycle (`mode: new` plus name, or `existing` plus name/resourceGroup) and `auth` (`managedIdentity`, or `secret` plus username); alternatively `kind: external` plus server/username. External branches do not accept managed-identity authentication fields.
+- `vault`: `mode: new` plus name, or `existing` plus name/resourceGroup.
+- `state`: `backend: memory`, or `table` plus account lifecycle/name and optional tablePrefix.
+
+All branches are sealed. Inactive fields and missing required branch properties are rejected. Password is a separate secure `registryPassword` parameter; never place it in these objects. The top-level `tablePrefix` preserves memory-mode output names and is the fallback for Table state; `state.tablePrefix` takes precedence when supplied. Other image/naming/scaling/logging and eight secret-name knobs retain flat defaults.
+
+Example registry configuration:
+
+```bicep
+registry: {
+  kind: 'acr'
+  acr: { mode: 'existing', name: '<registry-name>', resourceGroup: '<registry-rg>' }
+  auth: { mode: 'managedIdentity' }
+}
+```
+
+Use a gitignored local parameter file adapted from `parameters.typed.example.json` with `az deployment group validate/create --template-file infra/typed.bicep --parameters <local-file>`. The committed example references placeholders and is not runnable unchanged. Workspace bootstrap, secret provisioning, tenant checks and replica cut-over requirements apply to both entry points. Typed existing/existing memory redeployment and synthetic smoke passed; new/new and Table/new received template validation only.
 
 | Parameter | Values | Default | Meaning |
 |---|---|---|---|
