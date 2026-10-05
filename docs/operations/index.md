@@ -6,7 +6,7 @@ IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD i
 
 ## Initial Container App
 
-Production configuration is **Implemented** for the selected two Foundry resources, six logical models and two shared credit accounts. Cross-subscription ACR managed-identity pull, dedicated Key Vault references and readiness/model/auth checks passed. The production app uses memory state with one replica; production inference and Table persistence cut-over remain unverified. See [production evidence](../plans/production-foundry/evidence.md). Operator-supplied starting estimates are not authoritative Azure balances and reset to configured values after memory-process restart.
+Production configuration is **Implemented** for two resources, six model pools and two shared credit accounts. Twelve real production Responses tests passed (nonstream/stream for every model), including terminal usage and exact local estimated debit reconciliation. Counters show all requests selected fs-swarm; fs-openclaw inference and failover remain unverified. Production uses memory/one; Table cut-over remains pending. See [configuration](../plans/production-foundry/evidence.md) and [inference evidence](../plans/production-inference/evidence.md). Starting estimates are not Azure balances and reset on memory-process restart.
 
 Real non-streaming and streaming Responses verification is **Implemented** for both selected test models through the dedicated memory/one app. Azure v1 routing and nested terminal usage reconciliation were corrected after initial upstream 404s. Both streams completed and local test-price debits matched usage with zero inflight reservations. See [inference evidence](../plans/foundry-inference/evidence.md). This does not establish embeddings, real traffic failover, Table-backed real inference or authoritative Azure cost reconciliation.
 
@@ -18,7 +18,7 @@ Two-replica synthetic Table verification is **Implemented** in the isolated test
 
 Target Consumption settings are 0.25 vCPU, 0.5 GiB memory, and minimum replicas 0. `stateBackend` defaults to `memory`; `table` mode uses the configured HTTPS endpoint and table names with a user-assigned managed identity. Table-mode readiness requires every unique routable metered credit-group balance row and health-table reachability. Startup sync retries failed initialization when routing calls sync again; storage failures fail closed. Scale-to-zero startup latency is expected. Connection-pool/keep-alive/HTTP/2 tuning and graceful shutdown draining are implemented. Do not add always-on infrastructure, API Management, Front Door, Kubernetes, Redis, SQL, or other services without a concrete requirement.
 
-Shared-resource credit runtime and production configuration are **Implemented** with twelve deployment backends, six model pools and two canonical credit accounts. Production inference remains unverified.
+Shared-resource credit and production configuration are **Implemented** with twelve backends, six pools and two accounts. Production pool inference through fs-swarm passed; fs-openclaw and Table-backed production inference remain unverified.
 See [shared-credit operations and migration](shared-resource-credit.md). Production remains memory/one.
 
 Production cut-over requires reconciled starting balances, deployment in table mode with one replica, a green readiness check, and draining all memory-backed revisions before raising the replica count. In-memory state is not migrated. Rollback is to `memory` with one replica; retain Table data.
@@ -27,7 +27,7 @@ Memory-mode Azure validation and a single-replica synthetic baseline deployment 
 
 ## Reconciliation
 
-One-replica synthetic Table runtime verification is **Implemented**: token-only managed-identity readiness, independent adapter reservation/settlement/reconciliation/cooldown checks and balance persistence across app restart passed. Two-replica synthetic checks also passed as recorded above. The Azure extra includes aiohttp and the Table data-role ID is corrected. Production remains memory-backed with one replica; real inference and remaining cut-over gates are pending. See [Table runtime evidence](../plans/table-runtime-validation/evidence.md).
+One-replica synthetic Table runtime verification is **Implemented**: token-only managed-identity readiness, independent adapter accounting and restart persistence passed. Two-replica synthetic checks also passed. Production stays memory/one; Table-backed real inference and remaining cut-over gates are pending. See [Table runtime evidence](../plans/table-runtime-validation/evidence.md).
 
 The Bicep typing foundation, identity/observability and environment/router modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects and preserve access-grant dependencies. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and the infrastructure guide.
 

@@ -32,7 +32,7 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Typed finalization failure; no second egress after failed release; independent quota/telemetry cleanup | `routing/`, `forwarding/`, `api/common.py` | Failover, cancellation, streaming and settlement-failure regressions |
 | Unique routable-group readiness, canonical admin/metric views and reconciliation counts | `api/routes/`, `metrics/`, `reconciliation/`, `main.py` | Shared-credit diagnostics/readiness/reconciliation tests |
 | Drained writers and explicit starting estimates; no implicit partition sum/migration | [operations](../operations/shared-resource-credit.md) | [verification evidence](../plans/shared-resource-credit/evidence.md) |
-| Twelve deployments/six pools/two production credits without placeholder deployment | Implemented (production configuration) | [Production evidence](../plans/production-foundry/evidence.md); readiness/topology verified, production inference pending |
+| Twelve deployments/six pools/two production credits without placeholder deployment | Implemented (production configuration and fs-swarm pool inference) | [Production inference](../plans/production-inference/evidence.md); fs-openclaw inference and Table cut-over pending |
 | Independent-review financial recovery: conservative legacy expiry, durable intent and dual ETag settlement | `credit.py`, `state/table.py`, `state/azure.py` | `tests/unit/test_credit_recovery.py`; real Azurite intent/recovery race |
 | Ambiguous admission hard-stop, metering-aware serialized publication and bounded same-ID ownership | `credit.py`, `state/table.py` | Commit-then-timeout/no-egress, metering-flip, interleaving, incomplete discovery and ownership-limit fault tests |
 | Context close cannot suppress financial cleanup; repeated cancellation and bounded timeout join | `cleanup.py`, `forwarding/` | Close-error, repeated-cancel, timeout and non-cooperative bounded-tracking fault tests |
@@ -160,7 +160,7 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 
 ## Phase 11 Distributed State Wiring Traceability (Partially implemented)
 
-Production model configuration and cross-subscription registry pull are **Implemented** and verified by [production configuration evidence](../plans/production-foundry/evidence.md): six selected pools, 12 backend deployments and two canonical credit groups; memory/one replica. Production inference and Table cut-over remain pending.
+Production configuration and cross-subscription registry pull are **Implemented**: six pools, 12 deployments and two credit groups; memory/one. [Production inference](../plans/production-inference/evidence.md) passed nonstream/stream for all pools through fs-swarm. fs-openclaw inference, failure traffic and Table cut-over remain pending.
 
 Azure Responses v1 deployment substitution, bounded SSE usage inspection and nested terminal usage settlement are **Implemented** and verified by [real inference evidence](../plans/foundry-inference/evidence.md). Embeddings remains deployment-scoped; real embeddings and provider failure traffic remain unverified.
 

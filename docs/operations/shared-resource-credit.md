@@ -92,6 +92,6 @@ updates committed. Live Azure Cost Management integration remains Planned.
 
 ## Production Gate
 
-Production configuration now deploys twelve backend deployments, six model pools and two credit accounts using completed operator inputs. Discovery, shared-group diagnostics and cross-subscription image pull passed; see [production evidence](../plans/production-foundry/evidence.md). Production stays memory-backed with maxReplicas 1. Production inference, live failure/admission traffic, authoritative reconciliation and Table cut-over remain pending. Prices and credit values are operator-supplied local estimates, not authoritative balances.
+Production deploys twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; see [inference evidence](../plans/production-inference/evidence.md). Production stays memory/one. fs-openclaw inference, provider failure/admission traffic, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
 
 See [implementation evidence](../plans/shared-resource-credit/evidence.md).
