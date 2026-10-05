@@ -46,6 +46,7 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Phase 08 credit-integrity and boundary hardening plan](plans/phase-08-credit-integrity-hardening/index.md)
 - [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
 - [Google AI Studio backends and Responses adapter plan (Planned)](plans/google-ai-studio-adapter/index.md)
+- [Google AI Studio tools and multimodal follow-up plan (Planned)](plans/google-ai-studio-tools-multimodal/index.md)
 - [Phase 10 Bicep existing-resource support plan](plans/phase-10-bicep-existing-resource-support/index.md)
 - [Phase 11 distributed state wiring plan](plans/phase-11-distributed-state-wiring/index.md)
 - [Memory-mode Azure validation and baseline deployment](plans/memory-mode-validation/index.md)
