@@ -1,0 +1,37 @@
+# Model Alias Evidence
+
+## Status
+
+**Planned** implementation. This log records planning only, with no alias rollout or approval-policy change.
+
+## Evidence Log
+
+| Item | Reference | Notes |
+| --- | --- | --- |
+| Baseline | `333db5e`; `git status --short --branch` | Clean working tree; local main ahead of origin/main by three commits before drafting |
+| Reported failure | Retained `git push origin main` escalation result in this session | Approval tool reported HTTP 404 and `Model 'codex-auto-review' not found`; push was not executed. Provider-side logs/body were not independently inspected. |
+| User request | Current conversation | General custom/hidden model aliases; also names `codex-auto-approve` and proposes target `gpt-6.1-sol` |
+| Target historical inference | [Production evidence](../production-inference/evidence.md) | Normal/streaming `gpt-6.1-sol` inference and usage through fs-swarm recorded; not live availability/reviewer equivalence |
+| Source/tests inspected | [Inputs](inputs.md) | Current API accepts canonical pool names only; backend deployment substitution already exists; settlement/pricing use model identity |
+| Templates | [Templates](../../templates/index.md) | Copied index and all six companion templates before drafting |
+| Concrete plan | [Alias contract](alias-contract.md), [activities](activities.md) | Explicit config, identity boundaries, account inheritance, passthrough, catalog, infra wiring and test gates |
+| Independent plan/design review | Separate session `/root/review_model_alias_plan`, 2026-10-05 | Applied deep-review architecture/business/security/resource themes against actual source/tests; no Critical/Major or blocking findings; evidence-attribution suggestion addressed |
+| Documentation checks | `.venv/bin/python` relative-link/template/whitespace check; `git diff --check`; content inspection | 94 relative targets across nine touched Markdown files resolve; no template/whitespace issues; final secret/status claims reviewed |
+| Sonar script | Absent in inspected tree | Recheck conditionally during implementation |
+| Runtime/provider/approval verification | Not run | Documentation-only work; no change to approval review and no retry of the blocked push |
+
+## Review Dispositions
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| Escalation error wording could imply an independently confirmed provider root cause | Suggestion | Quote/attribute the retained tool's reported HTTP404/model name and state provider logs/body were not independently inspected. |
+
+The reviewer confirmed no blocking design findings. This is a plan review, not implementation,
+current target availability or actual approval-client validation.
+
+## Future Evidence
+
+Record actual unit/integration/coverage/lint/type/Docker/Bicep/CI and implementation review results.
+Keep live route success and actual reviewer-contract verification separate; retain no sensitive
+reviewer context, prompt/output bodies or credentials. User-provided references are background,
+not verified Codex configuration documentation.
