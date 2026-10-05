@@ -12,9 +12,13 @@
 
 ## Status
 
-**Planned**. Drafted against `333db5e` on 2026-10-05. This plan adds no runtime configuration,
-deployment or approval-policy change. Aliases and an end-to-end approval-review test remain
-unimplemented/unverified. The previously requested push remains blocked by approval-service failure.
+**Implemented**. Local alias tests passed; subsequent ACR verification passed
+482 tests with 90.38% coverage, Azurite and Docker/image smoke. The
+[production rollout](../model-aliases-production/evidence.md) passed six live
+Responses cases and actual Codex approval-client allow/deny/error validation.
+Production remains memory/one. Exact credit continuity during the user-directed
+unfenced rollout and GitHub CI remain limitations. Approval policy was unchanged;
+the earlier failed push was not retried. Drafted against `333db5e` on 2026-10-05.
 Independent plan review is complete with no blocking findings; see [Evidence](evidence.md).
 
 ## Objective

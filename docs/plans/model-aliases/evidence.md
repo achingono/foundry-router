@@ -2,7 +2,7 @@
 
 ## Status
 
-**Planned** implementation. This log records planning only, with no alias rollout or approval-policy change.
+**Implemented** with unit/integration verification. The subsequent [production rollout](../model-aliases-production/evidence.md) passed ACR/Azurite/Docker gates, six live Responses cases and actual approval-client allow/deny/error validation. Production remains memory/one; exact unfenced credit continuity and GitHub CI remain limitations. No approval-policy change.
 
 ## Evidence Log
 
@@ -17,9 +17,18 @@
 | Concrete plan | [Alias contract](alias-contract.md), [activities](activities.md) | Explicit config, identity boundaries, account inheritance, passthrough, catalog, infra wiring and test gates |
 | Independent plan/design review | Separate session `/root/review_model_alias_plan`, 2026-10-05 | Applied deep-review architecture/business/security/resource themes against actual source/tests; no Critical/Major or blocking findings; evidence-attribution suggestion addressed |
 | Documentation checks | `.venv/bin/python` relative-link/template/whitespace check; `git diff --check`; content inspection | 94 relative targets across nine touched Markdown files resolve; no template/whitespace issues; final secret/status claims reviewed |
-| Sonar script | Absent in inspected tree | Recheck conditionally during implementation |
-| Runtime/provider/approval verification | Not run | Documentation-only work; no change to approval review and no retry of the blocked push |
+| Sonar script | Absent in inspected tree | Still absent at implementation; no scan run |
+| Runtime/provider/approval verification | Not run | No change to approval review and no retry of the blocked push |
 | Cross-plan review | [Consolidated review](../cross-plan-review-2026-10-05.md), 2026-10-05 | Reviewed alongside adapter and tools/multimodal plans; 5 minor findings recorded; plan approved for implementation |
+| Implementation | `src/foundry_router/config/model_aliases.py`, `config/`, `api/routes/openai.py`, `routing/`, `api/routes/admin.py`, `metrics/`, `infra/` | One-hop alias config/resolution, ingress canonical copy, canonical accounting, catalog/admin/metrics/diagnostics, Bicep `modelAliases` wiring; `tests/unit/test_model_aliases.py` (39 tests) |
+| Focused/full tests | `.venv/bin/python -m pytest tests/unit/ tests/integration/ -m "not docker and not azurite" --cov=src/foundry_router --cov-fail-under=80` | 468 passed, 15 deselected; total coverage 89.29% (new helper 95%+); `test_model_aliases.py` 39 passed; ruff/mypy clean |
+| Streaming lifecycle verification | `tests/unit/test_model_aliases.py::TestAliasedStreaming` (5 tests) | Aliased fragmented-usage stream settles canonical 0.0005 with byte-identical SSE passthrough (provider deployment model preserved); unit-level fragmented charge/quota/metrics assertions; midstream failure emits SSE error with no failover; deterministic cancellation cleans up exactly once under canonical identity; through-the-route in-flight settings replacement (threaded TestClient + gated fake backend) keeps the original charge while a later request observes the replaced mapping |
+| Concurrent shared-capacity verification | `tests/unit/test_model_aliases.py::TestAliasSharedCapacity` (2 tests) | Three concurrent `select_candidate_backend` admissions (two aliases + direct) against one ~190 USD spendable budget admit exactly two with exact manual settlement accounting; three concurrent `execute_with_single_failover` orchestrations against shared rpm=2 admit exactly two with automatic finalization (zero orphans, exact canonical balances, shared quota usage, canonical once-per-outcome metrics) |
+| Lint/format/type | `.venv/bin/ruff check .`, `.venv/bin/ruff format --check .`, `.venv/bin/mypy src/` | All checks passed; `mypy` clean on 26 source files |
+| Bicep | `az bicep build --file infra/main.bicep`, `az bicep build --file infra/typed.bicep` | Both build; only pre-existing `BCP036` cpu warning and experimental-asserts notice |
+| Docker/Azurite | Not run locally | `docker` unavailable; Azurite emulator unavailable (14 azurite tests deselected/skipped); CI evidence required before declaring completion |
+| Implementation deep review | `.agents/prompts/deep-review.prompt.md` themes applied to this diff | No Critical/Major findings; bounded alias labels, canonical accounting, and frozen in-flight identity confirmed |
+| Docs/links/secrets | Touched Markdown link check; `git diff --check`; secret/status scan | Touched links resolve; no whitespace issues; no real credentials in diff; status claims use Implemented (mocked) vs Planned consistently |
 
 ## Review Dispositions
 

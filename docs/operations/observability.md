@@ -8,7 +8,10 @@ Use structured JSON logs with correlation IDs (`x-request-id`). Record request I
 
 The router emits structured `routing_decision` logs on every candidate selection containing:
 - `request_id`: Tracing correlation ID
-- `model`: Target logical model
+- `model`: Resolved canonical logical model
+- `requested_model`: Client-supplied model identifier
+- `resolved_model`: Canonical target
+- `alias`: Whether a configured alias was used
 - `operation`: `responses` or `embeddings`
 - `selected_backend`: Chosen backend ID or `null`
 - `reason`: Rationale (`selected`, `all_candidates_in_cooldown_or_disabled`, `insufficient_credit_capacity`, etc.)
@@ -23,7 +26,7 @@ backend IDs only; credentials are not logged.
 ## Live Administrative Diagnostics (Implemented)
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
-- **Configuration snapshot**: Returns configured backends, endpoints, providers, supported operations, regions, deployments, models, weights, and cycle parameters. Supported operations are configured capabilities, not probed provider availability.
+- **Configuration snapshot**: Returns configured backends, endpoints, providers, supported operations, regions, deployments, models, weights, cycle parameters, and the separate `model_aliases` map. Supported operations are configured capabilities, not probed provider availability.
 - **Live diagnostics**: Exposes health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Table-backed diagnostics are implemented in code; Azure deployment verification remains pending.
 - **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters. Google logical model aliases (never provider model IDs substituted upstream) are used in public results and telemetry.
 - **Multi-replica support**: Deployed shared state remains **Partially implemented** until Azure validation and a two-replica deployment pass. Table provisioning, identity-only client wiring, startup selection and bounded readiness probes are implemented in the current code; production remains memory-backed with one replica.
@@ -56,6 +59,8 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `foundry_router_rate_limit_remaining{backend, quota_group, limit}`: Remaining configured RPM, input TPM, or RPD budget.
 - `foundry_router_rate_limit_exhausted{backend, quota_group}`: Whether the project quota group is exhausted.
 - `foundry_router_rate_limit_cooldown{backend, quota_group}`: Whether the backend is currently in quota cooldown.
+- `foundry_router_model_alias_info{alias, target}`: Bounded configured alias mapping gauge.
+- Request, latency, and cost series count once under the canonical `model`; alias attribution comes from logs and the admin mapping.
 - `/metrics` uses admin authentication (`x-admin-key` or Bearer admin token).
 - Single-process in-memory collection via `InMemoryMetricsStore` (implemented in Phase 06).
 

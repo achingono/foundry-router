@@ -6,6 +6,16 @@ For each request: identify the model, filter candidates by declared `supported_o
 
 Operation-aware routing applies identically on initial selection and failover, before either store reserves. If no configured candidate supports the operation, routing returns HTTP 422 `unsupported_operation` without egress; if candidates support the operation but none support the request features (for example tools on Google-only pools), routing returns the relevant unsupported-field error; capable Azure candidates stay eligible, including during failover. Google embedding models require explicit `supported_operations: ["embeddings"]`.
 
+## Logical Model Aliases (Implemented with mocked verification)
+
+Explicit aliases resolve once to a canonical pool before candidate ranking, cost
+estimation, admission, failover, streaming settlement, and metrics. The router keeps
+requested, canonical, and physical deployment identities separate: accounting and
+policy inherit the target pool, while diagnostics carry `requested_model`,
+`resolved_model`, and `alias` alongside the canonical `model`. Resolution is frozen
+for in-flight requests, so retargeting or removing an alias only affects later
+requests through the normal drain/restart procedure.
+
 ## Separate Quota from Credit
 
 Quota represents rate or capacity constraints such as TPM/RPM. Credit represents a dollar or resource allowance. A backend can have high credit and exhausted quota, or available quota and insufficient safe credit. The router considers both independently.
@@ -85,7 +95,10 @@ absent/finalized tracking slots even when balance reconciliation is unavailable.
 Composite candidate scores combine availability, quota health, credit health, cycle urgency, and error health per ADR-006.
 
 Every routing decision emits a structured `routing_decision` event containing:
-- `model`: Requested model identifier
+- `model`: Resolved canonical model identifier
+- `requested_model`: Client-supplied model identifier
+- `resolved_model`: Canonical target (equals `model`)
+- `alias`: Whether the request used a configured alias
 - `operation`: Target operation (`responses` or `embeddings`)
 - `request_id`: Request correlation ID
 - `selected_backend`: Selected backend ID or `null` if none

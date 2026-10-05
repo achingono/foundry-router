@@ -34,6 +34,7 @@ resource router 'Microsoft.App/containerApps@2023-04-01-preview' = {
         external: true
         targetPort: config.containerPort
         transport: 'auto'
+        ipSecurityRestrictions: config.ingressIpSecurityRestrictions
         corsPolicy: {
           allowedOrigins: ['*']
           allowedMethods: ['POST', 'GET']
@@ -119,6 +120,7 @@ resource router 'Microsoft.App/containerApps@2023-04-01-preview' = {
             { name: 'FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON', secretRef: '${config.secretNamePrefix}-backend-cycle-allowance' }
             { name: 'FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON', secretRef: '${config.secretNamePrefix}-backend-initial-remaining' }
             { name: 'FOUNDRY_STATE_BACKEND', value: config.state.backend }
+            { name: 'FOUNDRY_MODEL_ALIASES_JSON', value: string(config.modelAliases) }
             { name: 'FOUNDRY_AZURE_CLIENT_ID', value: config.clientId }
             { name: 'FOUNDRY_TABLE_ENDPOINT', value: config.state.endpoint }
             { name: 'FOUNDRY_TABLE_HEALTH_NAME', value: config.state.healthTableName }

@@ -40,6 +40,17 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Periodic complete ownership discovery retires absent/finalized slots independently of provider availability | `state/table.py`, `reconciliation/` | No-commit timeout, external reaper, lost acknowledgement and incomplete/ambiguous cap regressions; real Azurite |
 | Post-output failed streams charge known usage or full reserve, never status-based zero intent | `forwarding/` | Memory/Table known/no-usage/zero-usage regressions; real Azurite full-reserve debit; corrected existing main test |
 
+## Logical Model Alias Traceability (Implemented)
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Explicit one-hop alias-to-canonical-pool configuration with bounded validation | `src/foundry_router/config/model_aliases.py`, `src/foundry_router/config/` | `tests/unit/test_model_aliases.py`, `tests/unit/test_config.py` |
+| Responses/embeddings alias resolution before admission with canonical accounting | `src/foundry_router/api/routes/openai.py`, `src/foundry_router/routing/` | `tests/unit/test_model_aliases.py`, `tests/unit/test_main.py` |
+| Alias catalog, admin mapping, canonical metrics/readiness, and redacted diagnostics | `src/foundry_router/api/routes/`, `src/foundry_router/metrics/` | `tests/unit/test_model_aliases.py`, `tests/unit/test_metrics.py` |
+| Optional nonsecret Bicep/env wiring with empty default and no new resources | `infra/main.bicep`, `infra/typed.bicep`, `infra/modules/containers/router.bicep` | Bicep build with only pre-existing warning; rendered env propagation verified |
+
+Production deployment, six live Responses cases and actual Codex reviewer allow/deny/injected-error validation passed; see [production alias evidence](../plans/model-aliases-production/evidence.md). Exact credit continuity in the operator-directed unfenced memory rollout is unverified. An alias does not imply specialized-model equivalence.
+
 ## Implemented Hardening Traceability
 
 | Requirement | Implementation | Evidence |
@@ -191,3 +202,10 @@ Azure Responses v1 deployment substitution, bounded SSE usage inspection and nes
 | Existing-account cross-RG synthetic runtime | Implemented | Existing-account module and isolated test app | [Cross-RG evidence](../plans/table-existing-cross-rg/evidence.md); scoped token access, redeployment and restart persistence |
 | Production cut-over | Planned | `infra/`, operations | Reconciled starting balances, real traffic verification and explicit cut-over runbook remain pending; production memory/one |
 | Multi-worker metrics aggregation via multiprocess mode or OpenTelemetry | Planned | `src/foundry_router/metrics/` | Single-process Prometheus implemented; multiprocess planned |
+
+## Memory Rollout Configuration
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Preserve explicit ingress IP restrictions during a memory-state deployment | `infra/main.bicep`, `infra/typed.bicep`, `infra/types/containers.bicep`, `infra/modules/containers/router.bicep` | Typed Bicep compilation and deployment passed with observed empty restrictions preserved; ingress mutation was explicitly prohibited. Exact credit continuity remains unverified; see [production rollout evidence](../plans/model-aliases-production/evidence.md) |
+| Pin fresh estimated startup credit to an immutable secret version | `infra/main.bicep`, `infra/typed.bicep` | Loaded startup estimates matched fresh snapshot less existing reservations; [production rollout evidence](../plans/model-aliases-production/evidence.md) |

@@ -27,13 +27,23 @@ Non-streaming Google success requires a single-choice Chat Completions envelope 
 
 Google streaming decodes Chat SSE incrementally (split UTF-8, LF/CRLF, multiline data, keepalives, multiple events per chunk, usage-only final chunks) and emits ordered Responses events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta*`, done events, exactly one `response.completed`/`response.incomplete`/`response.failed`) with consistent IDs and monotonically increasing sequence numbers. Post-commit failures emit a schema-valid `response.failed` carrying the same response identity, continued sequencing, and `failed` status. No synthetic lifecycle event is sent before the first validated upstream event; after the first downstream event there is no retry or failover. EOF without the documented `[DONE]` terminator is a truncation failure. Google attempts are single-shot per backend: only 429 is failover-eligible (admitted fresh with both attempts counted); ambiguous dispatched failures (partial writes, read failures, timeouts, truncated 200 streams, 5xx, cancellation after possible dispatch) settle known usage or the estimate and terminate. Google 401/403 enters backend-local `ERROR_COOLDOWN` without same-request key cycling. Reads, prefetch, and delivery are bounded by the reservation deadline, which routing anchors at reservation creation and retains across failover.
 
+Logical model aliases (Implemented with mocked verification) resolve once at API
+ingress before admission: the requested name is replaced by its canonical target in
+a shallow request copy, while all non-model fields are preserved exactly. Routing,
+estimates, reservations, settlement, and metrics use the canonical pool and its
+prices; failover never re-resolves. `GET /openai/v1/models` lists canonical models
+in configured order followed by configured aliases in sorted order, each exactly once.
+`GET /admin/status` adds a separate `model_aliases` map. Upstream response and SSE
+bodies are untouched, so the provider's reported `model` may differ from the alias;
+live inference and approval-client compatibility remain separately gated.
+
 ## Endpoints
 
 | Method and path | Requirement |
 | --- | --- |
 | `POST /openai/v1/responses` | Implemented; normal and streaming forwarding |
 | `POST /openai/v1/embeddings` | Implemented; embedding forwarding |
-| `GET /openai/v1/models` | Required; list configured logical models |
+| `GET /openai/v1/models` | Required; list configured logical models and explicit aliases |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
 | `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics (Table-backed code is implemented; multi-replica Azure deployment verification remains pending) |

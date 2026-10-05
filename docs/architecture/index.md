@@ -30,6 +30,13 @@ balances, locks/caches and reservations use groups; captured ownership governs s
 continues to use deployment backend IDs. Quota groups remain independent. See
 [migration](../operations/shared-resource-credit.md) and [evidence](../plans/shared-resource-credit/evidence.md).
 
+Logical model aliases are **Implemented** with mocked verification:
+`config/model_aliases.py` owns explicit one-hop alias-to-canonical-pool validation and
+resolution at the API boundary. Routing, credit, and telemetry keep canonical
+accounting while preserving requested/resolved identity for diagnostics; backend
+deployment substitution is unchanged. Live inference and approval-client validation
+remain separately gated.
+
 The approved recovery amendment adds retained/durable settlement intent and conservative expiry,
 fresh balance/reservation ETags, metering-aware serialized local ownership, bounded uncertain request
 tracking and independently protected cleanup (`cleanup.py`). This does not create a distributed

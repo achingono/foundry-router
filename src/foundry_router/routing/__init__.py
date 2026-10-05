@@ -112,6 +112,9 @@ def _emit_routing_decision(
     estimated_request_cost_usd: float | None,
     candidates: list[dict[str, Any]],
     protected_quota_fallback: bool | None = None,
+    requested_model: str | None = None,
+    resolved_model: str | None = None,
+    is_alias: bool = False,
 ) -> None:
     """Emit a low-volume INFO summary plus a gated candidate-detail event.
 
@@ -120,9 +123,18 @@ def _emit_routing_decision(
     ``DEBUG`` on success and ``WARNING`` on failure, so per-request candidate
     detail never reaches production ``INFO`` output. No routing, credit,
     forwarding, or API behaviour changes.
+
+    ``model`` is always the resolved canonical pool. ``requested_model``,
+    ``resolved_model`` and ``alias`` preserve the client-facing identity for
+    alias diagnostics without changing selection or accounting.
     """
+    effective_requested = requested_model if requested_model is not None else model
+    effective_resolved = resolved_model if resolved_model is not None else model
     summary: dict[str, Any] = {
         "model": model,
+        "requested_model": effective_requested,
+        "resolved_model": effective_resolved,
+        "alias": bool(is_alias),
         "operation": operation,
         "request_id": request_id,
         "selected_backend": selected_backend,
@@ -164,7 +176,12 @@ async def select_candidate_backend(
     logger: Any,
     rate_limit_store: Any | None = None,
     excluded: set[str] | None = None,
+    requested_model: str | None = None,
+    is_alias: bool = False,
 ) -> BackendSelectionResult:
+    effective_requested = requested_model if requested_model is not None else model
+    effective_resolved = model
+    effective_is_alias = bool(is_alias)
     ranked_candidates = ranked_model_backends(settings, model, excluded=excluded)
     if not ranked_candidates:
         return BackendSelectionResult(None, [], {}, False)
@@ -213,6 +230,9 @@ async def select_candidate_backend(
         _emit_routing_decision(
             logger,
             model=model,
+            requested_model=effective_requested,
+            resolved_model=effective_resolved,
+            is_alias=effective_is_alias,
             operation=operation,
             request_id=request_id,
             selected_backend=None,
@@ -340,6 +360,9 @@ async def select_candidate_backend(
         _emit_routing_decision(
             logger,
             model=model,
+            requested_model=effective_requested,
+            resolved_model=effective_resolved,
+            is_alias=effective_is_alias,
             operation=operation,
             request_id=request_id,
             selected_backend=None,
@@ -465,6 +488,9 @@ async def select_candidate_backend(
         _emit_routing_decision(
             logger,
             model=model,
+            requested_model=effective_requested,
+            resolved_model=effective_resolved,
+            is_alias=effective_is_alias,
             operation=operation,
             request_id=request_id,
             selected_backend=None,
@@ -561,6 +587,9 @@ async def select_candidate_backend(
             _emit_routing_decision(
                 logger,
                 model=model,
+                requested_model=effective_requested,
+                resolved_model=effective_resolved,
+                is_alias=effective_is_alias,
                 operation=operation,
                 request_id=request_id,
                 selected_backend=backend_id,
@@ -574,6 +603,9 @@ async def select_candidate_backend(
     _emit_routing_decision(
         logger,
         model=model,
+        requested_model=effective_requested,
+        resolved_model=effective_resolved,
+        is_alias=effective_is_alias,
         operation=operation,
         request_id=request_id,
         selected_backend=None,
@@ -697,11 +729,15 @@ async def execute_with_single_failover(
     api_error: Any,
     finalize_non_streaming_credit: Any,
     rate_limit_store: Any | None = None,
+    requested_model: str | None = None,
+    is_alias: bool = False,
 ) -> Response:
     started_at = time.monotonic()
     # Start before admission so storage latency cannot grant a fresh lifetime
     # to a reservation already created inside initial selection.
     reservation_deadline = _reservation_deadline_monotonic(settings)
+    effective_requested = requested_model if requested_model is not None else model
+    effective_is_alias = bool(is_alias)
 
     async def record_and_return(
         response: Response,
@@ -731,6 +767,8 @@ async def execute_with_single_failover(
             credit_store=credit_store,
             logger=logger,
             rate_limit_store=rate_limit_store,
+            requested_model=effective_requested,
+            is_alias=effective_is_alias,
         )
     except CreditStoreError:
         if rate_limit_store is not None:
@@ -933,6 +971,8 @@ async def execute_with_single_failover(
             logger=logger,
             rate_limit_store=rate_limit_store,
             excluded={first_backend_id},
+            requested_model=effective_requested,
+            is_alias=effective_is_alias,
         )
         second_backend_id = second_selection.backend_id
         if second_backend_id is None:

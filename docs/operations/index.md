@@ -27,6 +27,23 @@ See [shared-credit operations and migration](shared-resource-credit.md). Product
 
 Production cut-over requires reconciled starting balances, deployment in table mode with one replica, a green readiness check, and draining all memory-backed revisions before raising the replica count. In-memory state is not migrated. Rollback is to `memory` with one replica; retain Table data.
 
+Logical model aliases roll out through validated configuration and the normal
+drain/restart procedure; in-flight requests settle against their captured canonical
+target. Remove or retarget aliases in a fresh validated configuration to roll back.
+Alias configuration is preserved through the optional Bicep `modelAliases` wiring
+rather than ad hoc edits.
+
+The production model-alias rollout is **Implemented** with both aliases targeting
+`gpt-6.1-sol`, six live normal/streaming cases, and actual Codex reviewer
+allow/deny/injected-error validation. It retained memory/one and left ingress
+restrictions untouched as directed by the operator. Fresh estimated balances less
+existing reservations were pinned for startup; later old-process admissions and
+revision overlap were not migrated, so exact credit continuity is unverified.
+Preserve observed ingress restrictions explicitly in Bicep; the optional
+`ingressIpSecurityRestrictions` default `[]` removes any existing restrictions.
+Rollback requires fresh estimates and a pinned secret version, without reactivating
+stale memory state. See [production alias evidence](../plans/model-aliases-production/evidence.md).
+
 Memory-mode Azure validation and a single-replica synthetic baseline deployment are **Implemented** and verified in the [validation evidence](../plans/memory-mode-validation/evidence.md). The synthetic baseline covers health, authentication, model discovery, admin and metrics, not inference. New-workspace logging bootstrap requires `configureConsoleLogsPlan=false` until ingestion creates the console table, followed by `true`. The current Classic console table uses Analytics with 30-day retention; Basic/DCR migration remains **Planned**. See the [infrastructure deployment guide](../../infra/README.md) for tenant checks and partial-deployment recovery.
 
 ## Reconciliation

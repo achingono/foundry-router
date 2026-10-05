@@ -139,6 +139,7 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 | `FOUNDRY_TABLE_HEALTH_NAME` | `tablePrefix` + `health` | `Settings.table_health_name` | app-derived |
 | `FOUNDRY_TABLE_CREDIT_NAME` | `tablePrefix` + `credit` | `Settings.table_credit_name` | app-derived |
 | `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` | `maxReplicas` | `Settings.rate_limit_replica_share` | `1` |
+| `FOUNDRY_MODEL_ALIASES_JSON` | `modelAliases` object parameter (root/typed) | `Settings.model_aliases` | `{}` |
 
 `maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
 
@@ -165,6 +166,20 @@ Memory/new, memory/existing-storage and Table/new Azure validation passed after 
 For attached vaults, verify `properties.tenantId` matches the subscription tenant as well as RBAC/network access. The baseline encountered `AKV10032` on a shared vault left in another tenant and used a dedicated compatible vault without changing the shared vault. Secret writers need explicit data-plane permission; the runtime receives only Secrets User. After configuration-secret changes, ensure a fresh revision has loaded the updated values.
 
 ## Health Checks
+
+Both deployment entry points accept `ingressIpSecurityRestrictions`, a typed array
+of `name`, `ipAddressRange`, `action` (`Allow` or `Deny`) and optional `description`.
+The default `[]` removes restrictions. Preserve existing restrictions explicitly
+in local parameters. The production alias rollout left these rules untouched as
+explicitly directed by the operator. Do not infer permission to add or remove
+an intake fence from the presence of this parameter. See the
+[rollout evidence](../docs/plans/model-aliases-production/evidence.md).
+
+`backendInitialRemainingSecretVersion` optionally pins the initial-credit secret
+to the immutable version returned by Key Vault when saving startup estimates.
+Its default empty string retains versionless references. Use the explicit version
+for a handoff so a replacement cannot load a cached older estimate. Each later
+memory rollout or rollback needs a fresh conservative snapshot and version.
 
 After deployment, verify:
 

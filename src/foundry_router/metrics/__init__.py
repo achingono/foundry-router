@@ -13,6 +13,20 @@ def _escape_label(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+def _render_alias_info_lines(model_aliases: dict[str, str] | None) -> list[str]:
+    lines: list[str] = [
+        "# HELP foundry_router_model_alias_info Configured logical model alias mapping",
+        "# TYPE foundry_router_model_alias_info gauge",
+    ]
+    for alias, target in sorted((model_aliases or {}).items()):
+        lines.append(
+            "foundry_router_model_alias_info"
+            f'{{alias="{_escape_label(alias)}",'
+            f'target="{_escape_label(target)}"}} 1'
+        )
+    return lines
+
+
 class InMemoryMetricsStore:
     """Thread-safe metric snapshots rendered in Prometheus text format."""
 
@@ -61,6 +75,7 @@ class InMemoryMetricsStore:
         backend_available_credit_usd: dict[str, float],
         backend_rate_limit_snapshots: dict[str, Any] | None = None,
         credit_group_available_credit_usd: dict[str, float] | None = None,
+        model_aliases: dict[str, str] | None = None,
     ) -> str:
         async with self._lock:
             request_totals = dict(self._request_totals)
@@ -214,5 +229,7 @@ class InMemoryMetricsStore:
                 f'quota_group="{_escape_label(snapshot.quota_group)}"}} '
                 f"{int(is_cooling_down)}"
             )
+
+        lines.extend(_render_alias_info_lines(model_aliases))
 
         return "\n".join(lines) + "\n"

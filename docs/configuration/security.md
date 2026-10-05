@@ -35,3 +35,8 @@ The template creates a user-assigned runtime identity before the container app. 
 ## Required Security Tests
 
 Tests must verify client authentication, administrative authentication, secret and authorization-header redaction, prompt/output non-logging, configured-backend-only egress, and rejection of arbitrary user-supplied endpoint URLs.
+
+Logical model aliases inherit all target-pool policy without creating capacity or
+bypassing capability and continuation rules. Alias configuration adds no per-client
+ACLs, wildcard matching, or unknown-model fallback; unconfigured names remain 404
+with no reservation or egress.

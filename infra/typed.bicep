@@ -2,6 +2,7 @@
 targetScope = 'resourceGroup'
 
 import { DeploymentRegistry, VaultLifecycle, DeploymentState } from './types/deployment.bicep'
+import { IngressIpSecurityRestriction } from './types/containers.bicep'
 
 @description('ACR lifecycle/authentication or an external registry using secret authentication.')
 param registry DeploymentRegistry
@@ -63,6 +64,9 @@ param backendCycleAllowanceSecretName string = 'backend-cycle-allowance'
 @description('Secret name holding the backend initial-remaining JSON.')
 param backendInitialRemainingSecretName string = 'backend-initial-remaining'
 
+@description('Optional immutable Key Vault version for initial credit estimates during a drained memory-state handoff.')
+param backendInitialRemainingSecretVersion string = ''
+
 @description('Container port.')
 param containerPort int = 8000
 
@@ -98,6 +102,12 @@ param configureConsoleLogsPlan bool = true
 @description('Email recipient for the daily ingestion cap alert.')
 param alertEmailAddress string
 
+@description('Optional logical model aliases as an object mapping alias names to canonical model IDs.')
+param modelAliases object = {}
+
+@description('Ingress IP restrictions preserved during deployment. An empty array removes all IP restrictions.')
+param ingressIpSecurityRestrictions IngressIpSecurityRestriction[] = []
+
 @description('Resource tags.')
 param tags object = {
   environment: environment
@@ -126,6 +136,8 @@ module deployment './main.bicep' = {
     storageAccountName: state.backend == 'table' ? state.account.name : 'unusedstorage'
     storageResourceGroupName: state.backend == 'table' ? (state.account.mode == 'existing' ? state.account.resourceGroup : resourceGroup().name) : resourceGroup().name
     tablePrefix: state.backend == 'table' ? (state.?tablePrefix ?? tablePrefix) : tablePrefix
+    modelAliases: modelAliases
+    ingressIpSecurityRestrictions: ingressIpSecurityRestrictions
     imageRepository: imageRepository
     imageTag: imageTag
     registryServer: registry.kind == 'external' ? registry.server : ''
@@ -140,6 +152,7 @@ module deployment './main.bicep' = {
     backendCycleStartDaySecretName: backendCycleStartDaySecretName
     backendCycleAllowanceSecretName: backendCycleAllowanceSecretName
     backendInitialRemainingSecretName: backendInitialRemainingSecretName
+    backendInitialRemainingSecretVersion: backendInitialRemainingSecretVersion
     containerPort: containerPort
     minReplicas: minReplicas
     maxReplicas: maxReplicas
