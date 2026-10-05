@@ -30,13 +30,19 @@ Authenticated administrators can query `GET /admin/status` (requires `x-admin-ke
 
 ## Reservation Lifecycle Safety (Implemented)
 
-Each in-memory credit reservation tracks a monotonic creation timestamp. A bounded, lock-protected sweep (triggered lazily from `assess` and `try_assign_reservation`) reclaims reservations older than `reservation_max_age_seconds` (`FOUNDRY_RESERVATION_MAX_AGE_SECONDS`, default 900 seconds) without charging the backend, preventing inflight credit from leaking on client disconnects or abandoned streams. The sweep is disabled (no expiry) when the configured max age is left at its non-finite default state; production defaults enable it. The default is aligned to the backend client's read/connect timeout plus margin so legitimate long-running streams are not reclaimed prematurely.
+Each in-memory credit reservation tracks a monotonic creation timestamp. A bounded lock-protected sweep (from `assess` and `try_assign_reservation`) settles reservations older than `reservation_max_age_seconds` (`FOUNDRY_RESERVATION_MAX_AGE_SECONDS`, default 900 seconds) conservatively: valid retained settlement intent wins; otherwise the full reserved estimate is charged, including legacy/pre-egress rows. Confirmed explicit releases charge zero. The sweep is disabled for a non-finite age; production defaults enable it. Keep the age beyond legitimate stream duration; later authoritative reconciliation can correct overestimated recovery charges.
 
-For the distributed `AzureTableCreditStore`, the same age bound is enforced by an explicit reaper: `TableEntityClient.query_entities(partition, "req-")` scans reservation rows and `reap_expired_reservations(max_age_seconds)` transactionally deletes expired `req-*` rows while decrementing `reserved_inflight_usd`. The reaper is invoked best-effort from `ReconciliationLoop.run_once` and can also be called directly; it requires the `query_entities` capability (see `src/foundry_router/state/table.py:62,393,672`). Until `query_entities` is available, admin diagnostics report `active_reservations` via that query – without it they return `0/None` with documented limitation.
+For `AzureTableCreditStore`, the explicit reaper scans group `req-*` rows and atomically debits retained intent or the full estimate while decrementing inflight reservations and deleting the row. Fresh balance and reservation ETags guard recovery against intent/finalization races. Reconciliation invokes it best-effort; diagnostic scans require `query_entities`. See [recovery and cleanup policy](shared-resource-credit.md) for ambiguous admission, bounded ownership and cancellation handling.
 
 ## Credit and Pricing Configuration Completeness (Implemented)
 
-`GET /health/ready` reports `backend_credit_config_complete` and `model_pricing_complete`, plus `state_store_reachable` in table mode. The storage check verifies every configured backend has a balance row and caches successful/failed probes for at most five seconds. `rate_limit_share_valid` and a `rate_limit_share_<group>_<dimension>_valid` check identify any per-replica RPM, input-TPM, or RPD share that floors to zero. Readiness returns `503` for any failed check; this is a readiness-level signal, not a configuration-load failure. Request-time credit and quota admission still fail closed independently of the cached readiness result.
+Incomplete Table sync fails explicitly at startup/request admission; retained recovery aliases do
+not permit dispatch under new incomplete Settings. Periodic ownership maintenance independently
+checks all known partitions, freeing only confirmed absent/finalized slots and preserving incomplete
+or ambiguous owners. Post-output stream failures debit known usage or full reserve, including when
+the telemetry status is 502. See [operations](shared-resource-credit.md).
+
+`GET /health/ready` reports `backend_credit_config_complete` and `model_pricing_complete`, plus `state_store_reachable` in table mode. The storage check verifies each unique routable metered credit group has a balance row and checks health-table reachability; probes are cached for at most five seconds. `rate_limit_share_valid` and a `rate_limit_share_<group>_<dimension>_valid` check identify any per-replica RPM, input-TPM, or RPD share that floors to zero. Readiness returns `503` for any failed check; this is a readiness-level signal, not a configuration-load failure. Request-time credit and quota admission still fail closed independently of the cached readiness result.
 
 ## Prometheus & OpenTelemetry Metrics (Implemented single-process; multi-process aggregation Planned)
 
@@ -45,7 +51,8 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `foundry_router_latency_seconds{model, backend}`: Latency and time-to-first-token (TTFT) histogram.
 - `foundry_router_estimated_cost_usd_total{model, backend}`: Cumulative estimated request-cost.
 - `foundry_router_backend_health_state{backend}`: Current backend health state gauge.
-- `foundry_router_credit_available_usd{backend}`: Current spendable balance gauge.
+- `foundry_router_credit_available_usd{backend}`: Nonadditive backend view of estimated account credit.
+- `foundry_router_credit_group_available_usd{credit_group}`: Canonical unique account spendable estimate.
 - `foundry_router_rate_limit_remaining{backend, quota_group, limit}`: Remaining configured RPM, input TPM, or RPD budget.
 - `foundry_router_rate_limit_exhausted{backend, quota_group}`: Whether the project quota group is exhausted.
 - `foundry_router_rate_limit_cooldown{backend, quota_group}`: Whether the backend is currently in quota cooldown.
@@ -58,6 +65,10 @@ Multi-process metric aggregation (for `--workers > 1` deployments) requires eith
 - Both remain **Planned**; current implementation (`src/foundry_router/metrics/__init__.py:15` `InMemoryMetricsStore`) is single-process only.
 
 ## Operator Checks
+
+Shared credit account diagnostics and drained-state migration are described in
+[shared-resource credit operations](shared-resource-credit.md). `/admin/status.credit_groups`
+exposes each account once; backend entries identify `credit_group` and mirror its snapshot.
 
 When a request fails, inspect model configuration, candidate availability, backend state, cooldown expiry, quota signals, credit estimate and reserve, and retry count. Distinguish upstream errors from router validation errors. Administrative status must never reveal credentials.
 

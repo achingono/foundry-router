@@ -17,6 +17,7 @@ from foundry_router.credit import (
     estimate_request_cost,
     score_credit_assessment,
 )
+from foundry_router.credit_groups import CreditStoreError
 from foundry_router.health import (
     COOLDOWN_STATES,
     BackendHealthState,
@@ -441,13 +442,26 @@ async def select_candidate_backend(
         if reserved:
             quota_group = quota_group_by_backend[backend_id]
             if rate_limit_store is not None and quota_group in effective_limits:
-                quota_reserved = await rate_limit_store.try_reserve_estimate(
-                    request_id,
-                    quota_group,
-                    estimated_input_tokens=estimate.input_tokens,
-                    reservation_max_age_seconds=settings.reservation_max_age_seconds,
-                    allow_over_limit=protected_quota_fallback,
-                )
+                try:
+                    quota_reserved = await rate_limit_store.try_reserve_estimate(
+                        request_id,
+                        quota_group,
+                        estimated_input_tokens=estimate.input_tokens,
+                        reservation_max_age_seconds=settings.reservation_max_age_seconds,
+                        allow_over_limit=protected_quota_fallback,
+                    )
+                except BaseException:
+                    # Cancellation/outage during quota admission must not orphan credit.
+                    try:
+                        await credit_store.finalize_request(
+                            request_id,
+                            backend_id=backend_id,
+                            charge_reserved=False,
+                            charged_cost_usd=None,
+                        )
+                    finally:
+                        await rate_limit_store.release_request(request_id)
+                    raise
                 if not quota_reserved:
                     rate_limit_reservation_failed = True
                     try:
@@ -547,17 +561,25 @@ async def execute_with_single_failover(
         )
         return response
 
-    first_selection = await select_candidate_backend(
-        settings,
-        model,
-        operation=operation,
-        body=body,
-        request_id=request_id,
-        health_store=health_store,
-        credit_store=credit_store,
-        logger=logger,
-        rate_limit_store=rate_limit_store,
-    )
+    try:
+        first_selection = await select_candidate_backend(
+            settings,
+            model,
+            operation=operation,
+            body=body,
+            request_id=request_id,
+            health_store=health_store,
+            credit_store=credit_store,
+            logger=logger,
+            rate_limit_store=rate_limit_store,
+        )
+    except CreditStoreError:
+        if rate_limit_store is not None:
+            await rate_limit_store.release_request(request_id)
+        return await record_and_return(
+            api_error(503, "Credit state could not be confirmed", "credit_store_unavailable"),
+            backend_id=None,
+        )
     if first_selection.backend_id is None:
         if first_selection.pricing_unavailable:
             return await record_and_return(
@@ -604,6 +626,16 @@ async def execute_with_single_failover(
 
     first_backend_id = first_selection.backend_id
     reservation_closed_or_transferred = False
+    credit_finalization_attempted = False
+    original_finalize = finalize_non_streaming_credit
+
+    async def finalize_credit(**kwargs: Any) -> Any:
+        nonlocal credit_finalization_attempted
+        credit_finalization_attempted = True
+        return await original_finalize(**kwargs)
+
+    finalize_non_streaming_credit = finalize_credit
+
     try:
         first_result = await execute_backend(first_backend_id)
 
@@ -629,6 +661,7 @@ async def execute_with_single_failover(
         # before branching into the second partition. The second selection
         # creates an independent reservation; without this release the first
         # partition's req-* row would orphan until the reaper runs.
+        credit_finalization_attempted = True
         try:
             await credit_store.finalize_request(
                 request_id,
@@ -644,14 +677,7 @@ async def execute_with_single_failover(
                 charge_reserved=False,
                 charged_cost_usd=None,
             )
-        except Exception:
-            warn = getattr(logger, "warning", None)
-            if callable(warn):
-                warn(
-                    "routing_failover_release_failed",
-                    request_id=request_id,
-                    backend_id=first_backend_id,
-                )
+        credit_finalization_attempted = False
         second_selection = await select_candidate_backend(
             settings,
             model,
@@ -802,10 +828,16 @@ async def execute_with_single_failover(
             )
         reservation_closed_or_transferred = True
         return await record_and_return(second_result.response, backend_id=second_backend_id)
+    except CreditStoreError:
+        credit_finalization_attempted = True
+        return await record_and_return(
+            api_error(503, "Credit state could not be confirmed", "credit_store_unavailable"),
+            backend_id=first_backend_id,
+        )
     finally:
-        if not reservation_closed_or_transferred:
-            if rate_limit_store is not None:
-                await rate_limit_store.release_request(request_id)
+        if not reservation_closed_or_transferred and rate_limit_store is not None:
+            await rate_limit_store.release_request(request_id)
+        if not reservation_closed_or_transferred and not credit_finalization_attempted:
             try:
                 await credit_store.finalize_request(
                     request_id,

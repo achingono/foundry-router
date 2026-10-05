@@ -199,13 +199,19 @@ class AzureTableEntityClient:
 
     async def try_create_entity(self, entity: Mapping[str, Any]) -> bool:
         """Create only if absent; False when the row already exists."""
-        from azure.core.exceptions import HttpResponseError
+        from azure.core.exceptions import HttpResponseError, ResourceExistsError
 
         try:
             await self._get_client().create_entity(dict(entity))
         except HttpResponseError as exc:
             if _error_code(exc) == "EntityAlreadyExists":
                 return False
+            if isinstance(exc, ResourceExistsError):
+                # Some SDK/emulator versions omit the specific code on a create race.
+                # Confirm the requested row exists; an arbitrary 409 is not success.
+                existing = await self.get_entity(str(entity["PartitionKey"]), str(entity["RowKey"]))
+                if existing is not None:
+                    return False
             _logger.warning(
                 "table_create_failed",
                 table=self._table_name,
@@ -219,8 +225,8 @@ class AzureTableEntityClient:
     async def try_batch_transaction(self, operations: list[_TransactionEntity]) -> bool:
         """Map adapter operations to ``submit_transaction`` with ETag guards.
 
-        Returns False only for ``UpdateConditionNotSatisfied`` (412) on the
-        balance row and ``EntityAlreadyExists`` (409) on a reservation Create,
+        Returns False only for ``UpdateConditionNotSatisfied`` (412) on a guarded
+        balance/reservation write and ``EntityAlreadyExists`` (409) on a reservation Create,
         matched on error code *and* failing operation index; every other error
         is raised so the credit store fails closed.
         """
@@ -239,8 +245,9 @@ class AzureTableEntityClient:
             if (
                 code == "UpdateConditionNotSatisfied"
                 and target is not None
-                and target.row_key == _BALANCE_ROW_KEY
-                and target.operation in ("Update", "UpdateMerge")
+                and (target.row_key == _BALANCE_ROW_KEY or target.row_key.startswith("req-"))
+                and target.operation in ("Update", "UpdateMerge", "Delete")
+                and target.etag is not None
             ):
                 return False
             if (

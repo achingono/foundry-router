@@ -45,7 +45,7 @@ spendable_credit = remaining_credit - safety_reserve
 projected_unused_credit = remaining_credit - estimated_daily_burn * days_remaining
 ```
 
-Prefer a usable backend that would otherwise waste more credit before its cycle ends, without crossing its safety reserve. Each backend has an independent cycle start day. Calculations handle month lengths, February 28/29 leap years, month and year boundaries, and represent the actual credit reset period.
+Prefer a usable backend whose credit group would otherwise waste more credit before its cycle ends, without crossing that account's safety reserve. Each credit group has an independent cycle start day. Omitted membership defaults to backend ID. All model pools using one group share available credit and inflight capacity. Calculations handle month lengths, February 28/29 leap years, month and year boundaries, and represent the actual credit reset period.
 
 ## Concurrency and Reservation Lifecycle
 
@@ -56,7 +56,17 @@ available_credit = estimated_remaining_credit - reserved_inflight_cost - safety_
 ```
 
 ### Safety and Cleanup Invariants:
-1. **Guaranteed Cleanup**: The entire dispatch and failover lifecycle is enclosed in a `try...finally` block, guaranteeing that `finalize_request` is invoked on normal return, secondary failover exceptions, or client task cancellation (`asyncio.CancelledError`).
+Expired pending credit reservations are conservatively settled using retained valid intent or the
+full reserved estimate. This includes legacy/pre-egress rows; age never proves that work was free.
+Table admission exceptions (including commit then timeout) stop selection with a typed failure.
+Incomplete Table sync also stops dispatch instead of selecting under retained old membership.
+Membership includes metering and publishes under the same local lock as admission. Existing request
+IDs cannot move accounts without confirmed release. Stream financial cleanup is bounded and shielded
+independently of context close. See [recovery policy](../operations/shared-resource-credit.md).
+Post-output streaming failure settles known usage or the full reserved estimate; failure status is
+not evidence that provider work was free. Periodic complete ownership discovery frees confirmed
+absent/finalized tracking slots even when balance reconciliation is unavailable.
+1. **Failure-aware Cleanup**: Dispatch/failover cleanup handles normal return, secondary failures and client cancellation. Failed release hard-stops second selection/egress. Failed settlement preserves the pending reservation and is never converted to a free release; quota/telemetry cleanup runs independently. Streaming never fails over after output.
 2. **Non-2xx Upstream Zero Charge**: When an upstream backend rejects a request with a non-2xx status code (e.g. 400 Bad Request, 422 Unprocessable Entity, or failed 5xx), the reserved in-flight credit is released without debiting the backend balance.
 3. **Streaming Terminal Usage Extraction**: During streaming SSE pass-through, the generator parses terminal `usage` events (e.g. `stream_options: {"include_usage": true}`) with a bounded accumulation buffer (`MAX_SSE_EVENT_BUFFER_BYTES`) to settle the final charge against exact actual token usage rather than conservative defaults.
 4. **Safe Capacity Rejection**: If no candidate can safely accept the conservative reservation without crossing safety reserves, reject with `503` and `insufficient_credit_capacity` without backend egress.

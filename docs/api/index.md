@@ -21,6 +21,22 @@ Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-versio
 
 Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
+Shared-resource credit is **Implemented**. `/admin/status` adds canonical `credit_groups` account
+snapshots and a `credit_group` on each backend. Backend credit views are compatible but nonadditive.
+`/metrics` adds `foundry_router_credit_group_available_usd{credit_group}` while retaining backend
+metrics. Reconciliation adds `last_updated_credit_groups`; the legacy count is a compatibility alias.
+Readiness checks unique routable metered accounts. A credit persistence/finalization failure before
+response delivery returns `503 credit_store_unavailable`, preventing failover after failed release.
+After SSE output, completion failure propagates without a retry. See
+[credit operations](../operations/shared-resource-credit.md).
+
+Expired pending reservations now settle conservatively, including legacy/pre-egress rows: retained
+valid intent wins, otherwise the full estimate is debited. Ambiguous Table admission stops routing;
+context-close errors cannot prevent independently bounded shielded credit/quota/metrics cleanup.
+Incomplete Table settings sync returns `503 credit_store_unavailable` without upstream egress.
+Post-output stream errors charge actual known usage or the full reserved estimate, preserving the
+stream's SSE error and prohibiting failover.
+
 ## Authentication
 
 All `/openai/v1/*` endpoints require client authentication. The `/admin/status` and `/metrics` endpoints require separate admin authentication.

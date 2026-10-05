@@ -63,6 +63,7 @@ class ReconciliationLoop:
             "last_success_utc": self._status.last_success_utc,
             "last_error": self._status.last_error,
             "last_updated_backends": self._status.last_updated_backends,
+            "last_updated_credit_groups": self._status.last_updated_backends,
             "consecutive_failures": self._status.consecutive_failures,
             "stale": self._is_stale(),
         }
@@ -88,6 +89,14 @@ class ReconciliationLoop:
     async def run_once(self) -> None:
         now = datetime.now(UTC)
         self._status.last_attempt_utc = now.isoformat()
+        # Ownership maintenance must still run when the balance provider is unavailable.
+        if hasattr(self._credit_store, "reconcile_tracked_ownership"):
+            try:
+                await self._credit_store.reconcile_tracked_ownership()
+            except Exception as exc:
+                self._logger.warning(
+                    "credit_ownership_maintenance_failed", error_type=type(exc).__name__
+                )
         try:
             balances = await self._provider.fetch_remaining_credit(self._settings)
             updated_count = await self._credit_store.apply_reconciled_remaining(balances)

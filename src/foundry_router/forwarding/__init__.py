@@ -15,6 +15,7 @@ import httpx
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 
+from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
     estimate_response_usage_cost,
     extract_response_usage_tokens,
@@ -160,6 +161,7 @@ async def stream_response(
     credit_store: Any,
     metrics_store: Any,
     rate_limit_store: Any | None = None,
+    cleanup_timeout_seconds: float = DEFAULT_CLEANUP_TIMEOUT_SECONDS,
 ) -> Any:
     started_at = time.monotonic()
     charged_cost: float | None = None
@@ -234,11 +236,11 @@ async def stream_response(
                 pending_event_bytes = pending_event_bytes[-3:]
 
     try:
-        yield first_chunk
         inspect_chunk(first_chunk)
+        yield first_chunk
         async for chunk in chunks:
-            yield chunk
             inspect_chunk(chunk)
+            yield chunk
     except httpx.HTTPError:
         await set_backend_cooldown(
             backend_id,
@@ -250,34 +252,46 @@ async def stream_response(
     finally:
         if not discarding_event and pending_event_bytes.strip():
             process_event_payload(pending_event_bytes)
-        await context.__aexit__(None, None, None)
-        is_stream_success = metric_status_code < 400
-        try:
-            await credit_store.finalize_request(
-                request_id,
-                backend_id=backend_id,
-                charge_reserved=is_stream_success or (charged_cost is not None),
-                charged_cost_usd=charged_cost,
-            )
-        except TypeError as exc:
-            if "backend_id" in str(exc):
+
+        async def settle_credit() -> None:
+            try:
                 await credit_store.finalize_request(
                     request_id,
-                    charge_reserved=is_stream_success or (charged_cost is not None),
+                    backend_id=backend_id,
+                    # This generator owns a stream after meaningful output, never a free rejection.
+                    charge_reserved=True,
                     charged_cost_usd=charged_cost,
                 )
-            else:
-                raise
-        if rate_limit_store is not None:
-            await rate_limit_store.finalize_request(
-                request_id, actual_input_tokens=actual_input_tokens
-            )
-        await metrics_store.observe_request(
-            model=model,
-            backend=backend_id,
-            status_code=metric_status_code,
-            latency_seconds=max(0.0, time.monotonic() - started_at),
-            estimated_cost_usd=charged_cost,
+            except TypeError as exc:
+                if "backend_id" in str(exc):
+                    await credit_store.finalize_request(
+                        request_id,
+                        charge_reserved=True,
+                        charged_cost_usd=charged_cost,
+                    )
+                else:
+                    raise
+
+        async def settle_quota() -> None:
+            if rate_limit_store is not None:
+                await rate_limit_store.finalize_request(
+                    request_id, actual_input_tokens=actual_input_tokens
+                )
+
+        await protected_cleanup(
+            [
+                settle_credit,
+                settle_quota,
+                lambda: metrics_store.observe_request(
+                    model=model,
+                    backend=backend_id,
+                    status_code=metric_status_code,
+                    latency_seconds=max(0.0, time.monotonic() - started_at),
+                    estimated_cost_usd=charged_cost,
+                ),
+                lambda: context.__aexit__(None, None, None),
+            ],
+            timeout_seconds=cleanup_timeout_seconds,
         )
 
 

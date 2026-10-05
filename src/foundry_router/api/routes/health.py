@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 
+from foundry_router.credit_groups import credit_membership
+
 
 def build_router(*, load_settings_fn: Any, extra_checks_fn: Any | None = None) -> APIRouter:
     router = APIRouter(tags=["Health"])
@@ -18,11 +20,12 @@ def build_router(*, load_settings_fn: Any, extra_checks_fn: Any | None = None) -
     @router.get("/health/ready")
     async def readiness() -> Response:
         settings = load_settings_fn()
+        aliases = credit_membership(settings)
         routable_backend_ids = {
             backend_id for pool in settings.models.values() for backend_id in pool.backends
         }
         metered_backend_ids = {
-            backend_id
+            aliases.get(backend_id, backend_id)
             for backend_id in routable_backend_ids
             if backend_id not in settings.backends or settings.backends[backend_id].credit_metered
         }

@@ -11,6 +11,14 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
+from foundry_router.credit_groups import (
+    CreditStoreError,
+    credit_membership,
+    metered_credit_groups,
+    normalize_reconciliation,
+    resolve_credit_group,
+)
+
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 CHARS_PER_TOKEN_DIVISOR = 3
 MIN_SCORE_DENOMINATOR = 0.0001
@@ -201,6 +209,7 @@ class _Reservation:
     backend_id: str
     estimated_cost_usd: float
     created_at_monotonic: float = field(default_factory=time.monotonic)
+    settlement_charge_usd: float | None = None
 
 
 def calculate_cycle_window(now_utc: datetime, cycle_start_day: int) -> CycleWindow:
@@ -426,23 +435,40 @@ class InMemoryCreditStore:
         self._snapshots: dict[str, _BackendCreditSnapshot] = {}
         self._reservations: dict[str, _Reservation] = {}
         self._last_synced_settings_id: int | None = None
+        self._credit_aliases: dict[str, str] = {}
+        self._metered_groups: set[str] = set()
 
     async def sync_from_settings(self, settings: Any) -> None:
         # `load_settings` is an lru_cache singleton, so the common production case
         # is repeated calls with the identical settings object; skip redundant work.
-        if id(settings) == self._last_synced_settings_id:
-            return
         now = datetime.now(UTC)
         async with self._lock:
-            for backend_id in settings.backends:
+            aliases = credit_membership(settings)
+            groups = metered_credit_groups(settings)
+            if (
+                id(settings) == self._last_synced_settings_id
+                and aliases == self._credit_aliases
+                and groups == self._metered_groups
+            ):
+                return
+            if (
+                aliases != self._credit_aliases or groups != self._metered_groups
+            ) and self._reservations:
+                raise CreditStoreError(
+                    "Drain pending reservations before changing credit membership"
+                )
+            sync_complete = True
+            for backend_id in groups:
                 allowance = settings.backend_cycle_allowance_usd.get(backend_id)
                 remaining = settings.backend_initial_estimated_remaining_usd.get(backend_id)
                 cycle_start_day = settings.backend_cycle_start_day.get(backend_id)
                 if allowance is None or remaining is None or cycle_start_day is None:
+                    sync_complete = False
                     continue
                 if not _valid_non_negative_finite(allowance) or not _valid_non_negative_finite(
                     remaining
                 ):
+                    sync_complete = False
                     continue
                 existing = self._snapshots.get(backend_id)
                 if existing is None:
@@ -456,7 +482,10 @@ class InMemoryCreditStore:
                 else:
                     existing.cycle_start_day = cycle_start_day
                     existing.cycle_allowance_usd = allowance
-            self._last_synced_settings_id = id(settings)
+            if sync_complete:
+                self._credit_aliases = aliases
+                self._metered_groups = groups
+                self._last_synced_settings_id = id(settings)
 
     async def assess_with_context(
         self,
@@ -467,8 +496,11 @@ class InMemoryCreditStore:
         """Context-based assess that bundles reserve policy + clock + aging."""
         now = context.now_utc or datetime.now(UTC)
         async with self._lock:
+            backend_id = resolve_credit_group(self._credit_aliases, backend_id)
             self._sweep_expired_reservations_locked(context.reservation_max_age_seconds)
-            snapshot = self._snapshots.get(backend_id)
+            snapshot = (
+                self._snapshots.get(backend_id) if backend_id in self._metered_groups else None
+            )
             if snapshot is None:
                 return CreditAssessment(
                     state=CreditState.INSUFFICIENT_CAPACITY,
@@ -517,15 +549,19 @@ class InMemoryCreditStore:
         """Context-based reservation that bundles policy + clock + aging."""
         now = context.now_utc or datetime.now(UTC)
         async with self._lock:
+            backend_id = resolve_credit_group(self._credit_aliases, backend_id)
             self._sweep_expired_reservations_locked(context.reservation_max_age_seconds)
-            snapshot = self._snapshots.get(backend_id)
+            existing = self._reservations.get(request_id)
+            if existing is not None:
+                if existing.backend_id != backend_id:
+                    raise CreditStoreError("Release reservation before changing credit account")
+                return True
+            snapshot = (
+                self._snapshots.get(backend_id) if backend_id in self._metered_groups else None
+            )
             if snapshot is None:
                 return False
             self._rollover_if_needed(snapshot, now)
-
-            existing = self._reservations.get(request_id)
-            if existing is not None and existing.backend_id == backend_id:
-                return True
 
             assessment = self._assessment(
                 snapshot,
@@ -536,9 +572,6 @@ class InMemoryCreditStore:
             )
             if assessment.state not in {CreditState.USABLE, CreditState.CONSERVATION}:
                 return False
-
-            if existing is not None:
-                self._release_locked(existing, charge_reserved=False, charged_cost_usd=None)
 
             snapshot.reserved_inflight_usd += estimated_request_cost_usd
             self._reservations[request_id] = _Reservation(
@@ -584,10 +617,18 @@ class InMemoryCreditStore:
             reservation = self._reservations.get(request_id)
             if reservation is None:
                 return
+            if reservation.settlement_charge_usd is None:
+                reservation.settlement_charge_usd = (
+                    charged_cost_usd
+                    if charged_cost_usd is not None and _valid_non_negative_finite(charged_cost_usd)
+                    else reservation.estimated_cost_usd
+                    if charge_reserved
+                    else 0.0
+                )
             self._release_locked(
                 reservation,
                 charge_reserved=charge_reserved,
-                charged_cost_usd=charged_cost_usd,
+                charged_cost_usd=reservation.settlement_charge_usd,
             )
 
     async def reset(self) -> None:
@@ -595,6 +636,8 @@ class InMemoryCreditStore:
             self._snapshots.clear()
             self._reservations.clear()
             self._last_synced_settings_id = None
+            self._credit_aliases.clear()
+            self._metered_groups.clear()
 
     async def apply_reconciled_remaining(
         self,
@@ -609,7 +652,8 @@ class InMemoryCreditStore:
         now = now_utc or datetime.now(UTC)
         updated = 0
         async with self._lock:
-            for backend_id, amount in authoritative_remaining_usd.items():
+            amounts = normalize_reconciliation(self._credit_aliases, authoritative_remaining_usd)
+            for backend_id, amount in amounts.items():
                 snapshot = self._snapshots.get(backend_id)
                 if snapshot is None:
                     continue
@@ -652,7 +696,8 @@ class InMemoryCreditStore:
                     )
 
             for backend_id in backend_ids:
-                snapshot = self._snapshots.get(backend_id)
+                group = resolve_credit_group(self._credit_aliases, backend_id)
+                snapshot = self._snapshots.get(group)
                 if snapshot is None:
                     continue
                 self._rollover_if_needed(snapshot, now)
@@ -664,7 +709,7 @@ class InMemoryCreditStore:
                     min_credit_reserve_percent,
                     now,
                 )
-                oldest_monotonic = oldest_reservation_monotonic.get(backend_id)
+                oldest_monotonic = oldest_reservation_monotonic.get(group)
                 snapshots[backend_id] = BackendCreditLiveSnapshot(
                     state=assessment.state,
                     available_credit_usd=assessment.available_credit_usd,
@@ -673,7 +718,7 @@ class InMemoryCreditStore:
                     cycle_allowance_usd=snapshot.cycle_allowance_usd,
                     current_cycle_start_utc=cycle.current_cycle_start_utc,
                     next_reset_utc=cycle.next_reset_utc,
-                    active_reservations=reservation_counts.get(backend_id, 0),
+                    active_reservations=reservation_counts.get(group, 0),
                     oldest_reservation_age_seconds=(
                         max(0.0, now_monotonic - oldest_monotonic)
                         if oldest_monotonic is not None
@@ -683,7 +728,7 @@ class InMemoryCreditStore:
         return snapshots
 
     def _sweep_expired_reservations_locked(self, reservation_max_age_seconds: float) -> None:
-        """Reclaim inflight credit from reservations older than the configured max age.
+        """Conservatively settle expired reservations using retained intent or full reserve.
 
         Bounded to the current number of active reservations; must be called with
         `self._lock` already held.
@@ -697,7 +742,11 @@ class InMemoryCreditStore:
             if (now_monotonic - reservation.created_at_monotonic) > reservation_max_age_seconds
         ]
         for reservation in expired:
-            self._release_locked(reservation, charge_reserved=False, charged_cost_usd=None)
+            self._release_locked(
+                reservation,
+                charge_reserved=True,
+                charged_cost_usd=reservation.settlement_charge_usd,
+            )
 
     def _release_locked(
         self,

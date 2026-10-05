@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from foundry_router.credit_groups import credit_membership, validate_credit_group
+
 
 class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
@@ -24,6 +26,12 @@ class BackendConfig(BaseModel):
     api_version: str = "2025-04-01-preview"
     quota_group: str | None = None
     credit_metered: bool = True
+    credit_group: str | None = None
+
+    @field_validator("credit_group")
+    @classmethod
+    def validate_credit_group_id(cls, v: str | None) -> str | None:
+        return validate_credit_group(v) if v is not None else None
 
     @field_validator("endpoint")
     @classmethod
@@ -152,7 +160,7 @@ class Settings(BaseSettings):
         default="{}",
         validation_alias="FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON",
         description=(
-            "Optional JSON object mapping backend IDs to authoritative-or-mocked "
+            "Optional JSON object mapping canonical credit groups to authoritative-or-mocked "
             "remaining USD values for reconciliation"
         ),
     )
@@ -247,7 +255,7 @@ class Settings(BaseSettings):
     backend_cycle_start_day_json: str = Field(
         default="{}",
         validation_alias="FOUNDRY_BACKEND_CYCLE_START_DAY_JSON",
-        description="JSON object mapping backend IDs to cycle start day (1-28)",
+        description="JSON object mapping canonical credit groups to cycle start day (1-28)",
     )
 
     # Protected emergency fallback
@@ -295,14 +303,14 @@ class Settings(BaseSettings):
     backend_cycle_allowance_usd_json: str = Field(
         default="{}",
         validation_alias="FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON",
-        description="JSON object mapping backend IDs to local estimated cycle allowance (USD)",
+        description="JSON object mapping credit groups to estimated cycle allowance (USD)",
     )
 
     # Backend local initial remaining estimates (JSON string)
     backend_initial_estimated_remaining_usd_json: str = Field(
         default="{}",
         validation_alias="FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON",
-        description="JSON object mapping backend IDs to local estimated remaining credit (USD)",
+        description="JSON object mapping credit groups to estimated remaining credit (USD)",
     )
 
     # Computed fields (populated after validation)
@@ -359,6 +367,8 @@ class Settings(BaseSettings):
                 normalised_value = dict(value)
                 if normalised_value.get("quota_group") is None:
                     normalised_value["quota_group"] = backend_id
+                if normalised_value.get("credit_group") is None:
+                    normalised_value["credit_group"] = backend_id
                 parsed_backends[backend_id] = BackendConfig(**normalised_value)
             self.backends = parsed_backends
         except (TypeError, ValueError) as exc:
@@ -369,6 +379,7 @@ class Settings(BaseSettings):
         # Validate at least one backend configured
         if not self.backends:
             raise ValueError("At least one backend must be configured")
+        credit_groups = set(credit_membership(self).values())
 
         # Parse models
         models_data = load_object(self.models_json, "FOUNDRY_MODELS_JSON")
@@ -479,7 +490,7 @@ class Settings(BaseSettings):
                 or not (cycle_day_min <= day <= cycle_day_max)
             ):
                 raise ValueError(f"Cycle start day for '{backend_id}' must be 1-28")
-            if backend_id not in self.backends:
+            if backend_id not in credit_groups:
                 raise ValueError(f"Cycle start day references unknown backend '{backend_id}'")
             self.backend_cycle_start_day[backend_id] = day
 
@@ -493,7 +504,7 @@ class Settings(BaseSettings):
             "FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON",
         )
         for backend_id, amount in allowance_data.items():
-            if backend_id not in self.backends:
+            if backend_id not in credit_groups:
                 raise ValueError(f"Cycle allowance references unknown backend '{backend_id}'")
             if isinstance(amount, bool) or not isinstance(amount, (int, float)):
                 raise TypeError(
@@ -512,7 +523,7 @@ class Settings(BaseSettings):
             "FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON",
         )
         for backend_id, amount in remaining_data.items():
-            if backend_id not in self.backends:
+            if backend_id not in credit_groups:
                 raise ValueError(
                     f"Initial estimated remaining credit references unknown backend '{backend_id}'"
                 )
@@ -535,7 +546,7 @@ class Settings(BaseSettings):
             "FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON",
         )
         for backend_id, amount in reconciliation_data.items():
-            if backend_id not in self.backends:
+            if backend_id not in credit_groups:
                 raise ValueError(
                     f"Reconciliation override references unknown backend '{backend_id}'"
                 )

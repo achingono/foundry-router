@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from foundry_router.state import AzureTableCreditStore
+from foundry_router.state import AzureTableCreditStore, TableEntityCreditStoreError
 from tests.unit.test_state import FakeTableClient
 
 
@@ -67,7 +67,8 @@ async def test_failed_initial_sync_retries_same_settings_object() -> None:
     store = AzureTableCreditStore(client)
     settings = _settings()
 
-    await store.sync_from_settings(settings)
+    with pytest.raises(TableEntityCreditStoreError, match="incomplete"):
+        await store.sync_from_settings(settings)
     assert ("b1", "balance") not in client.entities
     await store.sync_from_settings(settings)
 
@@ -89,8 +90,9 @@ async def test_failed_config_merge_retries_same_settings_object() -> None:
 
     client.try_batch_transaction = conflict
     changed_settings = _settings(allowance=200.0, remaining=200.0)
-    await store.sync_from_settings(changed_settings)
-    await store.sync_from_settings(changed_settings)
+    for _ in range(2):
+        with pytest.raises(TableEntityCreditStoreError, match="incomplete"):
+            await store.sync_from_settings(changed_settings)
 
     assert attempts == 2
     assert client.entities[("b1", "balance")]["cycle_allowance_usd"] == 100.0

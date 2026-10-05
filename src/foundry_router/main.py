@@ -133,11 +133,24 @@ def _table_client_for(table: str) -> Any | None:
 
 async def _probe_state_stores(settings: Any) -> bool:
     """Bounded table-reachability probe, cached for at most 5 seconds."""
+    from foundry_router.credit_groups import credit_membership, metered_credit_groups
+
     now = time.monotonic()
     cached_at = _state_probe_cache.get("at")
     if cached_at is not None and now - float(cached_at) <= _STATE_PROBE_CACHE_SECONDS:
         return bool(_state_probe_cache.get("ok", True))
     backend_ids = list(getattr(settings, "backends", {}).keys())
+    aliases = credit_membership(settings)
+    routable = (
+        {
+            backend_id
+            for pool in getattr(settings, "models", {}).values()
+            for backend_id in pool.backends
+        }
+        if hasattr(settings, "models")
+        else set(backend_ids)
+    )
+    groups = metered_credit_groups(settings) & {aliases[key] for key in routable}
     timeout = float(getattr(settings, "table_request_timeout_seconds", 5.0))
     ok = True
     if not backend_ids:
@@ -152,7 +165,7 @@ async def _probe_state_stores(settings: Any) -> bool:
                 credit_client.probe_reachable(
                     backend_id, "balance", timeout_seconds=timeout, require_entity=True
                 )
-                for backend_id in backend_ids
+                for backend_id in sorted(groups)
             ]
             probes.append(
                 health_client.probe_reachable(backend_ids[0], "health", timeout_seconds=timeout)

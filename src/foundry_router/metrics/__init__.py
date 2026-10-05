@@ -60,6 +60,7 @@ class InMemoryMetricsStore:
         backend_health_states: dict[str, str],
         backend_available_credit_usd: dict[str, float],
         backend_rate_limit_snapshots: dict[str, Any] | None = None,
+        credit_group_available_credit_usd: dict[str, float] | None = None,
     ) -> str:
         async with self._lock:
             request_totals = dict(self._request_totals)
@@ -142,7 +143,8 @@ class InMemoryMetricsStore:
             )
 
         lines.append(
-            "# HELP foundry_router_credit_available_usd Live estimated spendable credit by backend"
+            "# HELP foundry_router_credit_available_usd "
+            "Nonadditive backend view of estimated credit"
         )
         lines.append("# TYPE foundry_router_credit_available_usd gauge")
         for backend_id, available_credit in sorted(backend_available_credit_usd.items()):
@@ -150,6 +152,16 @@ class InMemoryMetricsStore:
                 "foundry_router_credit_available_usd"
                 f'{{backend="{_escape_label(backend_id)}"}} '
                 f"{available_credit:.9f}"
+            )
+
+        lines.append(
+            "# HELP foundry_router_credit_group_available_usd Estimated spendable credit by account"
+        )
+        lines.append("# TYPE foundry_router_credit_group_available_usd gauge")
+        for group, available in sorted((credit_group_available_credit_usd or {}).items()):
+            lines.append(
+                "foundry_router_credit_group_available_usd"
+                f'{{credit_group="{_escape_label(group)}"}} {available:.9f}'
             )
 
         lines.append(

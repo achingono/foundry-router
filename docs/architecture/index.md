@@ -24,6 +24,17 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 
 Keep these responsibilities separate. In particular, estimated local cost is not authoritative Azure cost, and model quota is not subscription credit.
 
+Shared-resource credit is **Implemented**: `credit_groups.py` owns the validated canonical account
+namespace and one-pass backend alias resolution used by settings and credit stores. Memory/Table
+balances, locks/caches and reservations use groups; captured ownership governs settlement. Health
+continues to use deployment backend IDs. Quota groups remain independent. See
+[migration](../operations/shared-resource-credit.md) and [evidence](../plans/shared-resource-credit/evidence.md).
+
+The approved recovery amendment adds retained/durable settlement intent and conservative expiry,
+fresh balance/reservation ETags, metering-aware serialized local ownership, bounded uncertain request
+tracking and independently protected cleanup (`cleanup.py`). This does not create a distributed
+cross-partition identity protocol; requests retain server-owned unique IDs and drained rollout rules.
+
 ## Deployment Shape
 
 The initial target is Azure Container Apps Consumption with 0.25 vCPU, 0.5 GiB memory, and zero minimum replicas. Production remains `max_replicas: 1` until the Phase 11 Azure validation and two-replica deployment gates pass. Table adapters, an identity-only Table client, startup wiring, readiness checks and Azurite tests are implemented in code, but deployed multi-replica shared state is still **Partially implemented**. Single-process deployments use in-memory credit and health state; table mode uses Azure Table Storage for authoritative credit balances and reservations with ETag-based same-partition transactions. Health and cooldown snapshots are timestamped and eventually consistent. Redis may be added later as a cache, but it does not replace the Azure Table Storage source of truth.

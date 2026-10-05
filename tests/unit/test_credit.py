@@ -336,7 +336,7 @@ class TestCreditStore:
             )
         )
         assert "req-orphan" not in store._reservations
-        assert assessment.available_credit_usd == pytest.approx(80.0)
+        assert assessment.available_credit_usd == pytest.approx(70.0)
 
     def test_fresh_reservation_is_untouched_by_reaper(self) -> None:
         store = InMemoryCreditStore()

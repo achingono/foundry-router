@@ -21,6 +21,26 @@ models:
 
 The initial logical model set is `gpt-5.6-luna`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.3-codex`, `gpt-5.2-chat`, and `text-embedding-3-large`.
 
+## Shared Resource Credit (Implemented)
+
+Set `credit_group` on each deployment backend belonging to the same resource credit account.
+Omitted or null membership defaults to the backend ID. Any number of deployments and model pools
+can share an account; the intended production topology is twelve deployment backends in six model
+pools with two credit groups. Health remains backend-owned and provider quota remains `quota_group`-owned.
+
+The existing `FOUNDRY_BACKEND_CYCLE_START_DAY_JSON`,
+`FOUNDRY_BACKEND_CYCLE_ALLOWANCE_USD_JSON`,
+`FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON` and
+`FOUNDRY_RECONCILIATION_OVERRIDES_USD_JSON` names remain compatible. Their keys must be canonical
+credit-group IDs. Provide each account's cycle and estimates once; duplicated backend entries are
+rejected. Group IDs reject blank values, surrounding whitespace, Table-forbidden/control characters
+and UTF-16 encodings exceeding 1,024 bytes. A group cannot overlap a backend alias mapped elsewhere
+or combine metered and non-metered backends. Missing values fail readiness and credit admission.
+
+See [migration and operations](../operations/shared-resource-credit.md) before regrouping existing state.
+Incomplete Table group initialization/config merge raises a typed failure and blocks routing;
+failed Settings are not cached and can be retried unchanged after storage recovery.
+
 ## Google AI Studio Keys
 
 Each Google AI Studio API key is configured as a separate backend with
@@ -45,7 +65,7 @@ Set `credit_metered: false` on free-tier backends to opt out of dollar-credit as
 pool must be homogeneous: it cannot mix metered and non-metered backends because pricing and cost
 are configured per logical model. An all-non-metered model always receives zero pricing,
 regardless of any pricing entry. Metered pools still require explicit pricing and complete
-per-backend credit configuration for readiness.
+per-credit-group configuration for readiness.
 
 ## Core Settings
 
@@ -58,11 +78,11 @@ The implementation validates client authentication, reconciliation interval, min
 It also validates two request-intake and reservation-lifecycle bounds introduced in Phase 08:
 
 - `FOUNDRY_MAX_REQUEST_BODY_BYTES` (default 2,097,152 bytes / 2 MiB): maximum accepted request body size, enforced before JSON parsing for `/openai/v1/responses` and `/openai/v1/embeddings`.
-- `FOUNDRY_RESERVATION_MAX_AGE_SECONDS` (default 900 seconds): maximum age of an inflight credit reservation before the bounded reaper reclaims it without charging the backend.
+- `FOUNDRY_RESERVATION_MAX_AGE_SECONDS` (default 900 seconds): maximum reservation age before conservative settlement. Valid retained settlement intent wins; otherwise the full reserved estimate is charged, including legacy/pre-egress rows. Confirmed explicit releases charge zero.
 
 The optional distributed state backend is `memory` by default. When `FOUNDRY_STATE_BACKEND=table`, configure `FOUNDRY_TABLE_ENDPOINT`, `FOUNDRY_TABLE_HEALTH_NAME`, and `FOUNDRY_TABLE_CREDIT_NAME`; the endpoint must be HTTPS and contain no credential or query string. `FOUNDRY_TABLE_REQUEST_TIMEOUT_SECONDS` bounds Table SDK connect/read timeouts. `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` is set by Bicep from `maxReplicas` and divides configured provider quota limits per replica; readiness names any group/dimension whose effective share is zero. Table settings are ignored in memory mode. Table-mode wiring and tests are implemented, but a two-replica Azure deployment and production cut-over remain unverified.
 
-`GET /health/ready` reports whether every metered backend referenced by a model pool has complete credit configuration and every configured model has pricing, surfacing incomplete configuration without failing config load outright. Non-metered backends are excluded only from dollar-credit completeness checks.
+`GET /health/ready` reports whether every unique routable metered credit group has complete credit configuration and every configured model has pricing, surfacing incomplete configuration without failing config load outright. Non-metered backends are excluded only from dollar-credit completeness checks. Table probes require one balance row per routable metered group and still check health-table reachability for non-metered topology.
 
 Pricing values and local credit balances are estimates; zero is valid for an uncharged dimension. Missing local credit estimates make a backend ineligible for credit-aware routing rather than defaulting to unlimited capacity. Reconciliation is Partially implemented through a periodic background loop that can apply externally supplied remaining-credit snapshots while preserving local fail-safe behavior.
 

@@ -2093,7 +2093,9 @@ class TestOpenAIEndpoints:
         assert snapshot["backend_c"].active_reservations == 0
         assert snapshot["backend_c"].reserved_inflight_usd == 0.0
 
-    def test_stream_failure_does_not_charge_worst_case_reservation(self, monkeypatch) -> None:
+    def test_post_output_stream_failure_charges_reservation_without_usage(
+        self, monkeypatch
+    ) -> None:
         finalize_calls: list[dict[str, float | bool | str | None]] = []
 
         async def capture_finalize(
@@ -2144,7 +2146,8 @@ class TestOpenAIEndpoints:
         asyncio.run(consume_stream())
         assert len(finalize_calls) == 1
         assert finalize_calls[0]["request_id"] == "req-stream-fail"
-        assert finalize_calls[0]["charge_reserved"] is False
+        # A 502 after output is not evidence of free provider work; the former expectation was wrong.
+        assert finalize_calls[0]["charge_reserved"] is True
         assert finalize_calls[0]["charged_cost_usd"] is None
 
     @respx.mock

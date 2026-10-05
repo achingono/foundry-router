@@ -13,6 +13,7 @@ from foundry_router.health import BackendHealthState, HealthStore, InMemoryHealt
 from foundry_router.state import (
     AzureTableCreditStore,
     AzureTableHealthStore,
+    TableEntityCreditStoreError,
     TableEntityWriteError,
     _TransactionEntity,
 )
@@ -68,16 +69,16 @@ class FakeTableClient:
             key = (op.partition_key, op.row_key)
             if key in self.batch_etag_conflicts:
                 return False
-            if op.operation == "Update" and op.etag is not None:
+            if op.operation in {"Update", "Delete"} and op.etag is not None:
                 existing = self.entities.get(key)
-                if existing is not None and existing.get("odata.etag") != op.etag:
+                if existing is None or existing.get("odata.etag") != op.etag:
                     return False
+            if op.operation == "Create" and key in self.entities:
+                return False
         # Apply all operations
         for op in operations:
             key = (op.partition_key, op.row_key)
             if op.operation == "Create":
-                if key in self.entities:
-                    return False  # Already exists
                 self.entities[key] = dict(op.entity) if op.entity else {}
                 self.entities[key]["odata.etag"] = f"v{len(self.entities)}"
             elif op.operation == "Update":
@@ -621,15 +622,14 @@ def test_table_credit_store_handles_batch_failure() -> None:
         await store.sync_from_settings(settings)
         client.fail_batch = True
 
-        result = await store.try_assign_reservation(
-            "req-1",
-            "backend-a",
-            10.0,
-            min_credit_reserve_usd=5.0,
-            min_credit_reserve_percent=0.0,
-        )
-
-        assert result is False
+        with pytest.raises(TableEntityCreditStoreError):
+            await store.try_assign_reservation(
+                "req-1",
+                "backend-a",
+                10.0,
+                min_credit_reserve_usd=5.0,
+                min_credit_reserve_percent=0.0,
+            )
 
     asyncio.run(run())
 
@@ -684,7 +684,8 @@ def test_table_credit_store_invalid_settings_skipped() -> None:
         settings.backend_cycle_allowance_usd = {}
         settings.backend_initial_estimated_remaining_usd = {}
 
-        await store.sync_from_settings(settings)
+        with pytest.raises(TableEntityCreditStoreError, match="incomplete"):
+            await store.sync_from_settings(settings)
 
         assert ("backend-a", "balance") not in client.entities
 
@@ -826,7 +827,7 @@ def test_table_credit_store_finalize_with_no_storage() -> None:
         # Delete the reservation from storage
         del client.entities[("backend-a", "req-req-1")]
 
-        # Finalize should handle gracefully
+        # Confirmed absent reservation is idempotent.
         await store.finalize_request("req-1", charge_reserved=True, charged_cost_usd=None)
 
     asyncio.run(run())
@@ -925,9 +926,10 @@ def test_table_credit_store_sync_with_invalid_allowance() -> None:
         settings.backend_cycle_allowance_usd = {"backend-a": float("inf")}  # Invalid
         settings.backend_initial_estimated_remaining_usd = {"backend-a": 80.0}
 
-        await store.sync_from_settings(settings)
+        with pytest.raises(TableEntityCreditStoreError, match="incomplete"):
+            await store.sync_from_settings(settings)
 
-        # Should skip invalid backends
+        # Invalid initialization fails explicitly and creates no balance.
         assert ("backend-a", "balance") not in client.entities
 
     asyncio.run(run())
@@ -1036,8 +1038,10 @@ def test_table_credit_store_finalize_with_corrupted_reservation() -> None:
             "state": "pending",
         }
 
-        # Finalize should handle gracefully
-        await store.finalize_request("req-1", charge_reserved=True, charged_cost_usd=None)
+        # Corrupt pending ownership must fail explicitly and preserve the row.
+        with pytest.raises(TableEntityCreditStoreError):
+            await store.finalize_request("req-1", charge_reserved=True, charged_cost_usd=None)
+        assert ("backend-a", "req-req-1") in client.entities
 
     asyncio.run(run())
 

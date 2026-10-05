@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, Response
 
 from foundry_router.auth import verify_admin_auth
+from foundry_router.credit_groups import credit_membership, metered_credit_groups
 
 
 async def _rate_limit_snapshots_by_backend(settings: Any, rate_limit_store: Any) -> dict[str, Any]:
@@ -42,6 +43,7 @@ def _admin_backend_status(
     credit_snapshot: Any,
     rate_limit_snapshot: Any = None,
 ) -> dict[str, Any]:
+    group = getattr(config, "credit_group", None) or name
     live_status = {
         "health_state": health_snapshot.state if health_snapshot is not None else None,
         "cooldown_remaining_seconds": (
@@ -98,10 +100,11 @@ def _admin_backend_status(
         "endpoint": str(config.endpoint),
         "region": config.region,
         "deployment": config.deployment,
-        "cycle_start_day": settings.backend_cycle_start_day.get(name),
-        "cycle_allowance_usd": settings.backend_cycle_allowance_usd.get(name),
+        "credit_group": group,
+        "cycle_start_day": settings.backend_cycle_start_day.get(group),
+        "cycle_allowance_usd": settings.backend_cycle_allowance_usd.get(group),
         "initial_estimated_remaining_usd": settings.backend_initial_estimated_remaining_usd.get(
-            name
+            group
         ),
         "live": live_status,
     }
@@ -124,8 +127,10 @@ def build_router(
         backend_ids = list(settings.backends.keys())
         health_snapshots = await health_store.snapshot_backend_health(backend_ids)
         await credit_store.sync_from_settings(settings)
+        aliases = credit_membership(settings)
+        groups = sorted(metered_credit_groups(settings))
         credit_snapshots = await credit_store.live_snapshot(
-            backend_ids,
+            groups,
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
@@ -133,13 +138,35 @@ def build_router(
 
         return {
             "version": "0.1.0",
+            "credit_groups": {
+                group: {
+                    "cycle_start_day": settings.backend_cycle_start_day.get(group),
+                    "cycle_allowance_usd": settings.backend_cycle_allowance_usd.get(group),
+                    "initial_estimated_remaining_usd": settings.backend_initial_estimated_remaining_usd.get(
+                        group
+                    ),
+                    "live": {
+                        "credit_state": snapshot.state,
+                        "available_credit_usd": snapshot.available_credit_usd,
+                        "estimated_remaining_usd": snapshot.estimated_remaining_usd,
+                        "reserved_inflight_usd": snapshot.reserved_inflight_usd,
+                        "active_reservations": snapshot.active_reservations,
+                        "oldest_reservation_age_seconds": snapshot.oldest_reservation_age_seconds,
+                        "current_cycle_start_utc": snapshot.current_cycle_start_utc.isoformat(),
+                        "next_reset_utc": snapshot.next_reset_utc.isoformat(),
+                    }
+                    if (snapshot := credit_snapshots.get(group)) is not None
+                    else None,
+                }
+                for group in groups
+            },
             "backends": {
                 name: _admin_backend_status(
                     name,
                     config,
                     settings,
                     health_snapshot=health_snapshots.get(name),
-                    credit_snapshot=credit_snapshots.get(name),
+                    credit_snapshot=credit_snapshots.get(aliases[name]),
                     rate_limit_snapshot=rate_limit_snapshots.get(name),
                 )
                 for name, config in settings.backends.items()
@@ -167,8 +194,9 @@ def build_router(
         backend_ids = list(settings.backends.keys())
         health_snapshots = await health_store.snapshot_backend_health(backend_ids)
         await credit_store.sync_from_settings(settings)
+        aliases = credit_membership(settings)
         credit_snapshots = await credit_store.live_snapshot(
-            backend_ids,
+            sorted(metered_credit_groups(settings)),
             min_credit_reserve_usd=settings.min_credit_reserve_usd,
             min_credit_reserve_percent=settings.min_credit_reserve_percent,
         )
@@ -179,8 +207,12 @@ def build_router(
                 for backend_id, health_snapshot in health_snapshots.items()
             },
             backend_available_credit_usd={
-                backend_id: credit_snapshot.available_credit_usd
-                for backend_id, credit_snapshot in credit_snapshots.items()
+                backend_id: credit_snapshots[group].available_credit_usd
+                for backend_id, group in aliases.items()
+                if group in credit_snapshots
+            },
+            credit_group_available_credit_usd={
+                group: snapshot.available_credit_usd for group, snapshot in credit_snapshots.items()
             },
             backend_rate_limit_snapshots=rate_limit_snapshots,
         )
