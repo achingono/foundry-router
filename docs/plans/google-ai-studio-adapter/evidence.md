@@ -20,6 +20,7 @@ assert Google service availability or real-provider compatibility.
 | Documentation validation | Relative-link checker using `.venv/bin/python`; whitespace/diff review | 104 relative targets across nine touched Markdown files resolve; no unfilled template markers or trailing whitespace; `git diff --check` passes; content reviewed for secrets and unsupported status claims |
 | SonarQube script | `scripts/quality/sonarqube-scan.sh` absent in inspected tree | No scanner executed; recheck at implementation time |
 | Runtime verification | Not run for this planning-only change | Full suite, coverage, lint/type/build and live Google checks remain implementation gates |
+| Cross-plan review | [Consolidated review](../cross-plan-review-2026-10-05.md), 2026-10-05 | Reviewed alongside tools/multimodal and model-aliases plans; 3 minor findings recorded; plan approved for implementation |
 
 ## Review Dispositions
 
@@ -33,6 +34,20 @@ assert Google service availability or real-provider compatibility.
 The independent session inspected the revised contract, activities, exit criteria and risk
 register and confirmed all four findings resolved. This is a design review of a planning-only
 change, not implementation, vendor-contract or real-inference verification. W1 remains required.
+
+## Cross-Plan Review Findings
+
+Independent cross-plan review session, 2026-10-05. Reviewed alongside
+`google-ai-studio-tools-multimodal` and `model-aliases` plans.
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| Baseline commit references (`b6a188c`) pre-date two subsequent doc-only commits; HEAD is now `1c043fd` | Minor | Update references in `index.md`, `inputs.md` and `evidence.md` during W1 when confirming baseline; no runtime code changed between commits |
+| Google `/v1beta/openai/chat/completions` may expect `max_tokens` or `max_completion_tokens`; plan flags this for W1 but does not prescribe a default | Minor | Already captured as a W1 verification task; confirm during vendor contract confirmation and record the result in the ADR |
+| Adding `supported_operations` to `BackendConfig` must preserve backward compatibility for existing configurations | Minor | Default to `["responses", "embeddings"]` for Azure backends and `["responses"]` for Google backends when omitted, matching the W2 migration note |
+
+Verdict: **Approved for implementation** with no blocking findings. All three items are
+addressable during early implementation activities (W1/W2) without plan revision.
 
 ## Implementation Evidence to Add Later
 

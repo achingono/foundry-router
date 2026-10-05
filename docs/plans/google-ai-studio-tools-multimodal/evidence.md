@@ -19,6 +19,7 @@ verification, media inference, tool round trip or production enablement is estab
 | Documentation checks | `.venv/bin/python` relative-link/whitespace/template check; `git diff --check`; content inspection | 91 relative targets across nine touched Markdown files resolve; no template/whitespace issues; diff and secret/status claims reviewed |
 | SonarQube script | Absent at inspected baseline | No scan performed; conditional implementation gate retained |
 | Runtime/provider checks | Not run for this documentation-only task | No code tests, live calls, media/tool execution or deployed-capability claims |
+| Cross-plan review | [Consolidated review](../cross-plan-review-2026-10-05.md), 2026-10-05 | Reviewed alongside adapter and model-aliases plans; 2 moderate + 2 minor findings recorded; plan approved for implementation |
 
 ## Review Dispositions
 
@@ -31,6 +32,22 @@ The independent session re-read the changed contract, activities, exit criteria 
 confirmed both findings closed, with no Critical/Major findings remaining. It also confirmed
 that deferred native/media schemas and per-capability gates do not establish implementation.
 These are plan-review conclusions, not runtime/client/vendor verification.
+
+## Cross-Plan Review Findings
+
+Independent cross-plan review session, 2026-10-05. Reviewed alongside
+`google-ai-studio-adapter` and `model-aliases` plans.
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| Official OpenAI Python/Node SDKs with `extra="forbid"` Pydantic models may strip or reject the `foundry_provider_state` extension field on deserialization | Moderate | Plan anticipates this in T1 and R2; during T1 explicitly test pinned SDK versions for field preservation and document client requirements or restrictions if stripped |
+| Auth layer (`verify_client_auth`) returns raw keys without a principal identifier; continuation token binding needs a stable caller scope | Moderate | Plan accurately identifies the gap; document the caller-scope generation function (e.g. `HMAC_SHA256(matched_key, salt)`) during T1/T2 as a non-breaking internal enhancement to `verify_client_auth` |
+| Increment B changes to `PricingTier` / `estimate_request_cost` must remain backward-compatible with existing Azure text models and `test_credit.py` | Minor | Ensure media pricing dimensions are additive; existing text-only pricing paths and test assertions must continue to pass without modification |
+| Approval table role labels (`Draft author`, `Independent reviewer`, `API/release approver`) differ from template standard (`Owner`, `Reviewer`, `Approver`) | Minor | Functionally equivalent; align or parenthetically note template labels for strict conformity |
+
+Verdict: **Approved for implementation** with no blocking findings. The two moderate items
+are addressable during T1/T2 without plan revision; both are already anticipated by
+existing plan activities and risks.
 
 ## Future Evidence
 
