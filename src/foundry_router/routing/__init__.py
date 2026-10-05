@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -9,6 +10,9 @@ from typing import Any
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 
+from foundry_router.api.adapters import get_adapter
+from foundry_router.api.adapters.base import AdapterRejection
+from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
     CreditAssessment,
     CreditAssessmentContext,
@@ -18,6 +22,7 @@ from foundry_router.credit import (
     score_credit_assessment,
 )
 from foundry_router.credit_groups import CreditStoreError
+from foundry_router.forwarding import BackendRequestResult
 from foundry_router.health import (
     COOLDOWN_STATES,
     BackendHealthState,
@@ -34,6 +39,8 @@ class BackendSelectionResult:
     insufficient_credit_capacity: bool
     pricing_unavailable: bool = False
     rate_limit_unavailable: bool = False
+    operation_unsupported: bool = False
+    feature_rejection: Any | None = None
 
 
 def ranked_model_backends(
@@ -52,6 +59,46 @@ def select_backend(settings: Any, model: str) -> str | None:
     if not ranked:
         return None
     return ranked[0]
+
+
+def _backend_supports_operation(settings: Any, backend_id: str, operation: str) -> bool:
+    backends = getattr(settings, "backends", None)
+    if not isinstance(backends, dict) or backend_id not in backends:
+        return True
+    config = backends.get(backend_id)
+    if config is None:
+        return False
+    declared = getattr(config, "supported_operations", None)
+    if declared is None:
+        # Test doubles without the new field keep the legacy allow-all behavior.
+        return True
+    return operation in declared
+
+
+def _backend_feature_rejection(
+    settings: Any, backend_id: str, operation: str, body: dict[str, Any]
+) -> Any | None:
+    backends = getattr(settings, "backends", None)
+    if not isinstance(backends, dict) or backend_id not in backends:
+        # Legacy test doubles without backend configs keep the legacy allow-all behavior.
+        return None
+    config = backends.get(backend_id)
+    if config is None:
+        return None
+    provider = getattr(config, "provider", "azure_foundry")
+    try:
+        adapter = get_adapter(provider)
+    except ValueError:
+        return None
+    try:
+        return adapter.check_request(operation, body)
+    except Exception:
+        # Fail closed: an adapter bug must not make an unvalidated request eligible.
+        return AdapterRejection(
+            status_code=422,
+            code="unsupported_parameter",
+            message="Request could not be validated for the configured backend",
+        )
 
 
 def _emit_routing_decision(
@@ -121,6 +168,37 @@ async def select_candidate_backend(
     ranked_candidates = ranked_model_backends(settings, model, excluded=excluded)
     if not ranked_candidates:
         return BackendSelectionResult(None, [], {}, False)
+
+    # Operation-aware filtering happens before any reservation. Backends that
+    # do not declare the requested operation are excluded; feature gates are
+    # applied per provider so a capable Azure backend keeps a request alive
+    # when Google rejects an unsupported field.
+    operation_eligible = [
+        backend_id
+        for backend_id in ranked_candidates
+        if _backend_supports_operation(settings, backend_id, operation)
+    ]
+    if not operation_eligible:
+        return BackendSelectionResult(
+            None, ranked_candidates, {}, False, operation_unsupported=True
+        )
+    feature_eligible: list[str] = []
+    feature_rejection: Any | None = None
+    for backend_id in operation_eligible:
+        rejection = _backend_feature_rejection(settings, backend_id, operation, body)
+        if rejection is None:
+            feature_eligible.append(backend_id)
+        elif feature_rejection is None:
+            feature_rejection = rejection
+    if not feature_eligible:
+        return BackendSelectionResult(
+            None,
+            ranked_candidates,
+            {},
+            False,
+            feature_rejection=feature_rejection,
+        )
+    ranked_candidates = feature_eligible
 
     snapshots = await health_store.snapshot_backend_health(ranked_candidates)
     await credit_store.sync_from_settings(settings)
@@ -526,6 +604,84 @@ async def all_candidates_cooldown_response(
     return cooldown_exhausted_response(candidates, snapshots, api_error=api_error)
 
 
+def _reservation_deadline_monotonic(settings: Any) -> float:
+    """Absolute deadline anchored at reservation creation.
+
+    Computed once, immediately after the initial credit/quota reservation, and
+    retained across retries and failover with cleanup headroom — never reset
+    per attempt — so stalled reads, retry waits, prefetch, and slow downstream
+    delivery cannot outlive the reservation they settle against.
+    """
+    reservation_age = float(getattr(settings, "reservation_max_age_seconds", 900.0))
+    headroom = min(float(DEFAULT_CLEANUP_TIMEOUT_SECONDS), reservation_age / 2)
+    return time.monotonic() + reservation_age - headroom
+
+
+def _deadline_exceeded_result(
+    settings: Any,
+    model: str,
+    operation: str,
+    body: dict[str, Any],
+    api_error: Any,
+) -> BackendRequestResult:
+    """Synthesize a terminal billable outcome for an expired reservation.
+
+    The estimate is settled (never refunded): expiry proves nothing about
+    non-generation, and the attempt may already have dispatched upstream.
+    """
+    try:
+        estimate = estimate_request_cost(
+            model=model,
+            operation=operation,
+            body=body,
+            pricing=getattr(settings, "pricing", {}),
+        )
+    except Exception:
+        estimate = None
+    return BackendRequestResult(
+        response=api_error(502, "Backend request exceeded its deadline", "upstream_error"),
+        retryable_failure=False,
+        settlement_cost_usd=estimate.estimated_cost_usd if estimate is not None else None,
+        settlement_input_tokens=estimate.input_tokens if estimate is not None else None,
+        force_charge=True,
+    )
+
+
+async def _execute_backend_with_deadline(
+    execute_backend: Any,
+    backend_id: str,
+    *,
+    deadline_monotonic: float,
+    settings: Any,
+    model: str,
+    operation: str,
+    body: dict[str, Any],
+    api_error: Any,
+) -> BackendRequestResult:
+    """Run one backend attempt bounded by the reservation deadline.
+
+    A deadline already expired before dispatch means this backend was never
+    contacted: the result is terminal without force-charge so the undispatched
+    reservation is released. A timeout during the attempt may follow dispatch,
+    so it settles the estimate instead.
+    """
+    remaining = deadline_monotonic - time.monotonic()
+    if remaining <= 0:
+        return BackendRequestResult(
+            response=api_error(502, "Backend request exceeded its deadline", "upstream_error"),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
+    try:
+        async with asyncio.timeout(remaining):
+            backend_result: BackendRequestResult = await execute_backend(
+                backend_id, reservation_deadline_monotonic=deadline_monotonic
+            )
+            return backend_result
+    except TimeoutError:
+        return _deadline_exceeded_result(settings, model, operation, body, api_error)
+
+
 async def execute_with_single_failover(
     settings: Any,
     model: str,
@@ -543,6 +699,9 @@ async def execute_with_single_failover(
     rate_limit_store: Any | None = None,
 ) -> Response:
     started_at = time.monotonic()
+    # Start before admission so storage latency cannot grant a fresh lifetime
+    # to a reservation already created inside initial selection.
+    reservation_deadline = _reservation_deadline_monotonic(settings)
 
     async def record_and_return(
         response: Response,
@@ -590,6 +749,27 @@ async def execute_with_single_failover(
                 ),
                 backend_id=None,
             )
+        if first_selection.operation_unsupported:
+            return await record_and_return(
+                api_error(
+                    422,
+                    f"Operation '{operation}' is not supported by any configured backend",
+                    "unsupported_operation",
+                ),
+                backend_id=None,
+            )
+        if first_selection.feature_rejection is not None:
+            rejection = first_selection.feature_rejection
+            return await record_and_return(
+                api_error(
+                    int(getattr(rejection, "status_code", 422)),
+                    str(
+                        getattr(rejection, "message", "Unsupported request for configured backends")
+                    ),
+                    str(getattr(rejection, "code", "unsupported_parameter")),
+                ),
+                backend_id=None,
+            )
         candidate_cooldown_response = cooldown_exhausted_response(
             first_selection.candidates,
             first_selection.snapshots,
@@ -628,19 +808,63 @@ async def execute_with_single_failover(
     reservation_closed_or_transferred = False
     credit_finalization_attempted = False
     original_finalize = finalize_non_streaming_credit
+    # Anchor the absolute deadline at the initial reservation: both backend
+    # attempts (including failover) share it, so neither outlives the
+    # reservation their settlement closes.
 
     async def finalize_credit(**kwargs: Any) -> Any:
         nonlocal credit_finalization_attempted
         credit_finalization_attempted = True
         return await original_finalize(**kwargs)
 
+    async def settle_billable(result: BackendRequestResult, backend_id: str) -> None:
+        nonlocal credit_finalization_attempted, reservation_closed_or_transferred
+        credit_finalization_attempted = True
+        reservation_closed_or_transferred = True
+
+        async def credit() -> None:
+            await credit_store.finalize_request(
+                request_id,
+                backend_id=backend_id,
+                charge_reserved=True,
+                charged_cost_usd=result.settlement_cost_usd,
+            )
+
+        operations: list[Any] = [credit]
+        if rate_limit_store is not None:
+            operations.append(
+                lambda: rate_limit_store.finalize_request(
+                    request_id, actual_input_tokens=result.settlement_input_tokens
+                )
+            )
+        await protected_cleanup(operations)
+
     finalize_non_streaming_credit = finalize_credit
 
     try:
-        first_result = await execute_backend(first_backend_id)
+        first_result = await _execute_backend_with_deadline(
+            execute_backend,
+            first_backend_id,
+            deadline_monotonic=reservation_deadline,
+            settings=settings,
+            model=model,
+            operation=operation,
+            body=body,
+            api_error=api_error,
+        )
 
         if not first_result.retryable_failure:
+            if first_result.confirmed_pre_dispatch and rate_limit_store is not None:
+                await rate_limit_store.release_request(request_id)
             if not isinstance(first_result.response, StreamingResponse):
+                if bool(getattr(first_result, "force_charge", False)):
+                    finalized_cost = getattr(first_result, "settlement_cost_usd", None)
+                    await settle_billable(first_result, first_backend_id)
+                    return await record_and_return(
+                        first_result.response,
+                        backend_id=first_backend_id,
+                        actual_cost_usd=finalized_cost,
+                    )
                 finalized_cost = await finalize_non_streaming_credit(
                     request_id=request_id,
                     model=model,
@@ -678,6 +902,26 @@ async def execute_with_single_failover(
                 charged_cost_usd=None,
             )
         credit_finalization_attempted = False
+        # Retain the dispatched first attempt's quota consumption: convert its
+        # reservation into recorded usage so the failover admission for the
+        # second attempt sees both attempts. Releasing here would let two
+        # upstream dispatches share a single quota entry.
+        if rate_limit_store is not None:
+            try:
+                failover_estimate = estimate_request_cost(
+                    model=model,
+                    operation=operation,
+                    body=body,
+                    pricing=getattr(settings, "pricing", {}),
+                )
+            except Exception:
+                failover_estimate = None
+            await rate_limit_store.finalize_request(
+                request_id,
+                actual_input_tokens=(
+                    failover_estimate.input_tokens if failover_estimate is not None else None
+                ),
+            )
         second_selection = await select_candidate_backend(
             settings,
             model,
@@ -802,15 +1046,30 @@ async def execute_with_single_failover(
                 estimated_cost_usd=None,
             )
 
-        second_result = await execute_backend(second_backend_id)
+        second_result = await _execute_backend_with_deadline(
+            execute_backend,
+            second_backend_id,
+            deadline_monotonic=reservation_deadline,
+            settings=settings,
+            model=model,
+            operation=operation,
+            body=body,
+            api_error=api_error,
+        )
+        if second_result.confirmed_pre_dispatch and rate_limit_store is not None:
+            await rate_limit_store.release_request(request_id)
         if not isinstance(second_result.response, StreamingResponse):
-            finalized_cost = await finalize_non_streaming_credit(
-                request_id=request_id,
-                model=model,
-                settings=settings,
-                response=second_result.response,
-                backend_id=second_backend_id,
-            )
+            if bool(getattr(second_result, "force_charge", False)):
+                finalized_cost = getattr(second_result, "settlement_cost_usd", None)
+                await settle_billable(second_result, second_backend_id)
+            else:
+                finalized_cost = await finalize_non_streaming_credit(
+                    request_id=request_id,
+                    model=model,
+                    settings=settings,
+                    response=second_result.response,
+                    backend_id=second_backend_id,
+                )
             reservation_closed_or_transferred = True
             if second_result.retryable_failure:
                 all_cooldown = await all_candidates_cooldown_response(

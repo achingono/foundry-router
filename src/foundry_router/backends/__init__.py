@@ -14,6 +14,9 @@ class SecurityError(Exception):
     """Raised when a security policy is violated."""
 
 
+MAX_GOOGLE_RESPONSE_BYTES = 4 * 1024 * 1024
+
+
 class AllowedBackendClient:
     """HTTP client restricted to configured HTTPS origins and base paths."""
 
@@ -150,7 +153,12 @@ class AllowedBackendClient:
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
             effective_operation = self._google_operation(operation)
-            path = f"{base.path.rstrip('/')}/v1beta/openai/{effective_operation.lstrip('/')}"
+            # Avoid accidental double compatibility suffixes when the operator
+            # configures the endpoint with the compat root already included.
+            base_path = base.path.rstrip("/")
+            compat_root = "/v1beta/openai"
+            base_path = base_path.removesuffix(compat_root)
+            path = f"{base_path}{compat_root}/{effective_operation.lstrip('/')}"
             return base.copy_with(path=path)
 
         if not config.deployment:
@@ -169,7 +177,9 @@ class AllowedBackendClient:
             raise ValueError(f"Unknown backend '{backend_id}'")
         safe_headers = self._sanitize_headers(headers) or {}
         if config.provider == "google_ai_studio":
-            safe_headers["x-goog-api-key"] = config.credential
+            # Documented OpenAI-compat auth is `Authorization: Bearer <key>`
+            # (verified 2026-10-05). Strip inbound auth above; never forward it.
+            safe_headers["authorization"] = f"Bearer {config.credential}"
             return safe_headers
         safe_headers["api-key"] = config.credential
         return safe_headers
@@ -230,6 +240,7 @@ class AllowedBackendClient:
             "authorization",
             "token",
             "secret",
+            "key",
             "x-api-key",
             "x-goog-api-key",
             "apikey",

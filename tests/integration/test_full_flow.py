@@ -102,8 +102,18 @@ class TestFullFlow:
             return_value=httpx.Response(
                 200,
                 json={
-                    "id": "from-project-c",
-                    "usage": {"input_tokens": 2, "output_tokens": 1},
+                    "id": "chatcmpl-synthetic",
+                    "object": "chat.completion",
+                    "created": 1700000000,
+                    "model": "gemini-2.5-flash",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "synthetic hello"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
                 },
             )
         )
@@ -117,9 +127,18 @@ class TestFullFlow:
         metrics = client.get("/metrics", headers={"x-admin-key": "admin-key-789"})
 
         assert response.status_code == 200
-        assert response.json()["id"] == "from-project-c"
+        public = response.json()
+        assert public["object"] == "response"
+        assert public["model"] == "gemini-2.5-flash"
+        assert public["status"] == "completed"
+        assert public["output"][0]["content"][0]["text"] == "synthetic hello"
+        assert public["usage"] == {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3}
         assert route.call_count == 1
-        assert route.calls[0].request.headers["x-goog-api-key"] == "synthetic-project-c-key"
+        upstream_json = json.loads(route.calls[0].request.content)
+        assert upstream_json["model"] == "gemini-2.5-flash"
+        assert upstream_json["messages"] == [{"role": "user", "content": "hello"}]
+        assert upstream_json["max_completion_tokens"] == 4096
+        assert route.calls[0].request.headers["authorization"] == "Bearer synthetic-project-c-key"
         assert status.status_code == 200
         assert metrics.status_code == 200
         assert "synthetic-project-c-key" not in response.text

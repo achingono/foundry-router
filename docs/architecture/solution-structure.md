@@ -53,12 +53,12 @@ The modular implementation decomposes `src/foundry_router/` and adds infrastruct
 ```text
 foundry-router/
 ├── src/foundry_router/
-│   ├── api/                  # FastAPI routers (openai, admin, health)
+│   ├── api/                  # FastAPI routers (openai, admin, health) + adapters/ (provider protocol, azure, google_ai_studio)
 │   ├── auth/                 # API key verification & constant-time HMAC
 │   ├── backends/             # Restricted HTTP client, limits, HTTP/2
-│   ├── config/               # Pydantic settings & validation
+│   ├── config/               # Pydantic settings & validation (incl. supported_operations)
 │   ├── credit/               # Cycle math, reservations, estimates, scoring
-│   ├── forwarding/           # Transport execution, retries, SSE parser
+│   ├── forwarding/           # Transport execution, retries, SSE parser + Google translation/settlement
 │   ├── health/               # Ephemeral cooldown state tracking
 │   ├── logging/              # Redacted structured JSON logging
 │   ├── metrics/              # Prometheus telemetry (single-process; multi-process Planned)

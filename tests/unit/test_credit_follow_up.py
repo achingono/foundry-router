@@ -36,7 +36,9 @@ async def test_failed_membership_initialization_stops_egress_and_same_settings_r
         assert not [key for key in client.entities if key[1].startswith("req-")]
     client.try_create_entity = create
     assert (await run_route(settings, store, execute)).status_code == 200
-    execute.assert_awaited_once_with("a")
+    execute.assert_awaited_once()
+    assert execute.await_args.args == ("a",)
+    assert execute.await_args.kwargs["reservation_deadline_monotonic"] > 0
     assert store._credit_aliases == {"a": "new-one", "b": "new-two"}
 
 

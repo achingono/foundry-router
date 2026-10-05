@@ -21,7 +21,7 @@ def api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
     )
 
 
-async def request_body(  # noqa: PLR0911, PLR0912
+async def request_body(
     request: Request, endpoint: str, *, max_body_bytes: int
 ) -> dict[str, Any] | JSONResponse:
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":

@@ -416,15 +416,20 @@ class TestQuotaAwareSelection:
         assert all(snapshot.state.value == "QUOTA_COOLDOWN" for snapshot in health.values())
 
     @pytest.mark.asyncio
-    async def test_google_429_without_retry_after_uses_bounded_jitter(self) -> None:
+    async def test_google_429_without_retry_after_is_single_shot_for_routing_failover(
+        self,
+    ) -> None:
         settings = self._settings()
         settings.retry_attempts = 2
         settings.retry_max_delay_seconds = 3.0
         health_store = InMemoryHealthStore()
         delays: list[float] = []
+        calls = 0
 
         class BackendClient:
             async def request_backend(self, *_args: Any, **_kwargs: Any) -> Response:
+                nonlocal calls
+                calls += 1
                 return Response(429, json={"error": "RESOURCE_EXHAUSTED"})
 
         async def collect_sleep(seconds: float) -> None:
@@ -443,9 +448,12 @@ class TestQuotaAwareSelection:
             api_error=api_error,
         )
 
+        # Single-shot per backend: routing owns the retry with fresh quota
+        # admission, so forwarding must not sleep or re-dispatch internally.
         assert result.retryable_failure is True
-        assert len(delays) == 1
-        assert 0.0 <= delays[0] <= 1.0
+        assert result.response.status_code == 429
+        assert calls == 1
+        assert delays == []
 
 
 class TestMetricsEndpoint:
@@ -1000,7 +1008,7 @@ class TestOpenAIEndpoints:
         )
         calls: list[str] = []
 
-        async def execute(backend_id: str) -> BackendRequestResult:
+        async def execute(backend_id: str, **_kwargs) -> BackendRequestResult:
             calls.append(backend_id)
             await _set_backend_cooldown(
                 backend_id,
@@ -1049,7 +1057,7 @@ class TestOpenAIEndpoints:
             )
         )
 
-        async def execute(backend_id: str) -> BackendRequestResult:
+        async def execute(backend_id: str, **_kwargs) -> BackendRequestResult:
             calls.append(backend_id)
             return BackendRequestResult(Response(503), retryable_failure=True)
 
@@ -1836,7 +1844,7 @@ class TestOpenAIEndpoints:
             retry_max_delay_seconds=0.01,
         )
 
-        async def execute(_backend_id: str) -> BackendRequestResult:
+        async def execute(_backend_id: str, **_kwargs) -> BackendRequestResult:
             raise asyncio.CancelledError
 
         with pytest.raises(asyncio.CancelledError):
@@ -1878,7 +1886,7 @@ class TestOpenAIEndpoints:
         )
         calls: list[str] = []
 
-        async def execute(backend_id: str) -> BackendRequestResult:
+        async def execute(backend_id: str, **_kwargs) -> BackendRequestResult:
             calls.append(backend_id)
             if backend_id == "backend_a":
                 return BackendRequestResult(Response(503), retryable_failure=True)
@@ -2055,7 +2063,7 @@ class TestOpenAIEndpoints:
             retry_max_delay_seconds=0.01,
         )
 
-        async def mock_execute_backend(backend_id: str) -> BackendRequestResult:
+        async def mock_execute_backend(backend_id: str, **_kwargs) -> BackendRequestResult:
             if backend_id == "backend_a":
                 return BackendRequestResult(
                     response=Response(502, json={"error": "a failed"}),

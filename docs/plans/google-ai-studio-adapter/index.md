@@ -12,9 +12,10 @@
 
 ## Status
 
-**Planned**. This is an implementation plan, prepared against commit `b6a188c` on
-2026-10-05. Runtime implementation and real Google inference verification are pending.
-It extends the [Phase 09 work](../phase-09-google-ai-studio-multikey/index.md).
+**Implemented** with mocked verification (2026-10-05). Runtime translation, operation-aware
+routing, bounded streaming, quota/credit settlement, and regression tests are implemented in code;
+independent implementation review and the opt-in real Google inference gate remain pending as
+separate gates. It extends the [Phase 09 work](../phase-09-google-ai-studio-multikey/index.md).
 Independent plan review is complete with no blocking findings remaining; see [Evidence](evidence.md).
 
 ## Objective

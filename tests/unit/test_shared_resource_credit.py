@@ -233,7 +233,7 @@ async def test_failover_release_before_second_egress(store, groups):
     settings = shared_settings(groups)
     calls = []
 
-    async def execute(backend):
+    async def execute(backend, *_args, **_kwargs):
         calls.append(backend)
         live = await store.live_snapshot(list(set(groups)), **POLICY)
         assert sum(snapshot.active_reservations for snapshot in live.values()) == 1
@@ -297,7 +297,7 @@ async def test_quota_failure_release_stops_second_selection(store):
 
 @pytest.mark.asyncio
 async def test_cancellation_releases_shared_reservation(store):
-    async def execute(_backend):
+    async def execute(_backend, *_args, **_kwargs):
         raise asyncio.CancelledError()
 
     with pytest.raises(asyncio.CancelledError):

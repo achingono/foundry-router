@@ -1,14 +1,16 @@
 # Routing and Scheduling
 
-## Status: Partially implemented (core, credit scheduling, and process-local Google quota-aware routing; distributed quota accounting Planned)
+## Status: Implemented (core, credit scheduling, process-local Google quota-aware routing, and operation-aware adapter routing with mocked verification; distributed quota accounting and real Google inference Planned)
 
-For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
+For each request: identify the model, filter candidates by declared `supported_operations` and provider request capabilities, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
+
+Operation-aware routing applies identically on initial selection and failover, before either store reserves. If no configured candidate supports the operation, routing returns HTTP 422 `unsupported_operation` without egress; if candidates support the operation but none support the request features (for example tools on Google-only pools), routing returns the relevant unsupported-field error; capable Azure candidates stay eligible, including during failover. Google embedding models require explicit `supported_operations: ["embeddings"]`.
 
 ## Separate Quota from Credit
 
 Quota represents rate or capacity constraints such as TPM/RPM. Credit represents a dollar or resource allowance. A backend can have high credit and exhausted quota, or available quota and insufficient safe credit. The router considers both independently.
 
-## Google AI Studio Quota Routing (Partially implemented)
+## Google AI Studio Quota Routing (Implemented, Single-Process; Adapter Mock-Verified)
 
 Represent each API key as a backend in the model pool. Routing uses the existing deterministic
 score and weight tie-break, not round-robin. A quota-health term is the minimum remaining fraction
@@ -19,10 +21,17 @@ weight.
 
 Rate state is shared by `quota_group` (normally a Google Cloud project), so keys in one project
 share budget and cooldown. The router reserves estimated input usage before dispatch and updates it
-from response or terminal SSE usage when available. Failover transfers the server-owned reservation;
+from translated response usage or terminal Responses SSE usage when available; embeddings use the
+same quota store on selection, failover, and finalization. On failover the dispatched attempt's
+quota consumption is retained (finalized into recorded usage) before the second attempt is
+admitted, so every upstream dispatch is counted. Estimates cover `instructions` and
+supported history plus per-message overhead. Failover transfers the server-owned reservation;
 abandoned reservations are reclaimed after the configured age. Exhaustion and pre-output 429s cool
-all configured backends in the project group. The existing no-failover-after-stream-output rule is
-unchanged.
+all configured backends in the project group; Google 401/403 enters backend-local `ERROR_COOLDOWN`
+without same-request key cycling. Only Google 429 is retryable/failover-eligible; ambiguous
+dispatched failures retain conservative quota consumption and settle credit without another
+dispatch. The existing no-failover-after-stream-output rule is
+unchanged (for Google, latched at the first downstream event, including lifecycle events).
 
 The in-memory quota store is single-process only. Multi-worker and multi-replica quota aggregation
 is **Planned**; do not interpret local snapshots as authoritative Google quota counters.
@@ -87,7 +96,7 @@ Per-backend candidate detail (health, cooldown, credit, composite score, quota h
 
 ## Retry and Failover
 
-Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. Allow one immediate backend failover by default, use bounded exponential backoff, honor `Retry-After` within a maximum delay, and never retry indefinitely. A 429 enters quota cooldown. No retry or failover occurs after streaming has meaningfully started.
+Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. Allow one immediate backend failover by default, use bounded exponential backoff, honor `Retry-After` within a maximum delay, and never retry indefinitely. A 429 enters quota cooldown. No retry or failover occurs after streaming has meaningfully started. Google attempts are single-shot per backend (no internal sleep/retry): the 429 failover above is the only Google retry, admitted fresh with both attempts counted against project quota.
 
 ## State Store Abstractions (Phases 5–6, Implemented)
 

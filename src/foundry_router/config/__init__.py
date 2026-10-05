@@ -27,6 +27,7 @@ class BackendConfig(BaseModel):
     quota_group: str | None = None
     credit_metered: bool = True
     credit_group: str | None = None
+    supported_operations: list[str] | None = None
 
     @field_validator("credit_group")
     @classmethod
@@ -70,6 +71,23 @@ class BackendConfig(BaseModel):
             raise ValueError("Backend quota group must not be blank")
         return v
 
+    @field_validator("supported_operations")
+    @classmethod
+    def validate_supported_operations(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("Backend supported_operations must not be empty")
+        if len(v) != len(set(v)):
+            raise ValueError("Backend supported_operations must not contain duplicates")
+        allowed = {"responses", "embeddings"}
+        for operation in v:
+            if operation not in allowed:
+                raise ValueError(
+                    f"Backend supported_operations entry '{operation}' is not supported"
+                )
+        return list(v)
+
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
         if self.provider == "azure_foundry":
@@ -77,6 +95,8 @@ class BackendConfig(BaseModel):
                 raise ValueError("Backend deployment is required for azure_foundry backends")
             if not self.api_version or not self.api_version.strip():
                 raise ValueError("Backend API version is required for azure_foundry backends")
+            if self.supported_operations is None:
+                self.supported_operations = ["responses", "embeddings"]
             return self
 
         if self.provider == "google_ai_studio":
@@ -84,6 +104,15 @@ class BackendConfig(BaseModel):
                 raise ValueError(
                     "Google AI Studio model name is required for google_ai_studio backends"
                 )
+            endpoint_path = str(self.endpoint)
+            for forbidden in ("/chat/completions", "/embeddings"):
+                if forbidden in endpoint_path:
+                    raise ValueError(
+                        "Google AI Studio endpoint must be the service root or the "
+                        f"'/v1beta/openai' compat root, not an operation path ('{forbidden}')"
+                    )
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
             return self
 
         return self

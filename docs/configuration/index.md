@@ -1,6 +1,6 @@
 # Configuration
 
-## Status: Partially implemented (Google AI Studio quota-aware routing is single-process; distributed quota accounting remains Planned)
+## Status: Implemented (Google AI Studio quota-aware routing is single-process and the Responses/embeddings adapter is implemented with mocked verification; distributed quota accounting and real Google inference remain Planned)
 
 Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Retry/cooldown/failover settings are runtime behavior, and Phase 04 local credit estimation settings are runtime-enforced.
 
@@ -66,6 +66,48 @@ pool must be homogeneous: it cannot mix metered and non-metered backends because
 are configured per logical model. An all-non-metered model always receives zero pricing,
 regardless of any pricing entry. Metered pools still require explicit pricing and complete
 per-credit-group configuration for readiness.
+
+Each backend declares the operations it serves via `supported_operations`. Azure backends default
+to `["responses", "embeddings"]`; Google backends default to `["responses"]` and must explicitly
+declare `["embeddings"]` to serve embeddings (existing Google embeddings configurations must add
+the declaration; there is no automatic model discovery). Empty, duplicated, or unknown operations
+are rejected at config load.
+
+Synthetic environment-loaded examples (placeholders only; never real keys, endpoints, or model IDs
+beyond the documented compat root):
+
+```bash
+FOUNDRY_BACKENDS_JSON='{
+  "gemini-text-a": {
+    "provider": "google_ai_studio",
+    "endpoint": "https://generativelanguage.googleapis.com",
+    "credential": "${GEMINI_TEXT_A_KEY}",
+    "deployment": "gemini-2.5-flash",
+    "quota_group": "text-project",
+    "credit_metered": false,
+    "supported_operations": ["responses"]
+  },
+  "gemini-emb-a": {
+    "provider": "google_ai_studio",
+    "endpoint": "https://generativelanguage.googleapis.com",
+    "credential": "${GEMINI_EMB_A_KEY}",
+    "deployment": "gemini-embedding-001",
+    "quota_group": "emb-project",
+    "credit_metered": false,
+    "supported_operations": ["embeddings"]
+  }
+}'
+FOUNDRY_MODELS_JSON='{
+  "gemini-text": {"backends": {"gemini-text-a": 1.0}},
+  "gemini-embeddings": {"backends": {"gemini-emb-a": 1.0}}
+}'
+FOUNDRY_QUOTA_GROUP_RATE_LIMITS_JSON='{"text-project": {"rpm": 15, "tpm": 1000000, "rpd": 1500}}'
+```
+
+Paid (metered) Google pools keep `credit_metered: true` with explicit pricing and complete
+per-credit-group cycle configuration; free-tier pools use `credit_metered: false` with zero
+pricing. Non-metered opt-out affects dollar credit only; it never bypasses quota admission.
+Paid balances and prices remain local operator estimates with no Google billing synchronization.
 
 ## Core Settings
 

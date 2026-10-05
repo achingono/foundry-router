@@ -16,8 +16,12 @@ Authentication comparisons (`verify_client_auth`, `verify_admin_auth`) evaluate 
 
 Use Azure Container Apps secrets or managed identity where practical. Never store API keys, authorization headers, credentials, prompts, or model outputs in source, Git history, Docker images, logs, or normal status responses. Log redaction must be tested rather than assumed.
 
-For Google AI Studio backends, credentials are injected by the backend client in the `x-goog-api-key`
-header. Client-supplied values for that header are stripped. Admin status and metric labels identify
+For Google AI Studio backends, the backend client injects the server-side credential as
+`Authorization: Bearer <key>` on the documented OpenAI-compatible surface (verified 2026-10-05;
+the native `x-goog-api-key` header is not used there). Client-supplied `Authorization`, `api-key`,
+`x-api-key`, and `x-goog-api-key` values are stripped before forwarding, and credential-bearing
+query strings (including Google's `key` parameter) are rejected by the backend client. Admin status
+and metric labels identify
 backends and quota groups by configured IDs only; they never include credentials. Keep project IDs
 and quota configuration separate from API key strings. Google recommends restricting API keys and
 keeping them confidential; see [API key security guidance](https://docs.cloud.google.com/docs/authentication/api-keys-use).

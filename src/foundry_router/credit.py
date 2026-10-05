@@ -269,6 +269,18 @@ def estimate_request_cost(
     output_tokens = 0
     if operation == "responses":
         input_tokens = _estimate_text_tokens(body.get("input"))
+        instructions = body.get("instructions")
+        if isinstance(instructions, str):
+            instruction_tokens = _chars_to_tokens(instructions)
+            if instruction_tokens < 0:
+                return None
+            input_tokens += instruction_tokens
+        # Conservative per-message framing overhead for translated history.
+        history_input = body.get("input")
+        if isinstance(history_input, list):
+            input_tokens += 4 * len(history_input)
+        if input_tokens < 0:
+            return None
         max_output_tokens = body.get("max_output_tokens")
         if max_output_tokens is None:
             output_tokens = DEFAULT_MAX_OUTPUT_TOKENS

@@ -1,10 +1,31 @@
 # Public API
 
-## Status: Implemented (Responses, embeddings, models, health, admin/status, metrics single-process; `chat/completions` remains optional Planned)
+## Status: Implemented (Responses, embeddings, models, health, admin/status, metrics single-process; Google text/embeddings adapter Implemented with mocked verification, real Google inference Planned; `chat/completions` remains optional Planned)
 
 The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
-Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-version query, substituting the selected deployment name into the body `model`. Azure embeddings retains `POST {endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_version}`. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker. SSE bytes are forwarded unchanged; bounded usage inspection accepts terminal `response.usage` as well as top-level usage.
+Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-version query, substituting the selected deployment name into the body `model`. Azure embeddings retains `POST {endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_version}`. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker. Azure SSE bytes are forwarded unchanged; bounded usage inspection accepts terminal `response.usage` as well as top-level usage.
+
+## Google AI Studio Adapter (Implemented, Mocked Verification)
+
+Configured `google_ai_studio` backends are usable through the existing Responses and embeddings API via an explicit protocol adapter (`src/foundry_router/api/adapters/`). Google's OpenAI-compatible surface is `POST {endpoint-root}/v1beta/openai/chat/completions` and `POST {endpoint-root}/v1beta/openai/embeddings` with `Authorization: Bearer <server-side key>` (verified 2026-10-05). Client authentication is never forwarded. This is a text/embeddings compatibility subset, verified with strict mocked Chat Completions/envelope contracts; real Google inference remains **Planned** (opt-in live gate). It must not be advertised as full compatibility with tool-dependent coding-agent workflows.
+
+| Public input | Google mapping or outcome |
+| --- | --- |
+| `model` | Route by logical alias; send the backend `deployment`; return the logical alias |
+| `input: "text"` | One user message |
+| `input` message array | Ordered `system`/`developer`/`user`/`assistant` text history (`developer` normalizes to `system`); `input_text`/`output_text`/`text` parts preserved in order |
+| `instructions` | System instruction preceding history; included in the admission estimate |
+| `max_output_tokens` | Positive bounded integer mapped to `max_completion_tokens`; the reserved bound is enforced upstream when omitted |
+| `temperature` (0-2), `top_p` (0-1) | Validated and mapped |
+| `stream: true` | Upstream requests `stream_options: {"include_usage": true}`; downstream emits Responses lifecycle events |
+| `store: false`, `background: false`, `include: []` | Accepted stateless values; omitted upstream |
+| `metadata` | Validated; echoed in the public response only, never logged or forwarded |
+| Tools, `previous_response_id`, stored conversations/background, structured output, reasoning, multimodal, other unlisted fields | Rejected with HTTP 422 (`unsupported_parameter`/`unsupported_input`) before reservation/egress |
+
+Non-streaming Google success requires a single-choice Chat Completions envelope with an assistant text message and a documented finish reason (`stop` → completed; `length` → incomplete `max_output_tokens`; `content_filter` → incomplete `content_filter`). Usage maps `prompt_tokens` → `input_tokens` and `completion_tokens` → `output_tokens`. Missing usage retains conservative estimates; invalid usage, unknown finish reasons, tool calls, and malformed envelopes are sanitized 502 protocol failures. Embeddings accept string/nonempty string lists (float only); the returned count/order/dimensions are validated against the request (including requested dimensions) with mismatches rejected as protocol failures, and actual input tokens are reconciled.
+
+Google streaming decodes Chat SSE incrementally (split UTF-8, LF/CRLF, multiline data, keepalives, multiple events per chunk, usage-only final chunks) and emits ordered Responses events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta*`, done events, exactly one `response.completed`/`response.incomplete`/`response.failed`) with consistent IDs and monotonically increasing sequence numbers. Post-commit failures emit a schema-valid `response.failed` carrying the same response identity, continued sequencing, and `failed` status. No synthetic lifecycle event is sent before the first validated upstream event; after the first downstream event there is no retry or failover. EOF without the documented `[DONE]` terminator is a truncation failure. Google attempts are single-shot per backend: only 429 is failover-eligible (admitted fresh with both attempts counted); ambiguous dispatched failures (partial writes, read failures, timeouts, truncated 200 streams, 5xx, cancellation after possible dispatch) settle known usage or the estimate and terminate. Google 401/403 enters backend-local `ERROR_COOLDOWN` without same-request key cycling. Reads, prefetch, and delivery are bounded by the reservation deadline, which routing anchors at reservation creation and retains across failover.
 
 ## Endpoints
 
@@ -282,20 +303,50 @@ Content-Type: application/json
 }
 ```
 
-**Response (200 OK - Streaming)**
+**Response (200 OK - Streaming, Azure Passthrough)**
 ```http
 HTTP/1.1 200 OK
 Content-Type: text/event-stream
 Cache-Control: no-cache
 Connection: keep-alive
 
-data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": "Quantum"}]}]
+data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": "Quantum"}]}]}
 
-data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": " computing uses"}]}]
+data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": " computing uses"}]}]}
 
-data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": " quantum bits..."}]}]
+data: {"id": "resp_abc123", "object": "response", "created_at": 1699999999, "model": "gpt-5.4", "output": [{"type": "message", "id": "msg_abc123", "role": "assistant", "content": [{"type": "output_text", "text": " quantum bits..."}]}]}
 
 data: [DONE]
+```
+
+**Response (200 OK - Streaming, Google-Translated Shape)**
+
+Google-backed streams emit Responses lifecycle events (not raw `chat.completion.chunk` bytes):
+
+```http
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Cache-Control: no-cache
+
+data: {"type":"response.created","sequence_number":1,"response":{"id":"resp_abc123","object":"response","created_at":1699999999,"model":"gemini-2.5-flash","status":"in_progress","output":[]}}
+
+data: {"type":"response.in_progress","sequence_number":2,"response":{"id":"resp_abc123","object":"response","created_at":1699999999,"model":"gemini-2.5-flash","status":"in_progress","output":[]}}
+
+data: {"type":"response.output_item.added","sequence_number":3,"output_index":0,"item":{"type":"message","id":"msg_abc123","role":"assistant","status":"in_progress","content":[]}}
+
+data: {"type":"response.content_part.added","sequence_number":4,"item_id":"msg_abc123","output_index":0,"content_index":0,"part":{"type":"output_text","text":"","annotations":[]}}
+
+data: {"type":"response.output_text.delta","sequence_number":5,"item_id":"msg_abc123","output_index":0,"content_index":0,"delta":"Quantum"}
+
+data: {"type":"response.output_text.delta","sequence_number":6,"item_id":"msg_abc123","output_index":0,"content_index":0,"delta":" computing uses"}
+
+data: {"type":"response.output_text.done","sequence_number":7,"item_id":"msg_abc123","output_index":0,"content_index":0,"text":"Quantum computing uses"}
+
+data: {"type":"response.content_part.done","sequence_number":8,"item_id":"msg_abc123","output_index":0,"content_index":0,"part":{"type":"output_text","text":"Quantum computing uses","annotations":[]}}
+
+data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"type":"message","id":"msg_abc123","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Quantum computing uses","annotations":[]}]}}
+
+data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_abc123","object":"response","created_at":1699999999,"model":"gemini-2.5-flash","status":"completed","output":[{"type":"message","id":"msg_abc123","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Quantum computing uses","annotations":[]}]}],"usage":{"input_tokens":15,"output_tokens":12,"total_tokens":27}}}
 ```
 
 **Response (404 Not Found - Unknown Model)**
@@ -479,15 +530,45 @@ Common error types:
 - `rate_limit_exceeded` - All backends rate limited
 - `insufficient_credit_capacity` - No backend has sufficient safe estimated credit capacity
 - `invalid_request` - Malformed request body
+- `unsupported_operation` - No configured backend supports the requested operation
+- `unsupported_parameter`/`unsupported_input` - Request uses fields no capable backend supports
 - `authentication_error` - Invalid or missing credentials
+- `upstream_error` - Sanitized backend failure (provider bodies are never relayed)
 - `internal_error` - Unexpected server error
 
 ## Streaming Behavior
 
-- SSE events are forwarded without buffering the full response
+Google provider error envelopes and malformed non-null usage produce a redacted terminal
+failure immediately, with backend cooldown and bounded cleanup. Metadata is echoed in
+public JSON and SSE response objects and never sent upstream. Blank text history is rejected
+before admission; system/developer text-part arrays are flattened in order to system text.
+Embedding translation failures use valid reported input-token usage with zero output tokens.
+
+Google delivery uses the same absolute reservation deadline as routing and forwarding.
+It bounds actual ASGI response-start and body sends as well as upstream reads. Expiry
+closes the stream and runs bounded independent credit/quota/transport cleanup, including
+when repeated cancellation interrupts a blocked connection close. Confirmed expiry before
+dispatch releases the unused backend reservation; an ambiguous in-flight timeout settles
+known usage or the estimate.
+
+Google non-streaming cancellation protection includes normal connection closure and health
+updates after a successful read. Reported usage is retained before those awaits, so an
+interruption charges known generation usage (or the estimate), retains quota consumption,
+and runs bounded connection cleanup without retrying the request.
+
+The same attempt-wide protection applies to Google streaming before downstream handoff,
+including health activation after prefetch and HTTP errors while reading error bodies.
+Decoded usage remains available for settlement; ambiguous dispatched failures retain quota
+and charge known usage or the estimate. Ownership transfers to the downstream response only
+after successful handoff.
+
+- Azure SSE events are forwarded without buffering the full response
+- Google SSE is translated incrementally into Responses lifecycle events (never raw `chat.completion.chunk`)
 - Each event boundary is preserved
+- No synthetic Google lifecycle event is emitted before the first validated upstream event
 - Errors occurring after streaming begins are forwarded as SSE events
-- No retry or failover after meaningful streaming data has been sent
+- No retry or failover after meaningful streaming data has been sent (for Google, after the first downstream event, including lifecycle events)
+- Google truncation (EOF without `[DONE]`) is a terminal `response.failed` outcome, never a successful completion
 - Empty pre-output chunks are bounded by the router's pre-first-byte timeout and empty-chunk budget
 - Stream cleanup runs on successful completion, upstream failure, status-body read failure, and cancellation
 - `Retry-After` headers from upstream are honored within configured maximum delay

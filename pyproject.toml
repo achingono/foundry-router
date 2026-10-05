@@ -107,8 +107,14 @@ unfixable = ["T10", "TCH", "INT", "ASYNC"]
 ]
 "src/foundry_router/api/**/*.py" = [
     "E501",
+    "PLR0911",
+    "PLR0912",
     "PLR0913",
+    "PLR0915",
     "PLR2004",
+    "TRY004",
+    "SIM102",
+    "FURB192",
     "TC002",
 ]
 "src/foundry_router/health/__init__.py" = [

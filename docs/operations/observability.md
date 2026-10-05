@@ -23,9 +23,9 @@ backend IDs only; credentials are not logged.
 ## Live Administrative Diagnostics (Implemented)
 
 Authenticated administrators can query `GET /admin/status` (requires `x-admin-key`).
-- **Configuration snapshot**: Returns configured backends, endpoints, regions, deployments, models, weights, and cycle parameters.
+- **Configuration snapshot**: Returns configured backends, endpoints, providers, supported operations, regions, deployments, models, weights, and cycle parameters. Supported operations are configured capabilities, not probed provider availability.
 - **Live diagnostics**: Exposes health state, cooldown remaining seconds, credit state, available credit, reserved in-flight amount, active reservation count, oldest active reservation age in seconds, and cycle boundary timestamps without disclosing secrets. Table-backed diagnostics are implemented in code; Azure deployment verification remains pending.
-- **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters.
+- **Quota diagnostics**: For configured quota groups, each backend includes its group ID, RPM/input-TPM/RPD usage and remaining budget, exhaustion state, and reset delay. Keys sharing a group show the same snapshot. These values are in-process estimates, not authoritative Google counters. Google logical model aliases (never provider model IDs substituted upstream) are used in public results and telemetry.
 - **Multi-replica support**: Deployed shared state remains **Partially implemented** until Azure validation and a two-replica deployment pass. Table provisioning, identity-only client wiring, startup selection and bounded readiness probes are implemented in the current code; production remains memory-backed with one replica.
 
 ## Reservation Lifecycle Safety (Implemented)

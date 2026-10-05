@@ -12,9 +12,9 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 
 ## Boundaries
 
-- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation, and streaming response packaging.
-- **Forwarding (`forwarding/`)**: Owns outbound HTTP transport, retry loops, bounded pre-output waiting, streaming chunk pass-through, and SSE terminal usage extraction with bounded buffers.
-- **Backend client (`backends/`)**: Owns outbound connection pool lifecycle (`httpx.Limits`), keep-alive tuning, HTTP/2 multiplexing, and safe header allow-listing.
+- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation (`api/adapters/`: typed provider protocol, Azure pass-through, Google Chat Completions/embeddings translation with per-request stream decoders), and streaming response packaging.
+- **Forwarding (`forwarding/`)**: Owns outbound HTTP transport, retry loops, bounded pre-output waiting, Azure streaming chunk pass-through and Google Responses SSE translation with prefetch-validated commit, incremental bounded reads, absolute reservation deadlines, and billable-failure settlement with bounded buffers.
+- **Backend client (`backends/`)**: Owns outbound connection pool lifecycle (`httpx.Limits`), keep-alive tuning, HTTP/2 multiplexing, provider URL/header enforcement (Google `Authorization: Bearer`, double-suffix-tolerant compat paths, credential query rejection), and safe header allow-listing.
 - **Routing & Scheduling (`routing/`)**: Owns candidate selection, composite scoring (ADR-006), deterministic tie-breaking, failover coordination, and explainable decision logging.
 - **Health tracking (`health/`)**: Owns ephemeral health states (`ACTIVE`, `QUOTA_COOLDOWN`, `ERROR_COOLDOWN`, `DISABLED`), cooldown duration calculation, and snapshotting.
 - **Credit subsystem (`credit/` & `reconciliation/`)**: Owns cycle calculations, conservative token/cost estimation, atomic reservation lifecycle (`try...finally`), safe-capacity validation, and periodic billing reconciliation.

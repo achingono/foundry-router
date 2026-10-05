@@ -133,13 +133,26 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
-| Provider-specific Google OpenAI-compatible URL and API-key header with client-header stripping | Implemented | `src/foundry_router/config/`, `src/foundry_router/backends/` | `tests/unit/test_config.py`, `tests/unit/test_backends.py`; vendor references in ADR-007 |
+| Provider-specific Google OpenAI-compatible URL and Bearer header with client-header stripping | Implemented | `src/foundry_router/config/`, `src/foundry_router/backends/` | `tests/unit/test_config.py`, `tests/unit/test_backends.py`, `tests/unit/test_google_adapter.py`; vendor references in ADR-007/ADR-008 |
 | One backend per key and project-scoped quota-group configuration, including unknown-group rejection | Implemented | `src/foundry_router/config/` | `tests/unit/test_config.py`, `tests/unit/test_main.py` |
 | Monotonic 60-second RPM/input-TPM, Pacific-midnight RPD, bounded reservations and actual-token reconciliation | Implemented (in-memory single process) | `src/foundry_router/ratelimit.py`, `src/foundry_router/api/common.py`, `src/foundry_router/forwarding/` | `tests/unit/test_ratelimit.py`, `tests/unit/test_main.py` |
 | Quota-headroom score, candidate filtering, project-wide proactive and reactive cooldown | Implemented | `src/foundry_router/routing/`, `src/foundry_router/forwarding/`, `src/foundry_router/credit.py` | `tests/unit/test_main.py`, `tests/unit/test_credit.py` |
 | Homogeneous non-metered free-tier credit opt-out and zero pricing for free model pools | Implemented | `src/foundry_router/config/`, `src/foundry_router/api/routes/health.py`, `src/foundry_router/routing/` | `tests/unit/test_main.py`, `tests/unit/test_config.py` |
 | Per-key/group quota diagnostics and budget/cooldown metrics | Implemented | `src/foundry_router/api/routes/admin.py`, `src/foundry_router/metrics/` | `tests/unit/test_main.py`, `tests/unit/test_metrics.py` |
 | Cross-replica quota consistency and multi-worker quota/metrics aggregation | Planned | Future distributed rate-limit store | Phase 09 plan; no distributed quota adapter is implemented |
+
+## Google AI Studio Responses Adapter (Implemented with Mocked Verification; Real Inference Planned)
+
+| Requirement | Implementation Status | Package | Evidence |
+| --- | --- | --- | --- |
+| Typed provider adapter boundary with Azure pass-through and Google request/response/SSE translation | Implemented | `src/foundry_router/api/adapters/` | `tests/unit/test_google_adapter.py`; [adapter evidence](../plans/google-ai-studio-adapter/evidence.md) |
+| `supported_operations` validation with Azure/Google defaults and identical initial/failover eligibility | Implemented | `src/foundry_router/config/`, `src/foundry_router/routing/` | `tests/unit/test_google_adapter.py`, `tests/integration/test_google_adapter_integration.py` |
+| Non-streaming Responses/embeddings translation with usage normalization and sanitized errors | Implemented | `src/foundry_router/api/adapters/`, `src/foundry_router/forwarding/` | `tests/unit/test_google_adapter.py`, `tests/integration/test_full_flow.py`, `tests/integration/test_google_adapter_integration.py` |
+| Bounded incremental SSE translation with prefetch-validated commit and exactly-once terminal outcomes | Implemented | `src/foundry_router/api/adapters/`, `src/foundry_router/forwarding/` | `tests/unit/test_google_adapter.py` |
+| Embeddings quota wiring on selection, failover, and finalization | Implemented | `src/foundry_router/api/routes/openai.py` | `tests/integration/test_google_adapter_integration.py` |
+| Conservative estimates (instructions/history/overhead), enforced upstream output limits | Implemented | `src/foundry_router/credit.py` | `tests/unit/test_google_adapter.py` |
+| Narrowed Google retries (429-only), backend-local auth cooldown, billable-failure settlement, no retry after downstream delivery | Implemented | `src/foundry_router/forwarding/`, `src/foundry_router/routing/` | `tests/integration/test_google_adapter_integration.py` |
+| Real Google inference (non-streaming, streaming, embeddings, history, settlement) | Planned | Operator test topology | [Adapter plan](../plans/google-ai-studio-adapter/index.md) W7 gate; no live credentials used |
 
 ## Phase 10 Bicep Existing-Resource Support Traceability (Implemented as template code)
 

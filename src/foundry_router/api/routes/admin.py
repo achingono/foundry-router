@@ -98,8 +98,10 @@ def _admin_backend_status(
     }
     return {
         "endpoint": str(config.endpoint),
+        "provider": getattr(config, "provider", "azure_foundry"),
         "region": config.region,
         "deployment": config.deployment,
+        "supported_operations": list(getattr(config, "supported_operations", []) or []),
         "credit_group": group,
         "cycle_start_day": settings.backend_cycle_start_day.get(group),
         "cycle_allowance_usd": settings.backend_cycle_allowance_usd.get(group),

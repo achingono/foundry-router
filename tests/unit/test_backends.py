@@ -161,7 +161,7 @@ class TestAllowedBackendClient:
 
         respx.post(
             "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-            headers={"x-goog-api-key": "AIza-test-key"},
+            headers={"authorization": "Bearer AIza-test-key"},
         ).mock(return_value=httpx.Response(200, json={"ok": True}))
 
         client = AllowedBackendClient()
@@ -169,7 +169,7 @@ class TestAllowedBackendClient:
             "gemini_a",
             "chat/completions",
             json={"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"authorization": "Bearer injected"},
+            headers={"authorization": "Bearer injected", "x-goog-api-key": "injected"},
         )
 
         assert response.status_code == 200
