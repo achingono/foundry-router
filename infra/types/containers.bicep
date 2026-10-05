@@ -49,6 +49,15 @@ type RouterStateConfig = {
 
 @export()
 @sealed()
+type IngressIpSecurityRestriction = {
+  name: string
+  ipAddressRange: string
+  action: 'Allow' | 'Deny'
+  description: string?
+}
+
+@export()
+@sealed()
 type RouterConfig = {
   name: string
   containerName: string
@@ -66,6 +75,8 @@ type RouterConfig = {
   secretUrls: RouterSecretUrls
   registry: RouterRegistryConfig
   state: RouterStateConfig
+  modelAliases: object
+  ingressIpSecurityRestrictions: IngressIpSecurityRestriction[]
 }
 
 @export()

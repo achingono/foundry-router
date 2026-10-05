@@ -21,6 +21,23 @@ models:
 
 The initial logical model set is `gpt-5.6-luna`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.3-codex`, `gpt-5.2-chat`, and `text-embedding-3-large`.
 
+## Logical Model Aliases (Implemented with mocked verification)
+
+`FOUNDRY_MODEL_ALIASES_JSON` is an optional object mapping explicit client-facing alias
+names to canonical model IDs (for example `{"codex-auto-review": "gpt-6.1-sol"}`).
+It defaults to `{}` and creates no new capacity, pools, prices, or resources.
+Resolution is exact, case-sensitive, and one-hop before provider and deployment
+selection; alias chains, wildcards, fuzzy matching, and unknown-model fallback are
+rejected. Alias keys must not collide with canonical IDs, targets must exist in
+`FOUNDRY_MODELS_JSON`, and pricing must be keyed by canonical targets (alias price
+overrides are rejected). Upstream JSON bodies and SSE bytes are preserved, including
+the provider's reported `model`; an accepted alias therefore does not imply
+equivalence to a specialized provider reviewer. Roll out or roll back by changing the
+validated configuration through the normal drain/restart procedure; in-flight requests
+settle against their captured canonical target. Bicep exposes optional nonsecret
+`modelAliases` (default `{}`) through root/typed/container wiring into
+`FOUNDRY_MODEL_ALIASES_JSON`.
+
 ## Shared Resource Credit (Implemented)
 
 Set `credit_group` on each deployment backend belonging to the same resource credit account.

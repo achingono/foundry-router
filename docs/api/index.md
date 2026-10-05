@@ -6,13 +6,23 @@ The service exposes an OpenAI-compatible base URL such as `https://<host>/openai
 
 Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-version query, substituting the selected deployment name into the body `model`. Azure embeddings retains `POST {endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_version}`. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker. SSE bytes are forwarded unchanged; bounded usage inspection accepts terminal `response.usage` as well as top-level usage.
 
+Logical model aliases (Implemented with mocked verification) resolve once at API
+ingress before admission: the requested name is replaced by its canonical target in
+a shallow request copy, while all non-model fields are preserved exactly. Routing,
+estimates, reservations, settlement, and metrics use the canonical pool and its
+prices; failover never re-resolves. `GET /openai/v1/models` lists canonical models
+in configured order followed by configured aliases in sorted order, each exactly once.
+`GET /admin/status` adds a separate `model_aliases` map. Upstream response and SSE
+bodies are untouched, so the provider's reported `model` may differ from the alias;
+live inference and approval-client compatibility remain separately gated.
+
 ## Endpoints
 
 | Method and path | Requirement |
 | --- | --- |
 | `POST /openai/v1/responses` | Implemented; normal and streaming forwarding |
 | `POST /openai/v1/embeddings` | Implemented; embedding forwarding |
-| `GET /openai/v1/models` | Required; list configured logical models |
+| `GET /openai/v1/models` | Required; list configured logical models and explicit aliases |
 | `GET /health/live` | Process liveness |
 | `GET /health/ready` | Readiness based on usable configuration/backend state |
 | `GET /admin/status` | Implemented; authenticated configuration/model snapshots and live health/credit diagnostics (Table-backed code is implemented; multi-replica Azure deployment verification remains pending) |

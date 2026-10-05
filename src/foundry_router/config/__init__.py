@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from foundry_router.config.model_aliases import parse_model_aliases
 from foundry_router.credit_groups import credit_membership, validate_credit_group
 
 
@@ -244,6 +245,13 @@ class Settings(BaseSettings):
         description="JSON object mapping model names to pricing configs",
     )
 
+    # Logical model aliases (JSON string)
+    model_aliases_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_MODEL_ALIASES_JSON",
+        description="JSON object mapping explicit alias names to canonical model IDs",
+    )
+
     # Google AI Studio free-tier rate limits per quota group
     quota_group_rate_limits_json: str = Field(
         default="{}",
@@ -319,6 +327,7 @@ class Settings(BaseSettings):
     client_api_keys: list[str] = Field(default_factory=list, exclude=True)
     admin_api_keys: list[str] = Field(default_factory=list, exclude=True)
     pricing: dict[str, PricingConfig] = Field(default_factory=dict, exclude=True)
+    model_aliases: dict[str, str] = Field(default_factory=dict, exclude=True)
     quota_group_rate_limits: dict[str, dict[str, int]] = Field(default_factory=dict, exclude=True)
     backend_cycle_start_day: dict[str, int] = Field(default_factory=dict, exclude=True)
     backend_cycle_allowance_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
@@ -410,6 +419,9 @@ class Settings(BaseSettings):
                     f"Model '{model_name}' cannot mix credit-metered and non-metered backends"
                 )
 
+        # Parse logical model aliases (one-hop, canonical targets only)
+        self.model_aliases = parse_model_aliases(self.model_aliases_json, set(self.models))
+
         # Parse client API keys
         self.client_api_keys = load_key_list(
             self.client_api_keys_json, "FOUNDRY_CLIENT_API_KEYS_JSON"
@@ -442,6 +454,12 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid FOUNDRY_PRICING_JSON pricing entry: {exc}") from exc
         if len(self.pricing) != len(pricing_data):
             raise ValueError("FOUNDRY_PRICING_JSON values must be JSON objects")
+        for alias_name in self.model_aliases:
+            if alias_name in self.pricing:
+                raise ValueError(
+                    f"FOUNDRY_PRICING_JSON must not contain alias '{alias_name}'; "
+                    "canonical target pricing is inherited"
+                )
         for model_name, pool in self.models.items():
             if all(not self.backends[backend_id].credit_metered for backend_id in pool.backends):
                 self.pricing[model_name] = PricingConfig(

@@ -11,7 +11,7 @@ targetScope = 'resourceGroup'
 import { ResourceMode, RegistryAuthMode } from './types/common.bicep'
 import { StateBackend, StorageTableNames } from './types/state.bicep'
 import { RuntimeIdentityRef } from './types/identity.bicep'
-import { EnvironmentConfig, RouterConfig } from './types/containers.bicep'
+import { EnvironmentConfig, RouterConfig, IngressIpSecurityRestriction } from './types/containers.bicep'
 
 // --- Mode contract (Phase 10 step 1: default new keeps CI hermetic) ---
 @description('Whether to provision a new Azure Container Registry or attach to an existing one.')
@@ -85,6 +85,12 @@ var effectiveStateBackend StateBackend = stateBackend
 @maxLength(50)
 param tablePrefix string = replace(appName, '-', '')
 
+@description('Optional logical model aliases as an object mapping alias names to canonical model IDs. Serialized into FOUNDRY_MODEL_ALIASES_JSON; empty by default with no new resources.')
+param modelAliases object = {}
+
+@description('Ingress IP restrictions preserved during deployment. An empty array removes all IP restrictions. Use consistent Allow or Deny actions as required by Container Apps.')
+param ingressIpSecurityRestrictions IngressIpSecurityRestriction[] = []
+
 // --- Image coordinates (Phase 10 step 3: no free-text image reference) ---
 @description('Container image repository path within the registry (no registry host, no tag).')
 param imageRepository string = 'foundry-router'
@@ -129,6 +135,9 @@ param backendCycleAllowanceSecretName string = 'backend-cycle-allowance'
 
 @description('Secret name (without vault URI) holding the backend initial-remaining JSON (FOUNDRY_BACKEND_INITIAL_ESTIMATED_REMAINING_USD_JSON).')
 param backendInitialRemainingSecretName string = 'backend-initial-remaining'
+
+@description('Optional immutable Key Vault version for initial credit estimates, preventing a replacement revision from loading a cached older value.')
+param backendInitialRemainingSecretVersion string = ''
 
 // --- App tuning ---
 @description('Container port.')
@@ -257,7 +266,7 @@ var modelsSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${modelsJ
 var pricingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${pricingJsonSecretName}'
 var cycleStartDaySecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendCycleStartDaySecretName}'
 var cycleAllowanceSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendCycleAllowanceSecretName}'
-var initialRemainingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendInitialRemainingSecretName}'
+var initialRemainingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendInitialRemainingSecretName}${empty(backendInitialRemainingSecretVersion) ? '' : '/${backendInitialRemainingSecretVersion}'}'
 
 // --- Log Analytics with cost guardrails ---
 module observability './modules/observability.bicep' = {
@@ -348,6 +357,8 @@ var routerConfig RouterConfig = {
     healthTableName: healthTableName
     creditTableName: creditTableName
   }
+  modelAliases: modelAliases
+  ingressIpSecurityRestrictions: ingressIpSecurityRestrictions
 }
 
 module containerApp './modules/containers/router.bicep' = {

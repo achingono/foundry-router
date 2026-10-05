@@ -177,6 +177,7 @@ def build_router(
                 }
                 for name, pool in settings.models.items()
             },
+            "model_aliases": dict(getattr(settings, "model_aliases", {}) or {}),
             "config": {
                 "reconciliation_interval_minutes": settings.reconciliation_interval_minutes,
                 "min_credit_reserve_usd": settings.min_credit_reserve_usd,
@@ -215,6 +216,7 @@ def build_router(
                 group: snapshot.available_credit_usd for group, snapshot in credit_snapshots.items()
             },
             backend_rate_limit_snapshots=rate_limit_snapshots,
+            model_aliases=dict(getattr(settings, "model_aliases", {}) or {}),
         )
         return Response(content=payload, media_type="text/plain; version=0.0.4; charset=utf-8")
 

@@ -4,6 +4,16 @@
 
 For each request: identify the model, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 
+## Logical Model Aliases (Implemented with mocked verification)
+
+Explicit aliases resolve once to a canonical pool before candidate ranking, cost
+estimation, admission, failover, streaming settlement, and metrics. The router keeps
+requested, canonical, and physical deployment identities separate: accounting and
+policy inherit the target pool, while diagnostics carry `requested_model`,
+`resolved_model`, and `alias` alongside the canonical `model`. Resolution is frozen
+for in-flight requests, so retargeting or removing an alias only affects later
+requests through the normal drain/restart procedure.
+
 ## Separate Quota from Credit
 
 Quota represents rate or capacity constraints such as TPM/RPM. Credit represents a dollar or resource allowance. A backend can have high credit and exhausted quota, or available quota and insufficient safe credit. The router considers both independently.
@@ -76,7 +86,10 @@ absent/finalized tracking slots even when balance reconciliation is unavailable.
 Composite candidate scores combine availability, quota health, credit health, cycle urgency, and error health per ADR-006.
 
 Every routing decision emits a structured `routing_decision` event containing:
-- `model`: Requested model identifier
+- `model`: Resolved canonical model identifier
+- `requested_model`: Client-supplied model identifier
+- `resolved_model`: Canonical target (equals `model`)
+- `alias`: Whether the request used a configured alias
 - `operation`: Target operation (`responses` or `embeddings`)
 - `request_id`: Request correlation ID
 - `selected_backend`: Selected backend ID or `null` if none
