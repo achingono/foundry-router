@@ -47,6 +47,57 @@ Provide **one** of:
 - Header: `api-key: <your-client-key>`
 - Header: `Authorization: Bearer <your-client-key>`
 
+### Client Configuration
+
+Configure clients with the base URL `https://<router-host>/openai/v1` and a logical model ID returned by `GET /openai/v1/models`. This router implements the Responses API; `POST /openai/v1/chat/completions` remains planned.
+
+For OpenCode, use the `@ai-sdk/openai` package, which sends Responses API requests. The `@ai-sdk/openai-compatible` package sends Chat Completions requests and is not compatible with the currently implemented inference route.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "foundry-router": {
+      "npm": "@ai-sdk/openai",
+      "name": "Foundry Router",
+      "options": {
+        "baseURL": "https://<router-host>/openai/v1",
+        "apiKey": "{env:FOUNDRY_ROUTER_API_KEY}"
+      },
+      "models": {
+        "<model-id-from-models-endpoint>": {
+          "name": "<model-display-name>"
+        }
+      }
+    }
+  },
+  "model": "foundry-router/<model-id-from-models-endpoint>"
+}
+```
+
+For Codex CLI, configure a custom provider using the Responses wire API:
+
+```toml
+model = "<model-id-from-models-endpoint>"
+model_provider = "foundry-router"
+
+[model_providers.foundry-router]
+name = "Foundry Router"
+base_url = "https://<router-host>/openai/v1"
+wire_api = "responses"
+env_key = "FOUNDRY_ROUTER_API_KEY"
+supports_websockets = false
+```
+
+Set `FOUNDRY_ROUTER_API_KEY` in the environment that launches each client. Codex's shared app-server inherits its environment when it starts, so restart it after setting or changing the key:
+
+```bash
+codex app-server daemon restart
+codex
+```
+
+Use `codex --no-daemon` to run the CLI without the shared app-server.
+
 ### Admin Authentication
 
 Provide **one** of:

@@ -6,6 +6,10 @@ IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD i
 
 ## Initial Container App
 
+To verify a client base URL and API key, run `scripts/operations/test-client-connection.sh
+https://<container-app-fqdn>/openai/v1`. Set `FOUNDRY_ROUTER_API_KEY` or enter the key at the
+hidden prompt; the script checks the authenticated models endpoint.
+
 Production configuration is **Implemented** for two resources, six model pools and two shared credit accounts. Twelve real production Responses tests passed (nonstream/stream for every model), including terminal usage and exact local estimated debit reconciliation. Counters show all requests selected fs-swarm; fs-openclaw inference and failover remain unverified. Production uses memory/one; Table cut-over remains pending. See [configuration](../plans/production-foundry/evidence.md) and [inference evidence](../plans/production-inference/evidence.md). Starting estimates are not Azure balances and reset on memory-process restart.
 
 Real non-streaming and streaming Responses verification is **Implemented** for both selected test models through the dedicated memory/one app. Azure v1 routing and nested terminal usage reconciliation were corrected after initial upstream 404s. Both streams completed and local test-price debits matched usage with zero inflight reservations. See [inference evidence](../plans/foundry-inference/evidence.md). This does not establish embeddings, real traffic failover, Table-backed real inference or authoritative Azure cost reconciliation.
