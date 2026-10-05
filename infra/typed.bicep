@@ -118,6 +118,7 @@ module deployment './main.bicep' = {
     appName: appName
     containerRegistryName: registry.kind == 'acr' ? registry.acr.name : 'unusedacr'
     registryResourceGroupName: registry.kind == 'acr' ? (registry.acr.mode == 'existing' ? registry.acr.resourceGroup : resourceGroup().name) : resourceGroup().name
+    registrySubscriptionId: registry.kind == 'acr' && registry.acr.mode == 'existing' ? (registry.acr.?subscriptionId ?? subscription().subscriptionId) : subscription().subscriptionId
     keyVaultName: vault.name
     keyVaultResourceGroupName: vault.mode == 'existing' ? vault.resourceGroup : resourceGroup().name
     stateBackend: state.backend

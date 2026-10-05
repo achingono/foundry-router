@@ -44,6 +44,9 @@ param containerRegistryName string = 'foundryrouteracr'
 @description('Resource group containing the registry when registryMode is existing. Defaults to the deployment resource group.')
 param registryResourceGroupName string = resourceGroup().name
 
+@description('Subscription containing an existing Azure Container Registry; defaults to the deployment subscription.')
+param registrySubscriptionId string = subscription().subscriptionId
+
 @description('Key Vault name (3-24 chars, globally unique). Used in both new and existing modes.')
 @minLength(3)
 @maxLength(24)
@@ -187,7 +190,7 @@ assert secretModeHasUsername = effectiveRegistryAuthMode != 'secret' || length(r
 // --- Existing resource declarations (explicit scope for cross-RG attach) ---
 resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = if (effectiveRegistryMode == 'existing' && registryServer == '') {
   name: containerRegistryName
-  scope: resourceGroup(registryResourceGroupName)
+  scope: resourceGroup(registrySubscriptionId, registryResourceGroupName)
 }
 
 resource existingVault 'Microsoft.KeyVault/vaults@2023-02-01' existing = if (effectiveKeyVaultMode == 'existing') {
@@ -365,7 +368,7 @@ module containerApp './modules/containers/router.bicep' = {
 // AcrPull on an existing registry via a module scoped to its resource group (covers cross-RG attach).
 module acrPullExisting './modules/registryPullRole.bicep' = if (effectiveRegistryMode == 'existing' && registryServer == '' && effectiveRegistryAuthMode == 'managedIdentity') {
   name: 'acr-pull-${uniqueString(resourceGroup().id, containerRegistryName)}'
-  scope: resourceGroup(registryResourceGroupName)
+  scope: resourceGroup(registrySubscriptionId, registryResourceGroupName)
   params: {
       config: {
         registryName: containerRegistryName

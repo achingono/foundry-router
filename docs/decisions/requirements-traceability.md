@@ -23,6 +23,23 @@ The original monolithic requirements document was split into the following desti
 
 The rewritten documents preserve the safety-critical requirements: credit versus quota separation, per-backend cycles, reserves, concurrency reservations, bounded failover, no retry after streaming begins, configured-backend-only egress, stale-cost handling, and explicit implementation-status labeling.
 
+## Shared Resource Credit Traceability (Implemented runtime)
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Safe canonical credit namespace; optional backend-default groups and canonical Settings keys | `src/foundry_router/credit_groups.py`, `config/` | `tests/unit/test_shared_resource_credit.py` |
+| Combined cross-model capacity, group cycles/reservations, immutable ownership and legacy defaults | `credit.py`, `state/table.py` | Shared-credit unit tests; Azurite cross-model contention/settlement/restart test |
+| Typed finalization failure; no second egress after failed release; independent quota/telemetry cleanup | `routing/`, `forwarding/`, `api/common.py` | Failover, cancellation, streaming and settlement-failure regressions |
+| Unique routable-group readiness, canonical admin/metric views and reconciliation counts | `api/routes/`, `metrics/`, `reconciliation/`, `main.py` | Shared-credit diagnostics/readiness/reconciliation tests |
+| Drained writers and explicit starting estimates; no implicit partition sum/migration | [operations](../operations/shared-resource-credit.md) | [verification evidence](../plans/shared-resource-credit/evidence.md) |
+| Twelve deployments/six pools/two production credits without placeholder deployment | Implemented (production configuration) | [Production evidence](../plans/production-foundry/evidence.md); readiness/topology verified, production inference pending |
+| Independent-review financial recovery: conservative legacy expiry, durable intent and dual ETag settlement | `credit.py`, `state/table.py`, `state/azure.py` | `tests/unit/test_credit_recovery.py`; real Azurite intent/recovery race |
+| Ambiguous admission hard-stop, metering-aware serialized publication and bounded same-ID ownership | `credit.py`, `state/table.py` | Commit-then-timeout/no-egress, metering-flip, interleaving, incomplete discovery and ownership-limit fault tests |
+| Context close cannot suppress financial cleanup; repeated cancellation and bounded timeout join | `cleanup.py`, `forwarding/` | Close-error, repeated-cancel, timeout and non-cooperative bounded-tracking fault tests |
+| Failed membership sync blocks new-settings egress; same-object retry | `state/table.py`, routing typed-error boundary | `tests/unit/test_credit_follow_up.py`; real Azurite failed-sync/retry regression |
+| Periodic complete ownership discovery retires absent/finalized slots independently of provider availability | `state/table.py`, `reconciliation/` | No-commit timeout, external reaper, lost acknowledgement and incomplete/ambiguous cap regressions; real Azurite |
+| Post-output failed streams charge known usage or full reserve, never status-based zero intent | `forwarding/` | Memory/Table known/no-usage/zero-usage regressions; real Azurite full-reserve debit; corrected existing main test |
+
 ## Implemented Hardening Traceability
 
 | Requirement | Implementation | Evidence |
@@ -142,6 +159,8 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 | Backend/model/pricing/cycle topology wired via Key Vault secret references (`FOUNDRY_BACKENDS_JSON`, `FOUNDRY_MODELS_JSON`, `FOUNDRY_PRICING_JSON`, cycle/allowance/remaining) | Implemented (template code) | `infra/main.bicep` | Deep-review remediation; secret values remain operator-supplied out of band |
 
 ## Phase 11 Distributed State Wiring Traceability (Partially implemented)
+
+Production model configuration and cross-subscription registry pull are **Implemented** and verified by [production configuration evidence](../plans/production-foundry/evidence.md): six selected pools, 12 backend deployments and two canonical credit groups; memory/one replica. Production inference and Table cut-over remain pending.
 
 Azure Responses v1 deployment substitution, bounded SSE usage inspection and nested terminal usage settlement are **Implemented** and verified by [real inference evidence](../plans/foundry-inference/evidence.md). Embeddings remains deployment-scoped; real embeddings and provider failure traffic remain unverified.
 

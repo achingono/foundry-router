@@ -17,6 +17,8 @@ type ExistingAcr = {
   name: string
   @minLength(1)
   resourceGroup: string
+  @minLength(1)
+  subscriptionId: string?
 }
 
 @export()

@@ -43,7 +43,9 @@ New registry/vault provisioning and scoped grants are **Implemented** in typed m
 
 ## Public typed entry point
 
-`typed.bicep` is **Implemented** as an opt-in resource-group-scoped adapter invoking `main.bicep`; the existing flat template and CI remain compatible. It forwards all 40 flat parameters and nine outputs without duplicating resource implementations. See [typed interface evidence](../docs/plans/bicep-public-interface/evidence.md).
+Cross-subscription existing ACR is supported with flat `registrySubscriptionId` (default: deployment subscription), or optional typed `registry.acr.subscriptionId`. Registry lookup and AcrPull deployment both target that subscription/resource group. Managed-identity pull requires the registry and app subscriptions to share a tenant. Deployer needs registry-scope role-assignment rights. Local input files are Git-ignored and excluded from Docker build context.
+
+`typed.bicep` is **Implemented** as an opt-in resource-group-scoped adapter invoking `main.bicep`; the existing flat template and CI remain compatible. It forwards all 41 flat parameters and nine outputs without duplicating resource implementations. See [typed interface evidence](../docs/plans/bicep-public-interface/evidence.md); the registry-subscription parameter was added subsequently for production.
 
 Required objects:
 

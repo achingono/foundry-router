@@ -56,6 +56,8 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Existing-account cross-RG Table verification](plans/table-existing-cross-rg/index.md)
 - [Real Foundry test backend configuration](plans/foundry-test-backend/index.md)
 - [Real Foundry inference verification](plans/foundry-inference/index.md)
+- [Production Foundry configuration](plans/production-foundry/index.md)
+- [Shared resource credit accounting](plans/shared-resource-credit/index.md)
 
 ## Reading Convention
 
