@@ -22,6 +22,8 @@ from foundry_router.credit import (
 from foundry_router.health import BackendHealthState
 
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
+MAX_SSE_EVENT_BUFFER_BYTES = 1024 * 1024
+SSE_INSPECTION_PIECE_BYTES = 64 * 1024
 HTTP_OK = 200
 HTTP_SUCCESS_LIMIT = 300
 HTTP_TOO_MANY_REQUESTS = 429
@@ -32,10 +34,11 @@ PRE_OUTPUT_TIMEOUT_SECONDS = 60.0
 
 
 def _extract_next_sse_event(buffer: bytes) -> tuple[bytes | None, bytes]:
-    for delimiter in (b"\r\n\r\n", b"\n\n"):
-        if delimiter in buffer:
-            event, remaining = buffer.split(delimiter, 1)
-            return event, remaining
+    boundaries = [(buffer.find(delimiter), delimiter) for delimiter in (b"\r\n\r\n", b"\n\n")]
+    found = [(index, delimiter) for index, delimiter in boundaries if index >= 0]
+    if found:
+        index, delimiter = min(found)
+        return buffer[:index], buffer[index + len(delimiter) :]
     return None, buffer
 
 
@@ -162,6 +165,7 @@ async def stream_response(
     charged_cost: float | None = None
     metric_status_code = status_code
     pending_event_bytes = b""
+    discarding_event = False
     actual_input_tokens: int | None = None
 
     def process_event_payload(payload: bytes) -> None:
@@ -183,6 +187,14 @@ async def stream_response(
             if not isinstance(parsed, dict):
                 continue
             usage = parsed.get("usage")
+            if not isinstance(usage, dict) and parsed.get("type") in {
+                "response.completed",
+                "response.incomplete",
+                "response.failed",
+            }:
+                response = parsed.get("response")
+                if isinstance(response, dict):
+                    usage = response.get("usage")
             if not isinstance(usage, dict):
                 continue
             usage_response = Response(
@@ -196,22 +208,37 @@ async def stream_response(
             if estimated_cost is not None:
                 charged_cost = estimated_cost
 
-    try:
-        yield first_chunk
-        pending_event_bytes += first_chunk
-        while True:
-            event_payload, pending_event_bytes = _extract_next_sse_event(pending_event_bytes)
-            if event_payload is None:
-                break
-            process_event_payload(event_payload)
-        async for chunk in chunks:
-            yield chunk
-            pending_event_bytes += chunk
+    def inspect_chunk(chunk: bytes) -> None:
+        nonlocal pending_event_bytes, discarding_event
+        offset = 0
+        while offset < len(chunk):
+            piece_size = min(
+                SSE_INSPECTION_PIECE_BYTES,
+                MAX_SSE_EVENT_BUFFER_BYTES - len(pending_event_bytes),
+                len(chunk) - offset,
+            )
+            pending_event_bytes += chunk[offset : offset + piece_size]
+            offset += piece_size
             while True:
                 event_payload, pending_event_bytes = _extract_next_sse_event(pending_event_bytes)
                 if event_payload is None:
                     break
-                process_event_payload(event_payload)
+                if discarding_event:
+                    discarding_event = False
+                else:
+                    process_event_payload(event_payload)
+            if len(pending_event_bytes) == MAX_SSE_EVENT_BUFFER_BYTES:
+                discarding_event = True
+            if discarding_event:
+                # Retain only the suffix needed to recognize a split CRLF delimiter.
+                pending_event_bytes = pending_event_bytes[-3:]
+
+    try:
+        yield first_chunk
+        inspect_chunk(first_chunk)
+        async for chunk in chunks:
+            yield chunk
+            inspect_chunk(chunk)
     except httpx.HTTPError:
         await set_backend_cooldown(
             backend_id,
@@ -221,7 +248,7 @@ async def stream_response(
         metric_status_code = 502
         yield b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
     finally:
-        if pending_event_bytes.strip():
+        if not discarding_event and pending_event_bytes.strip():
             process_event_payload(pending_event_bytes)
         await context.__aexit__(None, None, None)
         is_stream_success = metric_status_code < 400
@@ -230,14 +257,14 @@ async def stream_response(
                 request_id,
                 backend_id=backend_id,
                 charge_reserved=is_stream_success or (charged_cost is not None),
-                charged_cost_usd=charged_cost if is_stream_success else None,
+                charged_cost_usd=charged_cost,
             )
         except TypeError as exc:
             if "backend_id" in str(exc):
                 await credit_store.finalize_request(
                     request_id,
                     charge_reserved=is_stream_success or (charged_cost is not None),
-                    charged_cost_usd=charged_cost if is_stream_success else None,
+                    charged_cost_usd=charged_cost,
                 )
             else:
                 raise
@@ -250,7 +277,7 @@ async def stream_response(
             backend=backend_id,
             status_code=metric_status_code,
             latency_seconds=max(0.0, time.monotonic() - started_at),
-            estimated_cost_usd=charged_cost if is_stream_success else None,
+            estimated_cost_usd=charged_cost,
         )
 
 

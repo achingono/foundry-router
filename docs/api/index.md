@@ -4,7 +4,7 @@
 
 The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
-The router uses `POST {endpoint}/openai/deployments/{deployment}/{operation}?api-version={api_version}` for the configured Azure OpenAI-compatible backend. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker.
+Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-version query, substituting the selected deployment name into the body `model`. Azure embeddings retains `POST {endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_version}`. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker. SSE bytes are forwarded unchanged; bounded usage inspection accepts terminal `response.usage` as well as top-level usage.
 
 ## Endpoints
 

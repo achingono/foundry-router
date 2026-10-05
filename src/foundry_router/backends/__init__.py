@@ -121,7 +121,9 @@ class AllowedBackendClient:
             return "chat/completions"
         return normalized
 
-    def prepare_upstream_payload(self, backend_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    def prepare_upstream_payload(
+        self, backend_id: str, body: dict[str, Any], operation: str = "responses"
+    ) -> dict[str, Any]:
         """Return a copy of ``body`` with the provider deployment substituted.
 
         The router routes on the logical model alias (e.g. ``gpt-5.4``); the
@@ -132,7 +134,10 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         out = dict(body)
-        if config.provider == "google_ai_studio" and config.deployment:
+        if config.deployment and (
+            config.provider == "google_ai_studio"
+            or (config.provider == "azure_foundry" and operation == "responses")
+        ):
             out["model"] = config.deployment
         return out
 
@@ -150,6 +155,8 @@ class AllowedBackendClient:
 
         if not config.deployment:
             raise ValueError(f"Backend '{backend_id}' has no deployment configured")
+        if operation == "responses":
+            return base.copy_with(path=f"{base.path.rstrip('/')}/openai/v1/responses")
         path = (
             f"{base.path.rstrip('/')}/openai/deployments/"
             f"{quote(config.deployment, safe='')}/{operation}"
@@ -181,7 +188,10 @@ class AllowedBackendClient:
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
         if isinstance(kwargs.get("json"), dict):
-            kwargs = {**kwargs, "json": self.prepare_upstream_payload(backend_id, kwargs["json"])}
+            kwargs = {
+                **kwargs,
+                "json": self.prepare_upstream_payload(backend_id, kwargs["json"], operation),
+            }
         return await self._client.request(
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )
@@ -200,7 +210,10 @@ class AllowedBackendClient:
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
         if isinstance(kwargs.get("json"), dict):
-            kwargs = {**kwargs, "json": self.prepare_upstream_payload(backend_id, kwargs["json"])}
+            kwargs = {
+                **kwargs,
+                "json": self.prepare_upstream_payload(backend_id, kwargs["json"], operation),
+            }
         return self._client.stream(
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )

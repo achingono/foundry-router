@@ -4,7 +4,7 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Repository Status
 
-Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**. Azure template validation, one/two-replica synthetic Table verification and existing-account cross-RG runtime passed, including managed-identity accounting and targeted restart persistence. Production cut-over remains **Partially implemented**; production stays memory-backed with one replica until remaining gates pass. Real inference, provider admission traffic and multi-worker metrics aggregation remain unverified. See [Table runtime](plans/table-runtime-validation/evidence.md), [two-replica](plans/table-two-replica/evidence.md) and [cross-RG](plans/table-existing-cross-rg/evidence.md) evidence for exact scope.
+Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-replica and cross-RG verification passed. Real non-streaming/streaming Responses and usage settlement passed for both configured models in the dedicated memory/one test app. Table-backed real inference, provider failure/admission traffic, embeddings, authoritative cost reconciliation and production cut-over remain unverified. Production stays memory-backed with one replica. See [inference](plans/foundry-inference/evidence.md), [Table runtime](plans/table-runtime-validation/evidence.md), [two-replica](plans/table-two-replica/evidence.md) and [cross-RG](plans/table-existing-cross-rg/evidence.md) evidence for exact scope.
 
 ## Start Here
 
@@ -54,6 +54,8 @@ Phase 10 infrastructure and Phase 11 distributed-state code are **Implemented**.
 - [Table runtime validation](plans/table-runtime-validation/index.md)
 - [Two-replica synthetic Table verification](plans/table-two-replica/index.md)
 - [Existing-account cross-RG Table verification](plans/table-existing-cross-rg/index.md)
+- [Real Foundry test backend configuration](plans/foundry-test-backend/index.md)
+- [Real Foundry inference verification](plans/foundry-inference/index.md)
 
 ## Reading Convention
 

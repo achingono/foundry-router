@@ -41,6 +41,7 @@ def setup_settings(monkeypatch):
     monkeypatch.setattr("foundry_router.main.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.auth.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.backends.load_settings", lambda: test_settings)
+    monkeypatch.setattr("foundry_router.backends._backend_client", None)
     monkeypatch.setattr("foundry_router.config.load_settings", lambda: test_settings)
     asyncio.run(_reset_backend_health_state())
     asyncio.run(_reset_credit_state())

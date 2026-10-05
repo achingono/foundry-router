@@ -143,6 +143,8 @@ F3 was implemented as a `/health/ready` diagnostic rather than a fail-fast confi
 
 ## Phase 11 Distributed State Wiring Traceability (Partially implemented)
 
+Azure Responses v1 deployment substitution, bounded SSE usage inspection and nested terminal usage settlement are **Implemented** and verified by [real inference evidence](../plans/foundry-inference/evidence.md). Embeddings remains deployment-scoped; real embeddings and provider failure traffic remain unverified.
+
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
 | Conditional Azure Table provisioning, identity-only client wiring, `memory`/`table` state-backend validation | Implemented (template + settings code) | `infra/main.bicep`, `src/foundry_router/config/`, `src/foundry_router/state/azure.py` | `tests/unit/test_distributed_wiring.py`, `tests/unit/test_config.py` |

@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -67,6 +68,7 @@ def setup_settings(monkeypatch):
     monkeypatch.setattr("foundry_router.main.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.auth.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.backends.load_settings", lambda: test_settings)
+    monkeypatch.setattr("foundry_router.backends._backend_client", None)
     monkeypatch.setattr("foundry_router.config.load_settings", lambda: test_settings)
     monkeypatch.setattr("foundry_router.main.asyncio.sleep", no_sleep)
     asyncio.run(_reset_backend_health_state())
@@ -454,8 +456,7 @@ class TestMetricsEndpoint:
     @respx.mock
     def test_metrics_endpoint_exposes_prometheus_series(self) -> None:
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
 
         request_response = client.post(
@@ -479,8 +480,7 @@ class TestMetricsEndpoint:
     @respx.mock
     def test_metrics_cost_uses_finalized_usage_values(self) -> None:
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -519,8 +519,7 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_responses_forward(self) -> None:
         route = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -551,8 +550,7 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_responses_forward_correlation_id(self) -> None:
         route = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "response-test", "output": []}))
         response = client.post(
             "/openai/v1/responses",
@@ -585,8 +583,7 @@ class TestOpenAIEndpoints:
         setup_settings.backends["backend_a"].credential = "synthetic-secret-not-for-status"
         setup_settings.quota_group_rate_limits = {"backend_a": {"rpm": 5, "tpm": 100, "rpd": 5}}
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -612,14 +609,12 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_429_triggers_quota_cooldown_and_failover(self) -> None:
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(429, json={"error": "rate limited"}, headers={"retry-after": "1"})
         )
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "from-b"}))
 
         response = client.post(
@@ -676,8 +671,7 @@ class TestOpenAIEndpoints:
         monkeypatch.setattr("foundry_router.config.load_settings", lambda: single_backend_settings)
 
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(503, json={"error": "busy"}))
 
         response = client.post(
@@ -693,12 +687,10 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_retry_exhaustion_after_failover_returns_cooldown_response(self) -> None:
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(503, json={"error": "busy-a"}))
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(503, json={"error": "busy-b"}))
 
         response = client.post(
@@ -715,12 +707,10 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_transport_failure_fails_over_to_next_backend(self) -> None:
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(side_effect=httpx.ConnectError("boom"))
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "ok-b"}))
 
         response = client.post(
@@ -815,8 +805,7 @@ class TestOpenAIEndpoints:
         )
 
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "emergency-ok"}))
 
         response = client.post(
@@ -1270,8 +1259,7 @@ class TestOpenAIEndpoints:
         monkeypatch.setattr("foundry_router.config.load_settings", lambda: no_pricing_settings)
 
         route = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "should-not-run"}))
 
         response = client.post(
@@ -1302,8 +1290,7 @@ class TestOpenAIEndpoints:
         monkeypatch.setattr("foundry_router.config.load_settings", lambda: low_credit_settings)
 
         route = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, json={"id": "should-not-run"}))
 
         response = client.post(
@@ -1327,8 +1314,7 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_responses_stream_is_passed_through(self) -> None:
         route = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -1349,12 +1335,10 @@ class TestOpenAIEndpoints:
     @respx.mock
     def test_stream_failure_before_first_chunk_retries_and_fails_over(self) -> None:
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, headers={"content-type": "text/event-stream"}))
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -1385,8 +1369,7 @@ class TestOpenAIEndpoints:
                 return None
 
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             side_effect=lambda _request: Response(
                 200,
@@ -1395,8 +1378,7 @@ class TestOpenAIEndpoints:
             )
         )
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -1431,8 +1413,7 @@ class TestOpenAIEndpoints:
                 return None
 
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200,
@@ -1441,8 +1422,7 @@ class TestOpenAIEndpoints:
             )
         )
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(200, headers={"content-type": "text/event-stream"}, content=b"")
         )
@@ -1568,8 +1548,7 @@ class TestOpenAIEndpoints:
         monkeypatch.setattr("foundry_router.config.load_settings", lambda: single_backend_settings)
 
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(200, headers={"content-type": "text/event-stream"}))
         response = client.post(
             "/openai/v1/responses",
@@ -1581,27 +1560,178 @@ class TestOpenAIEndpoints:
         assert response.json()["error"]["type"] == "upstream_unavailable"
 
     @respx.mock
-    def test_failover_uses_backend_specific_credentials(self) -> None:
+    @pytest.mark.parametrize("streaming", [False, True], ids=["request", "stream"])
+    def test_failover_uses_backend_specific_credentials(
+        self, setup_settings: Settings, streaming: bool
+    ) -> None:
+        setup_settings.backends["backend_a"].deployment = "deployment-a"
+        setup_settings.backends["backend_b"].deployment = "deployment-b"
+        setup_settings.backends["backend_b"].endpoint = setup_settings.backends[
+            "backend_a"
+        ].endpoint
         route_a = respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
+            json__model="deployment-a",
         ).mock(return_value=Response(503, json={"error": "busy"}))
         route_b = respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
-        ).mock(return_value=Response(200, json={"id": "ok"}))
+            "https://a.openai.azure.com/openai/v1/responses",
+            json__model="deployment-b",
+        ).mock(
+            return_value=(
+                Response(
+                    200,
+                    headers={"content-type": "text/event-stream"},
+                    content=b'data: {"id":"ok"}\n\ndata: [DONE]\n\n',
+                )
+                if streaming
+                else Response(200, json={"id": "ok"})
+            )
+        )
 
         response = client.post(
             "/openai/v1/responses",
             headers={"api-key": "client-key-123", "authorization": "Bearer secret-client"},
-            json={"model": "gpt-4", "input": "Hello"},
+            json={"model": "gpt-4", "input": "Hello", "stream": streaming},
         )
 
         assert response.status_code == 200
+        assert b'"ok"' in response.content
+        assert route_a.call_count == 2
+        assert route_b.call_count == 1
         assert route_a.calls[0].request.headers["api-key"] == "key-a"
         assert route_b.calls[0].request.headers["api-key"] == "key-b"
         assert "authorization" not in route_a.calls[0].request.headers
         assert "authorization" not in route_b.calls[0].request.headers
+        assert all(call.request.url.query == b"" for call in respx.calls)
+
+    @pytest.mark.parametrize("terminal_type", ["completed", "incomplete", "failed"])
+    @pytest.mark.parametrize("delimiter", [b"\n\n", b"\r\n\r\n"], ids=["lf", "crlf"])
+    @pytest.mark.parametrize("transport_failure", [False, True], ids=["eof", "read-error"])
+    @respx.mock
+    def test_split_nested_terminal_usage_preserves_bytes_and_settles_exactly_once(
+        self,
+        setup_settings: Settings,
+        monkeypatch,
+        terminal_type: str,
+        delimiter: bytes,
+        transport_failure: bool,
+    ) -> None:
+        from foundry_router.main import _credit_store, _metrics_store, _rate_limit_store
+
+        setup_settings.backends["backend_a"].deployment = "configured-deployment"
+        setup_settings.quota_group_rate_limits = {
+            "backend_a": {"tpm": 100},
+            "backend_b": {"tpm": 100},
+        }
+        finalize = AsyncMock(wraps=_credit_store.finalize_request)
+        monkeypatch.setattr(_credit_store, "finalize_request", finalize)
+        observe = AsyncMock(wraps=_metrics_store.observe_request)
+        monkeypatch.setattr(_metrics_store, "observe_request", observe)
+        delta = (
+            b'event: response.output_text.delta\ndata: {"type":"response.output_text.delta",'
+            b'"output_index":0,"content_index":0,"delta":"caf\xc3\xa9"}' + delimiter
+        )
+        terminal = (
+            f"event: response.{terminal_type}\ndata: ".encode()
+            + json.dumps(
+                {
+                    "type": f"response.{terminal_type}",
+                    "response": {
+                        "id": "resp-test",
+                        "object": "response",
+                        "status": terminal_type,
+                        "model": "configured-deployment",
+                        "usage": {
+                            "input_tokens": 13,
+                            "input_tokens_details": {"cached_tokens": 3},
+                            "output_tokens": 7,
+                            "output_tokens_details": {"reasoning_tokens": 2},
+                            "total_tokens": 20,
+                        },
+                    },
+                },
+                separators=(",", ":"),
+            ).encode()
+            + delimiter
+        )
+        payload = delta + terminal + b"data: [DONE]" + delimiter
+        # Split UTF-8, the nested usage field, and the terminal event delimiter.
+        cuts = [
+            delta.index(b"\xc3") + 1,
+            len(delta) + terminal.index(b'"usage"') + 4,
+            len(delta) + len(terminal) - 1,
+        ]
+        parts = [
+            payload[start:end] for start, end in zip([0, *cuts], [*cuts, len(payload)], strict=True)
+        ]
+        closed = []
+
+        class SplitStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                for part in parts:
+                    yield part
+                if transport_failure:
+                    raise httpx.ReadError("disconnect after terminal usage")
+
+            async def aclose(self) -> None:
+                closed.append(True)
+
+        route = respx.post("https://a.openai.azure.com/openai/v1/responses").mock(
+            return_value=Response(
+                200, headers={"content-type": "text/event-stream"}, stream=SplitStream()
+            )
+        )
+        fallback = respx.post("https://b.openai.azure.com/openai/v1/responses").mock(
+            return_value=Response(200, content=b"unexpected failover")
+        )
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={"model": "gpt-4", "input": "Hello", "max_output_tokens": 1024, "stream": True},
+        )
+
+        assert response.status_code == 200
+        error_event = (
+            b'data: {"error":{"message":"Upstream stream failed","type":"upstream_error"}}\n\n'
+        )
+        assert response.content == payload + (error_event if transport_failure else b"")
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert route.call_count == 1
+        assert fallback.call_count == 0
+        assert json.loads(route.calls[0].request.content)["model"] == "configured-deployment"
+        assert route.calls[0].request.url.query == b""
+        finalize.assert_awaited_once()
+        assert finalize.await_args.kwargs == {
+            "backend_id": "backend_a",
+            "charge_reserved": True,
+            "charged_cost_usd": pytest.approx(0.00034),
+        }
+        assessment = asyncio.run(
+            _credit_store.assess(
+                "backend_a", 0.0, min_credit_reserve_usd=0.0, min_credit_reserve_percent=0.0
+            )
+        )
+        assert assessment.available_credit_usd == pytest.approx(200.0 - 0.00034)
+        credit = asyncio.run(
+            _credit_store.live_snapshot(
+                ["backend_a"], min_credit_reserve_usd=0.0, min_credit_reserve_percent=0.0
+            )
+        )["backend_a"]
+        assert credit.estimated_remaining_usd == pytest.approx(200.0 - 0.00034)
+        assert credit.reserved_inflight_usd == 0.0
+        assert credit.active_reservations == 0
+        quota = asyncio.run(_rate_limit_store.snapshot_quota_groups(["backend_a"]))["backend_a"]
+        assert quota.input_tpm_used_60s == 13
+        assert quota.rpm_used_60s == 1
+        observe.assert_awaited_once()
+        assert observe.await_args.kwargs["status_code"] == (502 if transport_failure else 200)
+        assert observe.await_args.kwargs["estimated_cost_usd"] == pytest.approx(0.00034)
+        metrics = client.get("/metrics", headers={"x-admin-key": "admin-key-789"})
+        assert (
+            'foundry_router_estimated_cost_usd_total{model="gpt-4",backend="backend_a"} 0.000340000'
+            in metrics.text
+        )
+        assert closed == [True]
 
     @respx.mock
     def test_duplicate_client_request_id_creates_independent_reservations(
@@ -1612,12 +1742,10 @@ class TestOpenAIEndpoints:
             json={"id": "ok", "usage": {"prompt_tokens": 100, "completion_tokens": 20}},
         )
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=usage_response)
         respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(return_value=usage_response)
 
         from foundry_router.main import _credit_store
@@ -1672,8 +1800,7 @@ class TestOpenAIEndpoints:
         monkeypatch.setattr("foundry_router.config.load_settings", lambda: single_backend_settings)
 
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(400, json={"error": {"message": "bad request"}}))
 
         response = client.post(
@@ -2027,12 +2154,10 @@ class TestOpenAIEndpoints:
         asyncio.run(_metrics_store.reset())
 
         respx.post(
-            "https://a.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://a.openai.azure.com/openai/v1/responses",
         ).mock(return_value=Response(502, json={"error": "a-failed"}))
         respx.post(
-            "https://b.openai.azure.com/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://b.openai.azure.com/openai/v1/responses",
         ).mock(
             return_value=Response(
                 200, json={"id": "b-succeeded", "usage": {"input_tokens": 10, "output_tokens": 5}}

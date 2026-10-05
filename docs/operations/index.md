@@ -6,6 +6,10 @@ IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD i
 
 ## Initial Container App
 
+Real non-streaming and streaming Responses verification is **Implemented** for both selected test models through the dedicated memory/one app. Azure v1 routing and nested terminal usage reconciliation were corrected after initial upstream 404s. Both streams completed and local test-price debits matched usage with zero inflight reservations. See [inference evidence](../plans/foundry-inference/evidence.md). This does not establish embeddings, real traffic failover, Table-backed real inference or authoritative Azure cost reconciliation.
+
+A dedicated real-resource test backend is **Implemented** and configuration-ready for both operator-selected deployments. Secrets use a separate vault prefix with generated client/admin keys; local per-backend pricing/credit inputs are explicitly test-only estimates. Health/model discovery checks do not prove provider reachability or inference compatibility. See [test backend evidence](../plans/foundry-test-backend/evidence.md).
+
 Existing-account cross-RG synthetic Table runtime is **Implemented** and verified: table-scoped managed identity, idempotent redeployment, checked parent-setting preservation and restart persistence passed. See [cross-RG evidence](../plans/table-existing-cross-rg/evidence.md). Real inference/provider traffic and production cut-over remain unverified; production stays memory/one.
 
 Two-replica synthetic Table verification is **Implemented** in the isolated test app: replica-targeted managed-identity reservation checks, shared app diagnostics and individual container restart persistence passed. Production remains memory-backed with one replica until cut-over requirements are fulfilled. This evidence does not cover real inference, provider quota admission traffic or metrics aggregation. See [two-replica evidence](../plans/table-two-replica/evidence.md).

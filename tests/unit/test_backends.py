@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from copy import deepcopy
+
 import httpx
 import pytest
 import respx
@@ -35,6 +38,95 @@ def test_settings(monkeypatch):
 
 
 class TestAllowedBackendClient:
+    @pytest.mark.parametrize("streaming", [False, True], ids=["request", "stream"])
+    @pytest.mark.parametrize("operation", ["responses", "embeddings"])
+    @respx.mock
+    async def test_azure_operation_url_and_payload_contract(
+        self, test_settings, streaming, operation
+    ):
+        config = test_settings.backends["backend_a"]
+        config.endpoint = httpx.URL("https://allowed-a.openai.azure.com/gateway/")
+        config.deployment = "configured-deployment"
+        config.api_version = "2024-02-01"
+        body = {
+            "model": "logical-alias",
+            "input": [{"role": "user", "content": "hello"}],
+            "metadata": {"trace": "client-trace"},
+        }
+        if streaming:
+            body["stream"] = True
+        original = deepcopy(body)
+        if operation == "responses":
+            url = "https://allowed-a.openai.azure.com/gateway/openai/v1/responses"
+            expected_body = {**original, "model": "configured-deployment"}
+        else:
+            url = (
+                "https://allowed-a.openai.azure.com/gateway/openai/deployments/"
+                "configured-deployment/embeddings?api-version=2024-02-01"
+            )
+            expected_body = original
+        route = respx.post(url).mock(return_value=httpx.Response(200, content=b"upstream"))
+
+        client = AllowedBackendClient()
+        try:
+            if streaming:
+                async with client.stream_backend("backend_a", operation, json=body) as response:
+                    assert await response.aread() == b"upstream"
+            else:
+                response = await client.request_backend("backend_a", operation, json=body)
+                assert response.content == b"upstream"
+            assert route.call_count == 1
+            request = route.calls[0].request
+            assert str(request.url) == url
+            assert json.loads(request.content) == expected_body
+            assert request.headers["api-key"] == "key-a"
+            assert body == original
+        finally:
+            await client.aclose()
+
+    async def test_azure_payload_default_is_responses_and_returns_copy(self, test_settings):
+        test_settings.backends["backend_a"].deployment = "configured-deployment"
+        body = {"model": "logical-alias", "input": "hello"}
+        client = AllowedBackendClient()
+        try:
+            payload = client.prepare_upstream_payload("backend_a", body)
+            assert payload == {"model": "configured-deployment", "input": "hello"}
+            assert payload is not body
+            assert body == {"model": "logical-alias", "input": "hello"}
+        finally:
+            await client.aclose()
+
+    @pytest.mark.parametrize("streaming", [False, True], ids=["request", "stream"])
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "https://allowed-b.openai.azure.com/openai/v1/responses",
+            "https://allowed-a.openai.azure.com/other/openai/v1/responses",
+            "https://allowed-a.openai.azure.com/gateway-sibling/openai/v1/responses",
+            "http://allowed-a.openai.azure.com/gateway/openai/v1/responses",
+            "https://allowed-a.openai.azure.com:444/gateway/openai/v1/responses",
+        ],
+    )
+    @respx.mock
+    async def test_azure_responses_enforces_selected_origin_and_prefix(
+        self, test_settings, monkeypatch, streaming, target
+    ):
+        test_settings.backends["backend_a"].endpoint = httpx.URL(
+            "https://allowed-a.openai.azure.com/gateway"
+        )
+        client = AllowedBackendClient()
+        monkeypatch.setattr(client, "_backend_url", lambda *_args: httpx.URL(target))
+        try:
+            with pytest.raises(SecurityError):
+                if streaming:
+                    async with client.stream_backend("backend_a", "responses", json={}):
+                        pytest.fail("Rejected target opened a stream")
+                else:
+                    await client.request_backend("backend_a", "responses", json={})
+            assert not respx.calls
+        finally:
+            await client.aclose()
+
     def test_allowed_hostname_succeeds(self, test_settings):
         client = AllowedBackendClient()
         assert "allowed-a.openai.azure.com" in client.allowed_hostnames
@@ -263,8 +355,7 @@ class TestAllowedBackendClient:
         )
         monkeypatch.setattr("foundry_router.backends.load_settings", lambda: settings)
         respx.post(
-            "https://shared.example/a/openai/deployments/gpt-4/responses",
-            params={"api-version": "2025-04-01-preview"},
+            "https://shared.example/a/openai/v1/responses",
         ).mock(return_value=httpx.Response(200, json={"ok": True}))
         client = AllowedBackendClient()
         response = await client.request_backend("backend_a", "responses", json={})

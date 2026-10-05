@@ -8,6 +8,8 @@ Runtime phases through Phase 09, typed Bicep resource modules/public adapter and
 
 ## Canonical References
 
+Real non-streaming/streaming Responses and usage settlement also passed for the two configured models in the dedicated memory/one test app; see docs/plans/foundry-inference/evidence.md. Table-backed real inference, embeddings, provider failure/admission traffic and production cut-over remain unverified. Azure Responses uses resource-level v1 routing; embeddings retains its deployment-scoped versioned route.
+
 - Documentation hub: [`docs/index.md`](docs/index.md)
 - Getting started: [`docs/getting-started/index.md`](docs/getting-started/index.md)
 - Architecture: [`docs/architecture/index.md`](docs/architecture/index.md)
