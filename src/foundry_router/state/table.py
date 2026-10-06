@@ -330,7 +330,7 @@ class AzureTableCreditStore:
         self._metered_groups: set[str] = set()
         self._reservation_owners: dict[str, str] = {}
         self._uncertain_ids: set[str] = set()
-        self._last_synced_settings_id: int | None = None
+        self._last_synced_settings: Any = None
         self._logger = logger or _logger
 
     def _partition_lock(self, backend_id: str) -> asyncio.Lock:
@@ -350,7 +350,7 @@ class AzureTableCreditStore:
             aliases = credit_membership(settings)
             groups = metered_credit_groups(settings)
             if (
-                id(settings) == self._last_synced_settings_id
+                settings is self._last_synced_settings
                 and aliases == self._credit_aliases
                 and groups == self._metered_groups
             ):
@@ -406,7 +406,7 @@ class AzureTableCreditStore:
             if sync_complete:
                 self._credit_aliases = aliases
                 self._metered_groups = groups
-                self._last_synced_settings_id = id(settings)
+                self._last_synced_settings = settings
             else:
                 raise TableEntityCreditStoreError("Credit settings initialization incomplete")
 
@@ -986,7 +986,7 @@ class AzureTableCreditStore:
             self._metered_groups.clear()
             self._reservation_owners.clear()
             self._uncertain_ids.clear()
-            self._last_synced_settings_id = None
+            self._last_synced_settings = None
 
     async def apply_reconciled_remaining(
         self,

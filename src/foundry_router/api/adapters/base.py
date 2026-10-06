@@ -9,7 +9,10 @@ object returned for a single upstream stream.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from foundry_router.api.google_pdf import PreparedGoogleMedia
 
 
 @dataclass(frozen=True)
@@ -47,7 +50,14 @@ class ProviderAdapter(Protocol):
 
     def supports_operation(self, operation: str) -> bool: ...
 
-    def check_request(self, operation: str, body: dict[str, Any]) -> AdapterRejection | None: ...
+    def check_request(
+        self,
+        operation: str,
+        body: dict[str, Any],
+        *,
+        deadline_monotonic: float | None = None,
+        prepared_media: PreparedGoogleMedia | None = None,
+    ) -> AdapterRejection | None: ...
 
     def build_upstream_body(
         self,
@@ -56,6 +66,7 @@ class ProviderAdapter(Protocol):
         *,
         deployment: str,
         default_output_tokens: int,
+        prepared_media: PreparedGoogleMedia | None = None,
     ) -> dict[str, Any]: ...
 
     def translate_success(
@@ -67,9 +78,12 @@ class ProviderAdapter(Protocol):
         expected_input_count: int | None = None,
         expected_dimensions: int | None = None,
         metadata: dict[str, Any] | None = None,
+        request_body: dict[str, Any] | None = None,
     ) -> TranslatedSuccess: ...
 
     def translate_error(self, status_code: int, upstream_body: bytes | None) -> TranslatedError: ...
+
+    def extract_usage(self, operation: str, upstream: Any) -> tuple[int | None, int | None]: ...
 
     def create_stream_decoder(
         self,
@@ -77,6 +91,7 @@ class ProviderAdapter(Protocol):
         logical_model: str,
         request_input: Any = None,
         metadata: dict[str, Any] | None = None,
+        request_body: dict[str, Any] | None = None,
     ) -> Any: ...
 
 

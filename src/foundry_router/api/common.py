@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import json
+import asyncio
+import time
 from typing import Any
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from foundry_router.api.adapters.google_schema import load_bounded_json
+from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
 from foundry_router.credit import (
     estimate_response_usage_cost,
     extract_response_usage_tokens,
@@ -22,8 +25,31 @@ def api_error(status_code: int, message: str, error_type: str) -> JSONResponse:
 
 
 async def request_body(
-    request: Request, endpoint: str, *, max_body_bytes: int
+    request: Request,
+    endpoint: str,
+    *,
+    max_body_bytes: int,
+    deadline_monotonic: float | None = None,
+    offload_json: bool = False,
+    _read_with_deadline: bool = True,
 ) -> dict[str, Any] | JSONResponse:
+    if deadline_monotonic is not None and _read_with_deadline:
+        try:
+            async with asyncio.timeout_at(deadline_monotonic):
+                result = await request_body(
+                    request,
+                    endpoint,
+                    max_body_bytes=max_body_bytes,
+                    deadline_monotonic=deadline_monotonic,
+                    offload_json=offload_json,
+                    _read_with_deadline=False,
+                )
+        except TimeoutError:
+            return api_error(408, "Request intake deadline exceeded", "request_timeout")
+        else:
+            if time.monotonic() >= deadline_monotonic:
+                return api_error(408, "Request intake deadline exceeded", "request_timeout")
+            return result
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         return api_error(415, "Content-Type must be application/json", "invalid_request")
 
@@ -47,8 +73,23 @@ async def request_body(
             )
 
     try:
-        body = json.loads(bytes(raw_body))
-    except ValueError:
+        if offload_json:
+            wire = b""
+
+            def capture() -> None:
+                nonlocal wire
+                wire = bytes(raw_body)
+
+            body = await bounded_signed_work(
+                lambda: load_bounded_json(wire.decode(), max_bytes=max_body_bytes),
+                deadline=deadline_monotonic or time.monotonic() + 5,
+                before_submit=capture,
+            )
+        else:
+            body = load_bounded_json(bytes(raw_body).decode(), max_bytes=max_body_bytes)
+    except SignedIntakeError as exc:
+        return api_error(exc.status, str(exc), exc.code)
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return api_error(400, "Request body must contain valid JSON", "invalid_request")
     if not isinstance(body, dict):
         return api_error(400, "Request body must be a JSON object", "invalid_request")

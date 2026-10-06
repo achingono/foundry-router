@@ -378,3 +378,22 @@ class TestGlobalBackendClient:
         # Getting again should create new instance
         new_client = get_backend_client()
         assert new_client is not client
+
+
+async def test_owned_settings_constructor_does_not_load_ambient(monkeypatch):
+    from foundry_router.config import Settings
+
+    settings = Settings(
+        backends_json='{"g":{"provider":"google_ai_studio","endpoint":"https://synthetic.example.test","deployment":"configured","credential":"synthetic","credit_metered":false}}',
+        models_json='{"m":{"backends":{"g":1}}}',
+        client_api_keys_json='["synthetic"]',
+        admin_api_keys_json='["admin-synthetic"]',
+    )
+
+    def reject_ambient():
+        raise AssertionError("ambient settings read")
+
+    monkeypatch.setattr("foundry_router.backends.load_settings", reject_ambient)
+    backend = AllowedBackendClient(settings=settings)
+    assert backend._settings is settings
+    await backend.aclose()

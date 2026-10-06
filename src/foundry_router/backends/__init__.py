@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
-from foundry_router.config import load_settings
+from foundry_router.config import Settings, load_settings
 
 
 class SecurityError(Exception):
@@ -20,8 +20,8 @@ MAX_GOOGLE_RESPONSE_BYTES = 4 * 1024 * 1024
 class AllowedBackendClient:
     """HTTP client restricted to configured HTTPS origins and base paths."""
 
-    def __init__(self) -> None:
-        self._settings = load_settings()
+    def __init__(self, *, settings: Settings | None = None) -> None:
+        self._settings = settings if settings is not None else load_settings()
         self._allowed_hostnames = self._settings.get_allowed_hostnames()
         self._allowed_targets = {
             backend_id: httpx.URL(str(config.endpoint))
@@ -137,14 +137,20 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         out = dict(body)
-        if config.deployment and (
-            config.provider == "google_ai_studio"
-            or (config.provider == "azure_foundry" and operation == "responses")
+        if (
+            config.deployment
+            and config.api_surface != "native"
+            and (
+                config.provider == "google_ai_studio"
+                or (config.provider == "azure_foundry" and operation == "responses")
+            )
         ):
             out["model"] = config.deployment
         return out
 
-    def _backend_url(self, backend_id: str, operation: str) -> httpx.URL:
+    def _backend_url(
+        self, backend_id: str, operation: str, *, streaming: bool = False
+    ) -> httpx.URL:
         config = self._settings.backends.get(backend_id)
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
@@ -152,6 +158,15 @@ class AllowedBackendClient:
         if config.provider == "google_ai_studio":
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
+            if config.api_surface == "native":
+                if operation != "responses":
+                    raise ValueError("Native Google supports only Responses")
+                method = "streamGenerateContent" if streaming else "generateContent"
+                path = (
+                    f"{base.path.rstrip('/')}/v1beta/models/"
+                    f"{quote(config.deployment, safe='')}:{method}"
+                )
+                return base.copy_with(path=path, params={"alt": "sse"} if streaming else None)
             effective_operation = self._google_operation(operation)
             # Avoid accidental double compatibility suffixes when the operator
             # configures the endpoint with the compat root already included.
@@ -179,7 +194,10 @@ class AllowedBackendClient:
         if config.provider == "google_ai_studio":
             # Documented OpenAI-compat auth is `Authorization: Bearer <key>`
             # (verified 2026-10-05). Strip inbound auth above; never forward it.
-            safe_headers["authorization"] = f"Bearer {config.credential}"
+            if config.api_surface == "native":
+                safe_headers["x-goog-api-key"] = config.credential
+            else:
+                safe_headers["authorization"] = f"Bearer {config.credential}"
             return safe_headers
         safe_headers["api-key"] = config.credential
         return safe_headers
@@ -213,10 +231,16 @@ class AllowedBackendClient:
         *,
         method: str = "POST",
         headers: dict[str, str] | None = None,
+        native_generation_stream: bool = True,
         **kwargs: Any,
     ) -> Any:
         """Open a streaming request to a configured deployment."""
-        url = self._backend_url(backend_id, operation)
+        config = self._settings.backends.get(backend_id)
+        url = (
+            self._backend_url(backend_id, operation, streaming=native_generation_stream)
+            if config is not None and config.api_surface == "native"
+            else self._backend_url(backend_id, operation)
+        )
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
         if isinstance(kwargs.get("json"), dict):

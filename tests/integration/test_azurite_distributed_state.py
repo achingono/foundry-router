@@ -47,7 +47,9 @@ async def test_failed_membership_sync_blocks_egress_then_same_settings_recovers(
     assert store._credit_aliases == {"a": "account", "b": "account"}
     client.try_create_entity = original
     assert (await run_route(changed, store, execute)).status_code == 200
-    execute.assert_awaited_once_with("a")
+    execute.assert_awaited_once()
+    assert execute.await_args.args == ("a",)
+    assert execute.await_args.kwargs["reservation_deadline_monotonic"] > 0
 
 
 @pytest.mark.asyncio
