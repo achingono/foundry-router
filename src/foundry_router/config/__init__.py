@@ -9,9 +9,18 @@ from functools import lru_cache
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from foundry_router.config.google_audio_output import validate_audio_output_pools
+from foundry_router.config.google_features import GoogleFeatureProfile
+from foundry_router.config.google_output import validate_image_output_pools
+from foundry_router.config.google_state import (
+    MAX_SIGNED_BACKENDS,
+    MAX_SIGNED_REQUEST_BYTES,
+    GoogleStateKeys,
+    parse_state_keys,
+)
 from foundry_router.config.model_aliases import parse_model_aliases
 from foundry_router.credit_groups import credit_membership, validate_credit_group
 
@@ -20,6 +29,7 @@ class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
     provider: Literal["azure_foundry", "google_ai_studio"] = "azure_foundry"
+    api_surface: Literal["openai_compat", "native"] = "openai_compat"
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
     region: str | None = None
@@ -29,6 +39,7 @@ class BackendConfig(BaseModel):
     credit_metered: bool = True
     credit_group: str | None = None
     supported_operations: list[str] | None = None
+    google_features: GoogleFeatureProfile = Field(default_factory=GoogleFeatureProfile)
 
     @field_validator("credit_group")
     @classmethod
@@ -92,6 +103,10 @@ class BackendConfig(BaseModel):
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
         if self.provider == "azure_foundry":
+            if self.api_surface != "openai_compat":
+                raise ValueError("Native API surface requires a Google backend")
+            if self.google_features.features:
+                raise ValueError("Google feature profiles require a Google backend")
             if not self.deployment or not self.deployment.strip():
                 raise ValueError("Backend deployment is required for azure_foundry backends")
             if not self.api_version or not self.api_version.strip():
@@ -101,6 +116,16 @@ class BackendConfig(BaseModel):
             return self
 
         if self.provider == "google_ai_studio":
+            if (
+                bool(
+                    {"inline_pdfs", "inline_audio", "inline_video", "image_output", "audio_output"}
+                    & set(self.google_features.features)
+                )
+                or self.google_features.continuation_policy == "sealed_native"
+            ) and self.api_surface != "native":
+                raise ValueError(
+                    "File media and sealed continuation features require Google native surface"
+                )
             if not self.deployment or not self.deployment.strip():
                 raise ValueError(
                     "Google AI Studio model name is required for google_ai_studio backends"
@@ -114,6 +139,21 @@ class BackendConfig(BaseModel):
                     )
             if self.supported_operations is None:
                 self.supported_operations = ["responses"]
+            if self.google_features.features and "responses" not in self.supported_operations:
+                raise ValueError("Google features require Responses operation support")
+            if self.api_surface == "native" and (
+                self.supported_operations != ["responses"]
+                or "/v1beta/openai" in endpoint_path
+                or (
+                    not self.google_features.native_thinking_disabled
+                    and self.google_features.continuation_policy != "sealed_native"
+                    and "audio_output" not in self.google_features.features
+                )
+            ):
+                raise ValueError(
+                    "Native Google requires Responses-only, service root "
+                    "and thinking-disable affirmation"
+                )
             return self
 
         return self
@@ -123,6 +163,7 @@ class ModelBackendPool(BaseModel):
     """Backend pool configuration for a logical model."""
 
     backends: dict[str, float] = Field(default_factory=dict)
+    continuation_policy: Literal["unsigned", "bound_history_required"] = "unsigned"
 
     @field_validator("backends")
     @classmethod
@@ -140,6 +181,12 @@ class PricingConfig(BaseModel):
 
     input_per_million: float = Field(ge=0, allow_inf_nan=False)
     output_per_million: float = Field(ge=0, allow_inf_nan=False)
+    image_input_tokens: int | None = Field(default=None, ge=258, exclude=True)
+    pdf_document_tokens: int | None = Field(default=None, ge=258, exclude=True)
+    audio_file_tokens: int | None = Field(default=None, ge=96, exclude=True)
+    video_file_tokens: int | None = Field(default=None, ge=558, exclude=True)
+    image_output_per_image: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    audio_output_per_second: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class Settings(BaseSettings):
@@ -151,9 +198,13 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
         populate_by_name=True,
+        hide_input_in_errors=True,
     )
 
     # Backends configuration (JSON string)
+    intake_timeout_seconds: float = Field(
+        default=30.0, ge=0.1, le=120, validation_alias="FOUNDRY_INTAKE_TIMEOUT_SECONDS"
+    )
     backends_json: str = Field(
         default="{}",
         validation_alias="FOUNDRY_BACKENDS_JSON",
@@ -168,6 +219,13 @@ class Settings(BaseSettings):
     )
 
     # Client authentication
+    google_state_keys_json: SecretStr | None = Field(
+        default=None,
+        validation_alias="FOUNDRY_GOOGLE_STATE_KEYS_JSON",
+        exclude=True,
+        repr=False,
+        description="Optional secret-only signed continuation key ring; enables no capability",
+    )
     client_api_keys_json: str = Field(
         default="[]",
         validation_alias="FOUNDRY_CLIENT_API_KEYS_JSON",
@@ -352,6 +410,7 @@ class Settings(BaseSettings):
 
     # Computed fields (populated after validation)
     backends: dict[str, BackendConfig] = Field(default_factory=dict, exclude=True)
+    google_state_keys: GoogleStateKeys | None = Field(default=None, exclude=True, repr=False)
     models: dict[str, ModelBackendPool] = Field(default_factory=dict, exclude=True)
     client_api_keys: list[str] = Field(default_factory=list, exclude=True)
     admin_api_keys: list[str] = Field(default_factory=list, exclude=True)
@@ -366,8 +425,19 @@ class Settings(BaseSettings):
     )
     reconciliation_overrides_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
 
+    @field_validator("google_state_keys_json")
+    @classmethod
+    def validate_google_state_keys_json(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            parse_state_keys(value.get_secret_value())
+        return value
+
     @model_validator(mode="after")
     def parse_json_fields(self) -> Settings:
+        if self.google_state_keys_json is not None:
+            self.google_state_keys = parse_state_keys(
+                self.google_state_keys_json.get_secret_value()
+            )
         cycle_day_min = 1
         cycle_day_max = 28
 
@@ -437,6 +507,26 @@ class Settings(BaseSettings):
                     raise ValueError(
                         f"Model '{model_name}' references unknown backend '{backend_id}'"
                     )
+            signed = [
+                self.backends[name].google_features.continuation_policy == "sealed_native"
+                for name in pool.backends
+            ]
+            if pool.continuation_policy == "bound_history_required":
+                profiles = [self.backends[name].google_features for name in pool.backends]
+                if (
+                    not all(signed)
+                    or not 1 <= len(profiles) <= MAX_SIGNED_BACKENDS
+                    or any(profile != profiles[0] for profile in profiles)
+                    or self.google_state_keys is None
+                ):
+                    raise ValueError(
+                        "Bound-history pools require uniform native profiles and state keys"
+                    )
+                if self.max_request_body_bytes > MAX_SIGNED_REQUEST_BYTES:
+                    raise ValueError("Bound-history pools require an intake limit at most 2 MiB")
+                raise ValueError("Signed native runtime integration is not yet available")
+            if any(signed):
+                raise ValueError("Sealed native backends require a bound-history pool")
             has_metered_backend = any(
                 self.backends[backend_id].credit_metered for backend_id in pool.backends
             )
@@ -491,9 +581,110 @@ class Settings(BaseSettings):
                 )
         for model_name, pool in self.models.items():
             if all(not self.backends[backend_id].credit_metered for backend_id in pool.backends):
+                generated_image = any(
+                    "image_output" in self.backends[name].google_features.features
+                    for name in pool.backends
+                )
+                generated_audio = any(
+                    "audio_output" in self.backends[name].google_features.features
+                    for name in pool.backends
+                )
+                if generated_audio and any(
+                    self.backends[name].google_features.audio_output_price_ceiling_usd_per_second
+                    != 0
+                    for name in pool.backends
+                ):
+                    raise ValueError("Non-metered generated audio requires zero seconds price")
+                if generated_image and any(
+                    self.backends[name].google_features.image_output_price_ceiling_usd != 0
+                    for name in pool.backends
+                ):
+                    raise ValueError("Non-metered generated image requires zero image price")
                 self.pricing[model_name] = PricingConfig(
                     input_per_million=0.0,
                     output_per_million=0.0,
+                    image_output_per_image=0.0 if generated_image else None,
+                    audio_output_per_second=0.0 if generated_audio else None,
+                )
+            image_bounds = [
+                self.backends[backend_id].google_features.image_input_tokens
+                for backend_id in pool.backends
+                if "inline_images" in self.backends[backend_id].google_features.features
+            ]
+            pdf_profiles = [
+                self.backends[backend_id].google_features
+                for backend_id in pool.backends
+                if "inline_pdfs" in self.backends[backend_id].google_features.features
+            ]
+            if pdf_profiles:
+                if any(
+                    self.backends[backend_id].provider != "google_ai_studio"
+                    or self.backends[backend_id].api_surface != "native"
+                    for backend_id in pool.backends
+                ):
+                    raise ValueError("Google PDF profiles require a Google-native-only pool")
+                if model_name not in self.pricing:
+                    raise ValueError("PDF-enabled pools require token pricing")
+                self.pricing[model_name].pdf_document_tokens = max(
+                    (
+                        int(profile.pdf_input_tokens_per_page or 0)
+                        + int(profile.pdf_native_text_tokens_per_page or 0)
+                    )
+                    * profile.max_pdf_pages
+                    + profile.max_pdf_bytes
+                    + 64
+                    for profile in pdf_profiles
+                )
+            video_profiles = [
+                self.backends[backend_id].google_features
+                for backend_id in pool.backends
+                if "inline_video" in self.backends[backend_id].google_features.features
+            ]
+            if video_profiles:
+                if any(
+                    self.backends[backend_id].provider != "google_ai_studio"
+                    or self.backends[backend_id].api_surface != "native"
+                    for backend_id in pool.backends
+                ):
+                    raise ValueError("Google video profiles require a Google-native-only pool")
+                if model_name not in self.pricing:
+                    raise ValueError("Video-enabled pools require token pricing")
+                self.pricing[model_name].video_file_tokens = max(
+                    int(profile.video_input_tokens_per_frame or 0) * profile.max_video_frames
+                    + profile.max_video_bytes
+                    + 64
+                    for profile in video_profiles
+                )
+            audio_profiles = [
+                self.backends[backend_id].google_features
+                for backend_id in pool.backends
+                if "inline_audio" in self.backends[backend_id].google_features.features
+            ]
+            if audio_profiles:
+                if any(
+                    self.backends[backend_id].provider != "google_ai_studio"
+                    or self.backends[backend_id].api_surface != "native"
+                    for backend_id in pool.backends
+                ):
+                    raise ValueError("Google audio profiles require a Google-native-only pool")
+                if model_name not in self.pricing:
+                    raise ValueError("Audio-enabled pools require token pricing")
+                self.pricing[model_name].audio_file_tokens = max(
+                    int(profile.audio_input_tokens_per_second or 0) * profile.max_audio_seconds + 64
+                    for profile in audio_profiles
+                )
+            if image_bounds:
+                if any(
+                    self.backends[backend_id].provider != "google_ai_studio"
+                    for backend_id in pool.backends
+                ):
+                    raise ValueError(
+                        "Google image profiles require a separate Google-only model pool"
+                    )
+                if model_name not in self.pricing:
+                    raise ValueError("Image-enabled pools require token pricing")
+                self.pricing[model_name].image_input_tokens = max(
+                    bound for bound in image_bounds if bound is not None
                 )
 
         # Parse quota group rate limits
@@ -524,6 +715,15 @@ class Settings(BaseSettings):
             unknown_group = min(unknown_quota_groups)
             raise ValueError(f"Rate limits reference unknown quota group '{unknown_group}'")
         self.quota_group_rate_limits = parsed_quota_limits
+        validate_audio_output_pools(self, backends_data)
+        if any("audio_output" in b.google_features.features for b in self.backends.values()):
+            raise ValueError("Generated audio runtime is unavailable pending integration gates")
+        validate_image_output_pools(self, backends_data)
+        # Local integration alone does not clear resource/readiness/exact-model gates.
+        if any(
+            "image_output" in backend.google_features.features for backend in self.backends.values()
+        ):
+            raise ValueError("Generated image runtime is unavailable pending integration gates")
 
         # Parse backend cycle start days
         cycle_data = load_object(
