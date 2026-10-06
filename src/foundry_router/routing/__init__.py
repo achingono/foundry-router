@@ -5,13 +5,20 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 
+if TYPE_CHECKING:
+    from foundry_router.api.google_continuation import PreparedContinuation
+    from foundry_router.api.google_pdf import PreparedGoogleMedia
+    from foundry_router.api.google_sealing import SealContext
+
 from foundry_router.api.adapters import get_adapter
 from foundry_router.api.adapters.base import AdapterRejection
+from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
 from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
     CreditAssessment,
@@ -76,7 +83,15 @@ def _backend_supports_operation(settings: Any, backend_id: str, operation: str) 
 
 
 def _backend_feature_rejection(
-    settings: Any, backend_id: str, operation: str, body: dict[str, Any]
+    settings: Any,
+    backend_id: str,
+    operation: str,
+    body: dict[str, Any],
+    *,
+    deadline_monotonic: float | None = None,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> Any | None:
     backends = getattr(settings, "backends", None)
     if not isinstance(backends, dict) or backend_id not in backends:
@@ -87,11 +102,30 @@ def _backend_feature_rejection(
         return None
     provider = getattr(config, "provider", "azure_foundry")
     try:
-        adapter = get_adapter(provider)
+        adapter = get_adapter(
+            provider,
+            google_features=getattr(config, "google_features", None),
+            api_surface=getattr(config, "api_surface", "openai_compat"),
+            seal_context=seal_context,
+            backend_id=backend_id,
+            prepared_continuation=prepared_continuation,
+        )
     except ValueError:
+        if (
+            getattr(getattr(config, "google_features", None), "continuation_policy", None)
+            == "sealed_native"
+        ):
+            return AdapterRejection(
+                503, "provider_state_unavailable", "Provider state is unavailable"
+            )
         return None
     try:
-        return adapter.check_request(operation, body)
+        return adapter.check_request(
+            operation,
+            body,
+            deadline_monotonic=deadline_monotonic,
+            **({"prepared_media": prepared_media} if prepared_media is not None else {}),
+        )
     except Exception:
         # Fail closed: an adapter bug must not make an unvalidated request eligible.
         return AdapterRejection(
@@ -178,11 +212,128 @@ async def select_candidate_backend(
     excluded: set[str] | None = None,
     requested_model: str | None = None,
     is_alias: bool = False,
+    intake_deadline_monotonic: float | None = None,
+    validation_deadline_monotonic: float | None = None,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> BackendSelectionResult:
+    if intake_deadline_monotonic is not None:
+        if time.monotonic() >= intake_deadline_monotonic:
+            return BackendSelectionResult(
+                None,
+                [],
+                {},
+                False,
+                feature_rejection=AdapterRejection(
+                    408, "request_timeout", "Request intake deadline exceeded"
+                ),
+            )
+        try:
+            async with asyncio.timeout_at(intake_deadline_monotonic):
+                result = await select_candidate_backend(
+                    settings,
+                    model,
+                    operation=operation,
+                    body=body,
+                    request_id=request_id,
+                    health_store=health_store,
+                    credit_store=credit_store,
+                    logger=logger,
+                    rate_limit_store=rate_limit_store,
+                    excluded=excluded,
+                    requested_model=requested_model,
+                    is_alias=is_alias,
+                    validation_deadline_monotonic=intake_deadline_monotonic,
+                    prepared_media=prepared_media,
+                    seal_context=seal_context,
+                    prepared_continuation=prepared_continuation,
+                )
+        except TimeoutError:
+            # Storage cancellation can race a committed admission. Always release
+            # any possible reservation before returning a pre-dispatch timeout.
+            operations = [
+                lambda: credit_store.finalize_request(
+                    request_id, backend_id=None, charge_reserved=False, charged_cost_usd=None
+                )
+            ]
+            if rate_limit_store is not None:
+                operations.append(lambda: rate_limit_store.release_request(request_id))
+            await protected_cleanup(operations)
+            return BackendSelectionResult(
+                None,
+                [],
+                {},
+                False,
+                feature_rejection=AdapterRejection(
+                    408, "request_timeout", "Request intake deadline exceeded"
+                ),
+            )
+        else:
+            if time.monotonic() >= intake_deadline_monotonic:
+                await credit_store.finalize_request(
+                    request_id,
+                    backend_id=result.backend_id,
+                    charge_reserved=False,
+                    charged_cost_usd=None,
+                )
+                if rate_limit_store is not None:
+                    await rate_limit_store.release_request(request_id)
+                return BackendSelectionResult(
+                    None,
+                    [],
+                    {},
+                    False,
+                    feature_rejection=AdapterRejection(
+                        408, "request_timeout", "Request intake deadline exceeded"
+                    ),
+                )
+            return result
+    work_deadline = validation_deadline_monotonic or intake_deadline_monotonic
+
+    def intake_expired() -> bool:
+        return work_deadline is not None and time.monotonic() >= work_deadline
+
+    def expired_selection() -> BackendSelectionResult:
+        return BackendSelectionResult(
+            None,
+            [],
+            {},
+            False,
+            feature_rejection=AdapterRejection(
+                408, "request_timeout", "Request intake deadline exceeded"
+            ),
+        )
+
+    if intake_expired():
+        return expired_selection()
     effective_requested = requested_model if requested_model is not None else model
     effective_resolved = model
     effective_is_alias = bool(is_alias)
     ranked_candidates = ranked_model_backends(settings, model, excluded=excluded)
+    if prepared_continuation is not None:
+        try:
+            if seal_context is None:
+                prepared_continuation.validate(body)
+            else:
+                await bounded_signed_work(
+                    partial(prepared_continuation.validate, body),
+                    deadline=work_deadline or time.monotonic() + settings.intake_timeout_seconds,
+                    lease=seal_context.work_lease,
+                )
+        except (ValueError, TimeoutError):
+            return BackendSelectionResult(
+                None,
+                [],
+                {},
+                False,
+                feature_rejection=AdapterRejection(
+                    422, "invalid_provider_state", "Invalid provider state"
+                ),
+            )
+        ranked_candidates = [
+            name for name in ranked_candidates if name == prepared_continuation.backend
+        ]
     if not ranked_candidates:
         return BackendSelectionResult(None, [], {}, False)
 
@@ -202,7 +353,30 @@ async def select_candidate_backend(
     feature_eligible: list[str] = []
     feature_rejection: Any | None = None
     for backend_id in operation_eligible:
-        rejection = _backend_feature_rejection(settings, backend_id, operation, body)
+        if intake_expired():
+            return expired_selection()
+        validate = partial(
+            _backend_feature_rejection,
+            settings,
+            backend_id,
+            operation,
+            body,
+            deadline_monotonic=work_deadline,
+            prepared_media=prepared_media,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
+        )
+        if seal_context is None:
+            rejection = validate()
+        else:
+            try:
+                rejection = await bounded_signed_work(
+                    validate,
+                    lease=seal_context.work_lease,
+                    deadline=work_deadline or time.monotonic() + settings.intake_timeout_seconds,
+                )
+            except SignedIntakeError as exc:
+                rejection = AdapterRejection(exc.status, exc.code, str(exc))
         if rejection is None:
             feature_eligible.append(backend_id)
         elif feature_rejection is None:
@@ -216,6 +390,8 @@ async def select_candidate_backend(
             feature_rejection=feature_rejection,
         )
     ranked_candidates = feature_eligible
+    if intake_expired():
+        return expired_selection()
 
     snapshots = await health_store.snapshot_backend_health(ranked_candidates)
     await credit_store.sync_from_settings(settings)
@@ -225,6 +401,7 @@ async def select_candidate_backend(
         operation=operation,
         body=body,
         pricing=settings.pricing,
+        settings=settings,
     )
     if estimate is None:
         _emit_routing_decision(
@@ -310,6 +487,7 @@ async def select_candidate_backend(
     if (
         not health_eligible
         and settings.protected_emergency_fallback
+        and prepared_continuation is None
         and len(ranked_candidates) == 1
     ):
         fallback_candidate = ranked_candidates[0]
@@ -350,6 +528,7 @@ async def select_candidate_backend(
     protected_quota_fallback = (
         not quota_eligible
         and settings.protected_emergency_fallback
+        and prepared_continuation is None
         and len(ranked_candidates) == 1
         and health_eligible == ranked_candidates
     )
@@ -414,6 +593,8 @@ async def select_candidate_backend(
     has_credit_capacity = False
     rate_limit_reservation_failed = False
     for backend_id in quota_eligible:
+        if intake_expired():
+            return expired_selection()
         credit_metered = settings.backends[backend_id].credit_metered
         if not credit_metered:
             assessment = CreditAssessment(
@@ -504,6 +685,8 @@ async def select_candidate_backend(
 
     scored_candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
     for _score, _weight, backend_id in scored_candidates:
+        if intake_expired():
+            return expired_selection()
         credit_metered = settings.backends[backend_id].credit_metered
         if not credit_metered:
             reserved = True
@@ -667,6 +850,7 @@ def _deadline_exceeded_result(
             operation=operation,
             body=body,
             pricing=getattr(settings, "pricing", {}),
+            settings=settings,
         )
     except Exception:
         estimate = None
@@ -731,11 +915,17 @@ async def execute_with_single_failover(
     rate_limit_store: Any | None = None,
     requested_model: str | None = None,
     is_alias: bool = False,
+    intake_deadline_monotonic: float | None = None,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> Response:
     started_at = time.monotonic()
     # Start before admission so storage latency cannot grant a fresh lifetime
     # to a reservation already created inside initial selection.
     reservation_deadline = _reservation_deadline_monotonic(settings)
+    if intake_deadline_monotonic is not None:
+        reservation_deadline = min(reservation_deadline, intake_deadline_monotonic)
     effective_requested = requested_model if requested_model is not None else model
     effective_is_alias = bool(is_alias)
 
@@ -769,6 +959,10 @@ async def execute_with_single_failover(
             rate_limit_store=rate_limit_store,
             requested_model=effective_requested,
             is_alias=effective_is_alias,
+            intake_deadline_monotonic=intake_deadline_monotonic,
+            prepared_media=prepared_media,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
         )
     except CreditStoreError:
         if rate_limit_store is not None:
@@ -859,20 +1053,25 @@ async def execute_with_single_failover(
         nonlocal credit_finalization_attempted, reservation_closed_or_transferred
         credit_finalization_attempted = True
         reservation_closed_or_transferred = True
+        cost = result.settlement_cost_usd
+        input_tokens = result.settlement_input_tokens
+        # Cleanup callbacks retain primitive facts, never a potentially large
+        # generated-artifact response through their task/callback lifetime.
+        del result
 
         async def credit() -> None:
             await credit_store.finalize_request(
                 request_id,
                 backend_id=backend_id,
                 charge_reserved=True,
-                charged_cost_usd=result.settlement_cost_usd,
+                charged_cost_usd=cost,
             )
 
         operations: list[Any] = [credit]
         if rate_limit_store is not None:
             operations.append(
                 lambda: rate_limit_store.finalize_request(
-                    request_id, actual_input_tokens=result.settlement_input_tokens
+                    request_id, actual_input_tokens=input_tokens
                 )
             )
         await protected_cleanup(operations)
@@ -891,7 +1090,7 @@ async def execute_with_single_failover(
             api_error=api_error,
         )
 
-        if not first_result.retryable_failure:
+        if not first_result.retryable_failure or prepared_continuation is not None:
             if first_result.confirmed_pre_dispatch and rate_limit_store is not None:
                 await rate_limit_store.release_request(request_id)
             if not isinstance(first_result.response, StreamingResponse):
@@ -951,6 +1150,7 @@ async def execute_with_single_failover(
                     operation=operation,
                     body=body,
                     pricing=getattr(settings, "pricing", {}),
+                    settings=settings,
                 )
             except Exception:
                 failover_estimate = None
@@ -971,8 +1171,12 @@ async def execute_with_single_failover(
             logger=logger,
             rate_limit_store=rate_limit_store,
             excluded={first_backend_id},
+            prepared_media=prepared_media,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             requested_model=effective_requested,
             is_alias=effective_is_alias,
+            intake_deadline_monotonic=intake_deadline_monotonic,
         )
         second_backend_id = second_selection.backend_id
         if second_backend_id is None:

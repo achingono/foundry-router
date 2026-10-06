@@ -19,6 +19,10 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 import foundry_router.forwarding as forwarding_module
+from foundry_router.api.google_output_delivery import (
+    GeneratedOutputDeliveryMiddleware,
+    delivery_owner,
+)
 from foundry_router.api.routes.admin import build_router as build_admin_router
 from foundry_router.api.routes.health import build_router as build_health_router
 from foundry_router.api.routes.openai import build_router as build_openai_router
@@ -397,8 +401,14 @@ async def track_active_requests(request: Request, call_next: Any) -> Response:
     await _increment_active_requests()
     response: Response | None = None
     is_streaming = False
+    counter_transferred = False
     try:
         response = cast(Response, await call_next(request))  # noqa: TC006
+        owner = delivery_owner(request.state)
+        if owner is not None and owner.lease is not None:
+            owner.attach_drain_cleanup(_decrement_active_requests)
+            counter_transferred = True
+            return response
         is_streaming = isinstance(response, StreamingResponse)
         if is_streaming:
             # Hold drain counter until stream body is fully consumed.
@@ -420,11 +430,14 @@ async def track_active_requests(request: Request, call_next: Any) -> Response:
             return response
         return response
     finally:
-        if not is_streaming:
+        if not is_streaming and not counter_transferred:
             await _decrement_active_requests()
         elif response is None:
             # call_next raised before response was produced
             await _decrement_active_requests()
+
+
+app.add_middleware(GeneratedOutputDeliveryMiddleware)
 
 
 @app.exception_handler(Exception)

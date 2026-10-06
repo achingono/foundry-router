@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 
+from foundry_router.api.google_output_wav import output_wav_ready
+from foundry_router.api.google_output_work import OutputInspectionLease
+from foundry_router.api.google_pdf import pdf_preparer
 from foundry_router.credit_groups import credit_membership
 
 
@@ -49,6 +53,31 @@ def build_router(*, load_settings_fn: Any, extra_checks_fn: Any | None = None) -
             "backend_credit_config_complete": backend_credit_config_complete,
             "model_pricing_complete": model_pricing_complete,
         }
+        if any(
+            "audio_output" in config.google_features.features
+            for config in settings.backends.values()
+        ):
+            checks["generated_audio_inspector_available"] = output_wav_ready()
+        if any(
+            "image_output" in config.google_features.features
+            for config in settings.backends.values()
+        ):
+            lease = None
+            try:
+                lease = OutputInspectionLease()
+                checks["generated_output_inspector_available"] = await lease.ready(
+                    deadline=time.monotonic() + 2
+                )
+            except ValueError:
+                checks["generated_output_inspector_available"] = False
+            finally:
+                if lease is not None:
+                    lease.close()
+        if any(
+            "inline_pdfs" in config.google_features.features
+            for config in settings.backends.values()
+        ):
+            checks["pdf_inspector_available"] = await pdf_preparer.ready()
         if extra_checks_fn is not None:
             extra = await extra_checks_fn()
             checks = {**checks, **dict(extra)}

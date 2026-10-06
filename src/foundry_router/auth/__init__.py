@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from foundry_router.config import load_settings
+from foundry_router.config.google_state import decode_state_key
 
 
 class AuthError(HTTPException):
@@ -28,6 +30,7 @@ client_bearer = HTTPBearer(auto_error=False)
 
 
 async def verify_client_auth(
+    request: Request,
     api_key: str | None = Security(client_api_key_header),
     bearer: HTTPAuthorizationCredentials | None = Security(client_bearer),
 ) -> str:
@@ -55,6 +58,14 @@ async def verify_client_auth(
         if hmac.compare_digest(provided_key, valid_key):
             matched = True
     if matched:
+        state_keys = settings.google_state_keys
+        if state_keys is not None:
+            request.state.google_state_key_configuration = state_keys
+            request.state.google_caller_scope = hmac.new(
+                decode_state_key(state_keys.scope_key),
+                b"caller\0" + provided_key.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
         return provided_key
 
     raise AuthError("Invalid client API key")

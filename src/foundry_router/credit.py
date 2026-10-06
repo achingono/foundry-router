@@ -11,6 +11,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
+from foundry_router.api.adapters.google_audio_request import (
+    audio_output_request,
+    validate_audio_output_request,
+)
+from foundry_router.api.adapters.google_image_request import image_output_request
 from foundry_router.credit_groups import (
     CreditStoreError,
     credit_membership,
@@ -254,6 +259,7 @@ def estimate_request_cost(
     operation: str,
     body: dict[str, Any],
     pricing: dict[str, Any],
+    settings: Any | None = None,
 ) -> RequestEstimate | None:
     """Estimate a request cost from configured pricing; missing pricing fails closed."""
     model_pricing = pricing.get(model)
@@ -265,13 +271,72 @@ def estimate_request_cost(
     if not _valid_non_negative_finite(input_price) or not _valid_non_negative_finite(output_price):
         return None
 
+    signature_bound = 0
+    thinking_budget = 0
+    pools = getattr(settings, "models", {})
+    pool = pools.get(model)
+    if (
+        operation == "responses"
+        and settings is not None
+        and pool is not None
+        and audio_output_request(body)
+        and any(
+            "audio_output" in settings.backends[name].google_features.features
+            for name in pool.backends
+        )
+    ):
+        return _estimate_audio_pool(body, model_pricing, settings, pool)
+    if (
+        operation == "responses"
+        and settings is not None
+        and pool is not None
+        and image_output_request(body)
+        and any(
+            "image_output" in settings.backends[name].google_features.features
+            for name in pool.backends
+        )
+    ):
+        return _estimate_image_pool(body, model_pricing, settings, pool)
+    if (
+        settings is not None
+        and pool is not None
+        and operation == "responses"
+        and getattr(pool, "continuation_policy", None) == "bound_history_required"
+    ):
+        backends = settings.backends
+        profiles = [backends[name].google_features for name in pool.backends]
+        signature_bound = max(profile.signature_input_token_bound or 0 for profile in profiles)
+        thinking_budget = max(profile.native_thinking_budget or 0 for profile in profiles)
+        # Only protocol-owned root carriers disappear. Nested schema/argument/result
+        # fields remain ordinary billable content. Intake has already validated shapes.
+        history = body.get("input")
+        if not isinstance(history, list):
+            return None
+        body = {
+            **{key: value for key, value in body.items() if key != "foundry_provider_state"},
+            "input": [
+                {key: value for key, value in item.items() if key != "foundry_provider_state"}
+                if isinstance(item, dict)
+                and (item.get("role") == "assistant" or item.get("type") == "function_call")
+                else item
+                for item in history
+            ],
+        }
     input_tokens = 0
     output_tokens = 0
     if operation == "responses":
-        input_tokens = _estimate_text_tokens(body.get("input"))
+        input_tokens = _estimate_response_input(
+            body, model_pricing, force_bytes=bool(signature_bound)
+        )
+        if input_tokens < 0:
+            return None
         instructions = body.get("instructions")
         if isinstance(instructions, str):
-            instruction_tokens = _chars_to_tokens(instructions)
+            instruction_tokens = (
+                len(instructions.encode())
+                if signature_bound or _feature_estimate_required(body, model_pricing)
+                else _chars_to_tokens(instructions)
+            )
             if instruction_tokens < 0:
                 return None
             input_tokens += instruction_tokens
@@ -295,6 +360,8 @@ def estimate_request_cost(
     else:
         return None
 
+    input_tokens += signature_bound
+    output_tokens += thinking_budget
     estimated_cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
     if not _valid_non_negative_finite(estimated_cost):
         return None
@@ -302,6 +369,214 @@ def estimate_request_cost(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         estimated_cost_usd=estimated_cost,
+    )
+
+
+def _estimate_image_pool(
+    body: dict[str, Any], model_pricing: Any, settings: Any, pool: Any
+) -> RequestEstimate | None:
+    profiles = [settings.backends[name].google_features for name in pool.backends]
+    if not profiles or any("image_output" not in p.features for p in profiles):
+        return None
+    bounds = {p.generated_output_tokens_bound for p in profiles}
+    ceilings = {p.image_output_price_ceiling_usd for p in profiles}
+    if len(bounds) != 1 or len(ceilings) != 1:
+        return None
+    bound = profiles[0].generated_output_tokens_bound
+    ceiling = profiles[0].image_output_price_ceiling_usd
+    price = getattr(model_pricing, "image_output_per_image", None)
+    if bound is None or ceiling is None or price != ceiling:
+        return None
+    return estimate_generated_image_request(
+        body=body,
+        model_pricing=model_pricing,
+        total_output_tokens=bound,
+        image_price_ceiling_usd=ceiling,
+    )
+
+
+def _estimate_audio_pool(
+    body: dict[str, Any], model_pricing: Any, settings: Any, pool: Any
+) -> RequestEstimate | None:
+    profiles = [settings.backends[name].google_features for name in pool.backends]
+    if not profiles or any(p != profiles[0] or "audio_output" not in p.features for p in profiles):
+        return None
+    profile = profiles[0]
+    try:
+        validate_audio_output_request(body, profile)
+    except ValueError:
+        return None
+    price = getattr(model_pricing, "audio_output_per_second", None)
+    if (
+        not isinstance(price, (int, float))
+        or isinstance(price, bool)
+        or not _valid_non_negative_finite(price)
+        or price != profile.audio_output_price_ceiling_usd_per_second
+    ):
+        return None
+    inputs = len(body["input"].encode()) + len(body.get("instructions", "").encode()) + 64
+    outputs = profile.generated_output_tokens_bound
+    input_price = getattr(model_pricing, "input_per_million", None)
+    output_price = getattr(model_pricing, "output_per_million", None)
+    if (
+        outputs is None
+        or not isinstance(input_price, (int, float))
+        or isinstance(input_price, bool)
+        or not isinstance(output_price, (int, float))
+        or isinstance(output_price, bool)
+        or not _valid_non_negative_finite(input_price)
+        or not _valid_non_negative_finite(output_price)
+    ):
+        return None
+    cost = ((inputs * input_price) + (outputs * output_price)) / 1000000 + 10 * price
+    if not _valid_non_negative_finite(cost):
+        return None
+    return RequestEstimate(inputs, outputs, cost)
+
+
+def estimate_generated_image_request(
+    *,
+    body: dict[str, Any],
+    model_pricing: Any,
+    total_output_tokens: int,
+    image_price_ceiling_usd: float,
+) -> RequestEstimate | None:
+    """Full conservative image reserve; multimodal usage must not reduce this cost.
+
+    This helper owns no enablement or provider conversion. Call only after exact
+    output profile and pricing/quota validation. Auto text-only output still reserves
+    one possible image; every billable outcome retains this entire estimate.
+    """
+    if (
+        type(total_output_tokens) is not int
+        or not 2048 <= total_output_tokens <= 32768
+        or type(image_price_ceiling_usd) not in (int, float)
+        or not _valid_non_negative_finite(image_price_ceiling_usd)
+    ):
+        return None
+    if (
+        type(body.get("max_output_tokens", total_output_tokens)) is not int
+        or body.get("max_output_tokens", total_output_tokens) != total_output_tokens
+    ):
+        return None
+    input_price = getattr(model_pricing, "input_per_million", None)
+    output_price = getattr(model_pricing, "output_per_million", None)
+    if (
+        not isinstance(input_price, (int, float))
+        or isinstance(input_price, bool)
+        or not isinstance(output_price, (int, float))
+        or isinstance(output_price, bool)
+        or not _valid_non_negative_finite(input_price)
+        or not _valid_non_negative_finite(output_price)
+    ):
+        return None
+    input_tokens = _estimate_response_input(body, model_pricing, force_bytes=True)
+    if input_tokens < 0:
+        return None
+    instructions = body.get("instructions")
+    if instructions is not None:
+        if not isinstance(instructions, str):
+            return None
+        input_tokens += len(instructions.encode())
+    if input_tokens < 0:
+        return None
+    cost = ((input_tokens * input_price) + (total_output_tokens * output_price)) / 1000000
+    cost += image_price_ceiling_usd
+    if not _valid_non_negative_finite(cost):
+        return None
+    return RequestEstimate(input_tokens, total_output_tokens, cost)
+
+
+def generated_image_billable_cost(estimate: RequestEstimate) -> float:
+    """Return the full typed reserve for every billable generated-image outcome."""
+    return estimate.estimated_cost_usd
+
+
+def _estimate_response_input(
+    body: dict[str, Any], model_pricing: Any, *, force_bytes: bool = False
+) -> int:
+    value = body.get("input")
+    media_tokens = 0
+    if isinstance(value, list):
+        # Media is metered from a server-owned profile bound, never encoded characters.
+        copied: list[Any] = []
+        for item in value:
+            if not isinstance(item, dict) or not isinstance(item.get("content"), list):
+                copied.append(item)
+                continue
+            parts: list[Any] = []
+            for part in item["content"]:
+                if isinstance(part, dict) and part.get("type") == "input_file":
+                    uri = part.get("file_data")
+                    is_audio = isinstance(uri, str) and uri.startswith("data:audio/wav;base64,")
+                    is_video = isinstance(uri, str) and uri.startswith("data:video/avi;base64,")
+                    bound = getattr(
+                        model_pricing,
+                        "audio_file_tokens"
+                        if is_audio
+                        else "video_file_tokens"
+                        if is_video
+                        else "pdf_document_tokens",
+                        None,
+                    )
+                    if not isinstance(bound, int) or isinstance(bound, bool) or bound < 96:
+                        parts.append(part)
+                        continue
+                    media_tokens += bound
+                    continue
+                if isinstance(part, dict) and part.get("type") == "input_image":
+                    bound = getattr(model_pricing, "image_input_tokens", None)
+                    if not isinstance(bound, int) or isinstance(bound, bool) or bound < 258:
+                        parts.append(part)
+                        continue
+                    media_tokens += bound + 16
+                else:
+                    parts.append(part)
+            copied.append({**item, "content": parts})
+        value = copied
+    text_tokens = _estimate_text_tokens(value)
+    if text_tokens < 0:
+        return -1
+    # Existing text-only estimates retain their behavior. Tool/schema requests use
+    # UTF-8 serialized bytes as a conservative token ceiling including keys/overhead.
+    if force_bytes or _feature_estimate_required(body, model_pricing):
+        try:
+            wire = json.dumps(
+                {"input": value, "tools": body.get("tools", []), "text": body.get("text")},
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode()
+        except (ValueError, TypeError, RecursionError):
+            return -1
+        if len(wire) > MAX_TEXT_WALK_CHARS:
+            return -1
+        text_tokens = len(wire) + 64
+    return text_tokens + media_tokens
+
+
+def _feature_estimate_required(body: dict[str, Any], model_pricing: Any) -> bool:
+    if any(key in body for key in ("tools", "text")):
+        return True
+    value = body.get("input")
+    return isinstance(value, list) and any(
+        isinstance(item, dict)
+        and (
+            item.get("type") in {"function_call", "function_call_output"}
+            or (
+                (
+                    getattr(model_pricing, "image_input_tokens", None) is not None
+                    or getattr(model_pricing, "pdf_document_tokens", None) is not None
+                    or getattr(model_pricing, "audio_file_tokens", None) is not None
+                    or getattr(model_pricing, "video_file_tokens", None) is not None
+                )
+                and isinstance(item.get("content"), list)
+                and any(
+                    isinstance(part, dict) and part.get("type") in {"input_image", "input_file"}
+                    for part in item["content"]
+                )
+            )
+        )
+        for item in value
     )
 
 
@@ -446,7 +721,7 @@ class InMemoryCreditStore:
         self._lock = asyncio.Lock()
         self._snapshots: dict[str, _BackendCreditSnapshot] = {}
         self._reservations: dict[str, _Reservation] = {}
-        self._last_synced_settings_id: int | None = None
+        self._last_synced_settings: Any = None
         self._credit_aliases: dict[str, str] = {}
         self._metered_groups: set[str] = set()
 
@@ -458,7 +733,7 @@ class InMemoryCreditStore:
             aliases = credit_membership(settings)
             groups = metered_credit_groups(settings)
             if (
-                id(settings) == self._last_synced_settings_id
+                settings is self._last_synced_settings
                 and aliases == self._credit_aliases
                 and groups == self._metered_groups
             ):
@@ -497,7 +772,7 @@ class InMemoryCreditStore:
             if sync_complete:
                 self._credit_aliases = aliases
                 self._metered_groups = groups
-                self._last_synced_settings_id = id(settings)
+                self._last_synced_settings = settings
 
     async def assess_with_context(
         self,
@@ -647,7 +922,7 @@ class InMemoryCreditStore:
         async with self._lock:
             self._snapshots.clear()
             self._reservations.clear()
-            self._last_synced_settings_id = None
+            self._last_synced_settings = None
             self._credit_aliases.clear()
             self._metered_groups.clear()
 

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from foundry_router.credit import InMemoryCreditStore
 from foundry_router.state import AzureTableCreditStore, TableEntityCreditStoreError
 from tests.unit.test_state import FakeTableClient
 
@@ -26,6 +27,26 @@ def _live_sum(client: FakeTableClient) -> float:
         if pk == "b1" and rk.startswith("req-"):
             total += float(ent["estimated_cost_usd"])
     return total
+
+
+@pytest.mark.parametrize("table", [False, True])
+async def test_credit_sync_retains_actual_identity_and_accepts_changed_configuration(table):
+    client = FakeTableClient()
+    store = AzureTableCreditStore(client) if table else InMemoryCreditStore()
+    initial = _settings()
+    await store.sync_from_settings(initial)
+    assert store._last_synced_settings is initial
+    changed = _settings(allowance=200, remaining=200, day=2)
+    await store.sync_from_settings(changed)
+    assert store._last_synced_settings is changed
+    if table:
+        assert client.entities[("b1", "balance")]["cycle_allowance_usd"] == 200
+        assert client.entities[("b1", "balance")]["cycle_start_day"] == 2
+    else:
+        assert store._snapshots["b1"].cycle_allowance_usd == 200
+        assert store._snapshots["b1"].cycle_start_day == 2
+    await store.reset()
+    assert store._last_synced_settings is None
 
 
 @pytest.mark.asyncio

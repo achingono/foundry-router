@@ -10,13 +10,28 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import Any
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from fastapi import Response
 from fastapi.responses import StreamingResponse
 
+if TYPE_CHECKING:
+    from foundry_router.api.google_continuation import PreparedContinuation
+    from foundry_router.api.google_output_work import OutputInspectionLease
+    from foundry_router.api.google_pdf import PreparedGoogleMedia
+    from foundry_router.api.google_sealing import SealContext
+
 from foundry_router.api.adapters import get_adapter
+from foundry_router.api.adapters.google_audio_request import (
+    MAX_AUDIO_RESPONSE_BYTES,
+    audio_output_request,
+)
+from foundry_router.api.adapters.google_image_output import translate_image_output
+from foundry_router.api.adapters.google_image_request import image_output_request
+from foundry_router.api.adapters.google_schema import load_bounded_json
+from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
 from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -81,7 +96,14 @@ def _default_output_tokens(body: dict[str, Any]) -> int:
 
 
 def _build_upstream_body(
-    settings: Any, backend_id: str, operation: str, public_body: dict[str, Any]
+    settings: Any,
+    backend_id: str,
+    operation: str,
+    public_body: dict[str, Any],
+    *,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> dict[str, Any]:
     backends = getattr(settings, "backends", None)
     if not isinstance(backends, dict) or backend_id not in backends:
@@ -90,8 +112,15 @@ def _build_upstream_body(
     # Fail closed: adapter errors propagate to the caller, which returns a
     # sanitized 502 without egress. Never fall back to the raw Responses body.
     provider = _provider_of(settings, backend_id)
-    adapter = get_adapter(provider)
     config = backends[backend_id]
+    adapter = get_adapter(
+        provider,
+        google_features=getattr(config, "google_features", None),
+        api_surface=getattr(config, "api_surface", "openai_compat"),
+        seal_context=seal_context,
+        backend_id=backend_id,
+        prepared_continuation=prepared_continuation,
+    )
     deployment = str(getattr(config, "deployment", "") or "")
     if not deployment:
         return dict(public_body)
@@ -100,6 +129,7 @@ def _build_upstream_body(
         public_body,
         deployment=deployment,
         default_output_tokens=_default_output_tokens(public_body),
+        **({"prepared_media": prepared_media} if prepared_media is not None else {}),
     )
 
 
@@ -149,6 +179,7 @@ def _fallback_estimate_cost(
                 operation=candidate,
                 body=public_body,
                 pricing=getattr(settings, "pricing", {}),
+                settings=settings,
             )
         except Exception:
             continue
@@ -422,11 +453,40 @@ async def forward_non_streaming_with_retries(
     sleep: Any,
     api_error: Any,
     reservation_deadline_monotonic: float | None = None,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
+    output_lease: OutputInspectionLease | None = None,
 ) -> BackendRequestResult:
     max_attempts = max(1, settings.retry_attempts)
     backend_client = get_backend_client()
     try:
-        upstream_body = _build_upstream_body(settings, backend_id, operation, body)
+        build = partial(
+            _build_upstream_body,
+            settings,
+            backend_id,
+            operation,
+            body,
+            prepared_media=prepared_media,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
+        )
+        upstream_body = (
+            build()
+            if seal_context is None
+            else await bounded_signed_work(
+                build,
+                lease=seal_context.work_lease,
+                deadline=reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds,
+            )
+        )
+    except SignedIntakeError as exc:
+        return BackendRequestResult(
+            response=api_error(exc.status, str(exc), exc.code),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
     except Exception:
         return BackendRequestResult(
             response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
@@ -434,6 +494,9 @@ async def forward_non_streaming_with_retries(
         )
     if _is_google(settings, backend_id):
         return await _forward_google_non_streaming(
+            output_lease=output_lease,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             settings=settings,
             backend_id=backend_id,
             operation=operation,
@@ -608,9 +671,14 @@ class GoogleAttemptSettlement:
     dispatched: bool = False
     context: Any = None
     decoder: Any = None
+    retain_full_cost: bool = False
 
     def capture_stream_usage(self, settings: Any, model: str) -> None:
         if self.decoder is None:
+            return
+        if getattr(self.decoder, "usage_invalid", False):
+            self.cost = None
+            self.input_tokens = None
             return
         input_tokens, output_tokens = self.decoder.usage
         if input_tokens is not None:
@@ -620,27 +688,19 @@ class GoogleAttemptSettlement:
             if cost is not None:
                 self.cost = cost
 
-    def capture_usage(self, raw_body: bytes, settings: Any, model: str, operation: str) -> None:
+    def capture_usage(
+        self, raw_body: bytes, settings: Any, model: str, operation: str, adapter: Any
+    ) -> None:
         try:
-            payload = json.loads(raw_body)
+            payload = load_bounded_json(raw_body.decode(), max_bytes=MAX_GOOGLE_RESPONSE_BYTES)
         except (ValueError, UnicodeDecodeError):
             return
-        usage = payload.get("usage") if isinstance(payload, dict) else None
-        if not isinstance(usage, dict):
-            return
-        input_tokens = usage.get("prompt_tokens")
-        output_tokens = 0 if operation == "embeddings" else usage.get("completion_tokens")
-        if (
-            isinstance(input_tokens, bool)
-            or not isinstance(input_tokens, int)
-            or input_tokens < 0
-            or isinstance(output_tokens, bool)
-            or not isinstance(output_tokens, int)
-            or output_tokens < 0
-        ):
+        input_tokens, output_tokens = adapter.extract_usage(operation, payload)
+        if input_tokens is None or output_tokens is None:
             return
         self.input_tokens = input_tokens
-        self.cost = _estimate_cost_for_tokens(settings, model, input_tokens, output_tokens)
+        if not self.retain_full_cost:
+            self.cost = _estimate_cost_for_tokens(settings, model, input_tokens, output_tokens)
 
 
 async def _forward_google_non_streaming(
@@ -656,12 +716,26 @@ async def _forward_google_non_streaming(
     set_backend_cooldown: Any,
     api_error: Any,
     reservation_deadline_monotonic: float | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
+    output_lease: OutputInspectionLease | None = None,
 ) -> BackendRequestResult:
     model = str(public_body.get("model", ""))
     cost, input_tokens = _fallback_estimate_cost(settings, public_body, model, operation)
-    settlement = GoogleAttemptSettlement(cost, input_tokens)
+    image = image_output_request(public_body)
+    audio = audio_output_request(public_body)
+    if (image or audio) and (output_lease is None or cost is None):
+        return BackendRequestResult(
+            response=api_error(503, "Generated output is unavailable", "upstream_error"),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
+    settlement = GoogleAttemptSettlement(cost, input_tokens, retain_full_cost=image or audio)
     try:
         return await _google_non_streaming_attempt(
+            output_lease=output_lease,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             settings=settings,
             backend_id=backend_id,
             operation=operation,
@@ -707,6 +781,9 @@ async def _google_non_streaming_attempt(
     api_error: Any,
     reservation_deadline_monotonic: float | None = None,
     settlement: GoogleAttemptSettlement,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
+    output_lease: OutputInspectionLease | None = None,
 ) -> BackendRequestResult:
     """Google non-streaming translation with conservative settlement.
 
@@ -721,7 +798,14 @@ async def _google_non_streaming_attempt(
     reservation estimate, retain quota). 5xx is never treated as proof of
     non-generation.
     """
-    adapter = get_adapter("google_ai_studio")
+    adapter = get_adapter(
+        "google_ai_studio",
+        google_features=settings.backends[backend_id].google_features,
+        api_surface=settings.backends[backend_id].api_surface,
+        seal_context=seal_context,
+        backend_id=backend_id,
+        prepared_continuation=prepared_continuation,
+    )
     logical_model = str(public_body.get("model", ""))
     fallback_cost, fallback_input = _fallback_estimate_cost(
         settings, public_body, logical_model, operation
@@ -740,9 +824,19 @@ async def _google_non_streaming_attempt(
             confirmed_pre_dispatch=True,
         )
     if not hasattr(backend_client, "stream_backend"):
+        if output_lease is not None:
+            return BackendRequestResult(
+                response=api_error(
+                    503, "Generated output requires bounded transport", "upstream_error"
+                ),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            )
         # Legacy test doubles expose only request_backend; apply bounded
         # post-read checks instead of incremental streaming reads.
         return await _forward_google_non_streaming_buffered(
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             settings=settings,
             backend_id=backend_id,
             operation=operation,
@@ -757,8 +851,27 @@ async def _google_non_streaming_attempt(
             settlement=settlement,
         )
 
+    if seal_context is not None:
+        try:
+            seal_context.validate_dispatch(settings, backend_client, backend_id, logical_model)
+        except ValueError:
+            return BackendRequestResult(
+                response=api_error(
+                    503, "Provider state is unavailable", "provider_state_unavailable"
+                ),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            )
     context = backend_client.stream_backend(
-        backend_id, operation, headers=headers, json=upstream_body
+        backend_id,
+        operation,
+        headers=headers,
+        json=upstream_body,
+        **(
+            {"native_generation_stream": False}
+            if settings.backends[backend_id].api_surface == "native"
+            else {}
+        ),
     )
     settlement.context = context
     settlement.dispatched = True
@@ -805,7 +918,9 @@ async def _google_non_streaming_attempt(
         async with asyncio.timeout(remaining):
             outcome = await _read_google_non_streaming_body(
                 upstream,
-                limit_bytes=MAX_GOOGLE_RESPONSE_BYTES,
+                limit_bytes=MAX_AUDIO_RESPONSE_BYTES
+                if audio_output_request(public_body)
+                else MAX_GOOGLE_RESPONSE_BYTES,
                 error_limit_bytes=MAX_UPSTREAM_ERROR_BYTES,
             )
     except (TimeoutError, asyncio.CancelledError):
@@ -839,7 +954,7 @@ async def _google_non_streaming_attempt(
     raw_body = outcome["body"]
     breached = outcome["breached"]
     if not breached and HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
-        settlement.capture_usage(raw_body, settings, logical_model, operation)
+        settlement.capture_usage(raw_body, settings, logical_model, operation, adapter)
     await _close_quietly(context)
     if breached:
         await set_backend_cooldown(
@@ -864,7 +979,8 @@ async def _google_non_streaming_attempt(
             fallback_cost=fallback_cost,
             fallback_input=fallback_input,
         )
-    translated = _translate_google_success(
+    translate = partial(
+        _translate_google_success,
         raw_body,
         adapter=adapter,
         operation=operation,
@@ -873,6 +989,48 @@ async def _google_non_streaming_attempt(
         api_error=api_error,
         public_body=public_body,
     )
+    try:
+        if output_lease is not None:
+            output_lease.bind_delivery_deadline(reservation_deadline_monotonic)
+            payload = load_bounded_json(raw_body.decode(), max_bytes=MAX_GOOGLE_RESPONSE_BYTES)
+            async with asyncio.timeout_at(reservation_deadline_monotonic):
+                if audio_output_request(public_body):
+                    generated_body = adapter.translate_success(
+                        operation,
+                        payload,
+                        logical_model=logical_model,
+                        request_body=public_body,
+                        metadata=public_body.get("metadata"),
+                    )
+                else:
+                    generated_body = await translate_image_output(
+                        payload,
+                        adapter=adapter,
+                        request_body=public_body,
+                        logical_model=logical_model,
+                        lease=output_lease,
+                        deadline=reservation_deadline_monotonic,
+                    )
+            translated = (generated_body, settlement.cost, settlement.input_tokens)
+        else:
+            translated = (
+                translate()
+                if seal_context is None
+                else await bounded_signed_work(
+                    translate,
+                    lease=seal_context.work_lease,
+                    deadline=reservation_deadline_monotonic
+                    or time.monotonic() + settings.reservation_max_age_seconds,
+                )
+            )
+    except (SignedIntakeError, TimeoutError, ValueError, UnicodeDecodeError, OSError):
+        return BackendRequestResult(
+            response=api_error(502, "Backend response could not be completed", "upstream_error"),
+            retryable_failure=False,
+            force_charge=True,
+            settlement_cost_usd=settlement.cost,
+            settlement_input_tokens=settlement.input_tokens,
+        )
     if isinstance(translated, BackendRequestResult):
         await set_backend_cooldown(
             backend_id,
@@ -900,6 +1058,9 @@ async def _google_non_streaming_attempt(
             headers=headers_out,
         ),
         retryable_failure=False,
+        settlement_cost_usd=settlement.cost if settlement.retain_full_cost else None,
+        settlement_input_tokens=settlement.input_tokens if settlement.retain_full_cost else None,
+        force_charge=settlement.retain_full_cost,
     )
 
 
@@ -917,13 +1078,22 @@ async def _forward_google_non_streaming_buffered(
     api_error: Any,
     reservation_deadline_monotonic: float | None = None,
     settlement: GoogleAttemptSettlement,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> BackendRequestResult:
     """Buffered fallback for doubles without streaming transport (tests only).
 
     Single-shot like the streaming-transport path: routing owns every retry
     with fresh quota admission.
     """
-    adapter = get_adapter("google_ai_studio")
+    adapter = get_adapter(
+        "google_ai_studio",
+        google_features=settings.backends[backend_id].google_features,
+        api_surface=settings.backends[backend_id].api_surface,
+        seal_context=seal_context,
+        backend_id=backend_id,
+        prepared_continuation=prepared_continuation,
+    )
     logical_model = str(public_body.get("model", ""))
     fallback_cost, fallback_input = _fallback_estimate_cost(
         settings, public_body, logical_model, operation
@@ -948,6 +1118,17 @@ async def _forward_google_non_streaming_buffered(
             force_charge=True,
         )
 
+    if seal_context is not None:
+        try:
+            seal_context.validate_dispatch(settings, backend_client, backend_id, logical_model)
+        except ValueError:
+            return BackendRequestResult(
+                response=api_error(
+                    503, "Provider state is unavailable", "provider_state_unavailable"
+                ),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            )
     settlement.dispatched = True
     try:
         upstream = await backend_client.request_backend(
@@ -986,7 +1167,7 @@ async def _forward_google_non_streaming_buffered(
     )
     raw_body = upstream.content if hasattr(upstream, "content") else b""
     if len(raw_body) <= limit and HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
-        settlement.capture_usage(raw_body, settings, logical_model, operation)
+        settlement.capture_usage(raw_body, settings, logical_model, operation, adapter)
     if len(raw_body) > limit:
         await set_backend_cooldown(
             backend_id,
@@ -1010,7 +1191,8 @@ async def _forward_google_non_streaming_buffered(
             fallback_cost=fallback_cost,
             fallback_input=fallback_input,
         )
-    translated = _translate_google_success(
+    translate = partial(
+        _translate_google_success,
         raw_body,
         adapter=adapter,
         operation=operation,
@@ -1019,6 +1201,25 @@ async def _forward_google_non_streaming_buffered(
         api_error=api_error,
         public_body=public_body,
     )
+    try:
+        translated = (
+            translate()
+            if seal_context is None
+            else await bounded_signed_work(
+                translate,
+                lease=seal_context.work_lease,
+                deadline=reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds,
+            )
+        )
+    except (SignedIntakeError, TimeoutError):
+        return BackendRequestResult(
+            response=api_error(502, "Backend response could not be completed", "upstream_error"),
+            retryable_failure=False,
+            force_charge=True,
+            settlement_cost_usd=settlement.cost,
+            settlement_input_tokens=settlement.input_tokens,
+        )
     if isinstance(translated, BackendRequestResult):
         await set_backend_cooldown(
             backend_id,
@@ -1182,8 +1383,12 @@ def _translate_google_success(
     public_body: dict[str, Any],
 ) -> Any:
     try:
-        upstream_json = json.loads(raw_body.decode("utf-8")) if raw_body else None
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        upstream_json = (
+            load_bounded_json(raw_body.decode("utf-8"), max_bytes=MAX_GOOGLE_RESPONSE_BYTES)
+            if raw_body
+            else None
+        )
+    except (UnicodeDecodeError, ValueError):
         fallback_cost, fallback_input = _fallback_estimate_cost(
             settings, public_body, logical_model, operation
         )
@@ -1194,25 +1399,7 @@ def _translate_google_success(
             settlement_input_tokens=fallback_input,
             force_charge=True,
         )
-    known_input: int | None = None
-    known_output: int | None = None
-    if isinstance(upstream_json, dict):
-        usage = upstream_json.get("usage")
-        if isinstance(usage, dict):
-            prompt = usage.get("prompt_tokens")
-            completion = 0 if operation == "embeddings" else usage.get("completion_tokens")
-            # Both dimensions are required before replacing the conservative
-            # estimate: a prompt-only usage charges input alone otherwise.
-            if (
-                isinstance(prompt, int)
-                and not isinstance(prompt, bool)
-                and prompt >= 0
-                and isinstance(completion, int)
-                and not isinstance(completion, bool)
-                and completion >= 0
-            ):
-                known_input = prompt
-                known_output = completion
+    known_input, known_output = adapter.extract_usage(operation, upstream_json)
     known_cost: float | None = None
     if known_input is not None and known_output is not None:
         known_cost = _estimate_cost_for_tokens(settings, logical_model, known_input, known_output)
@@ -1235,6 +1422,7 @@ def _translate_google_success(
             expected_input_count=expected_input_count,
             expected_dimensions=expected_dimensions,
             metadata=public_body.get("metadata"),
+            request_body=public_body,
         )
     except ValueError:
         fallback_cost, fallback_input = _fallback_estimate_cost(
@@ -1267,11 +1455,39 @@ async def forward_streaming_with_retries(
     rate_limit_store: Any | None = None,
     pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
     reservation_deadline_monotonic: float | None = None,
+    prepared_media: PreparedGoogleMedia | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> BackendRequestResult:
     max_attempts = max(1, settings.retry_attempts)
     backend_client = get_backend_client()
     try:
-        upstream_body = _build_upstream_body(settings, backend_id, "responses", body)
+        build = partial(
+            _build_upstream_body,
+            settings,
+            backend_id,
+            "responses",
+            body,
+            prepared_media=prepared_media,
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
+        )
+        upstream_body = (
+            build()
+            if seal_context is None
+            else await bounded_signed_work(
+                build,
+                lease=seal_context.work_lease,
+                deadline=reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds,
+            )
+        )
+    except SignedIntakeError as exc:
+        return BackendRequestResult(
+            response=api_error(exc.status, str(exc), exc.code),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
     except Exception:
         return BackendRequestResult(
             response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
@@ -1279,6 +1495,8 @@ async def forward_streaming_with_retries(
         )
     if _is_google(settings, backend_id):
         return await _forward_google_streaming(
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             settings=settings,
             backend_id=backend_id,
             request_id=request_id,
@@ -1504,6 +1722,8 @@ async def _forward_google_streaming(
     rate_limit_store: Any | None = None,
     pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
     reservation_deadline_monotonic: float | None = None,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> BackendRequestResult:
     """Retain dispatch/usage ownership until the downstream response takes it."""
     model = str(public_body.get("model", ""))
@@ -1511,6 +1731,8 @@ async def _forward_google_streaming(
     settlement = GoogleAttemptSettlement(cost, input_tokens)
     try:
         return await _google_streaming_attempt(
+            seal_context=seal_context,
+            prepared_continuation=prepared_continuation,
             settings=settings,
             backend_id=backend_id,
             request_id=request_id,
@@ -1565,6 +1787,8 @@ async def _google_streaming_attempt(
     pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
     reservation_deadline_monotonic: float | None = None,
     settlement: GoogleAttemptSettlement,
+    seal_context: SealContext | None = None,
+    prepared_continuation: PreparedContinuation | None = None,
 ) -> BackendRequestResult:
     logical_model = str(public_body.get("model", ""))
     fallback_cost, fallback_input = _fallback_estimate_cost(
@@ -1576,7 +1800,14 @@ async def _google_streaming_attempt(
             1.0, reservation_age - float(DEFAULT_CLEANUP_TIMEOUT_SECONDS)
         )
     deadline = reservation_deadline_monotonic
-    adapter = get_adapter("google_ai_studio")
+    adapter = get_adapter(
+        "google_ai_studio",
+        google_features=settings.backends[backend_id].google_features,
+        api_surface=settings.backends[backend_id].api_surface,
+        seal_context=seal_context,
+        backend_id=backend_id,
+        prepared_continuation=prepared_continuation,
+    )
     if time.monotonic() >= deadline:
         # Confirmed pre-dispatch: never contacted; release, don't charge.
         return BackendRequestResult(
@@ -1585,8 +1816,23 @@ async def _google_streaming_attempt(
             confirmed_pre_dispatch=True,
         )
 
+    if seal_context is not None:
+        try:
+            seal_context.validate_dispatch(settings, backend_client, backend_id, logical_model)
+        except ValueError:
+            return BackendRequestResult(
+                response=api_error(
+                    503, "Provider state is unavailable", "provider_state_unavailable"
+                ),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            )
     context = backend_client.stream_backend(
-        backend_id, "responses", headers=headers, json=upstream_body
+        backend_id,
+        "responses",
+        headers=headers,
+        json=upstream_body,
+        **({"native_generation_stream": False} if seal_context is not None else {}),
     )
     settlement.context = context
     settlement.dispatched = True
@@ -1679,7 +1925,7 @@ async def _google_streaming_attempt(
             retryable_failure=False,
         )
     decoder = adapter.create_stream_decoder(
-        logical_model=logical_model, metadata=public_body.get("metadata")
+        logical_model=logical_model, metadata=public_body.get("metadata"), request_body=public_body
     )
     settlement.decoder = decoder
     chunks = upstream.aiter_bytes()
@@ -1693,6 +1939,7 @@ async def _google_streaming_attempt(
             pre_output_timeout_seconds=pre_output_timeout_seconds,
         )
     except asyncio.CancelledError:
+        settlement.capture_stream_usage(settings, logical_model)
         await _shielded_google_cancel_cleanup(
             context,
             settings=settings,
@@ -1702,10 +1949,11 @@ async def _google_streaming_attempt(
         return BackendRequestResult(
             response=api_error(502, "Unable to read the backend stream", "upstream_error"),
             retryable_failure=False,
-            settlement_cost_usd=fallback_cost,
-            settlement_input_tokens=fallback_input,
+            settlement_cost_usd=settlement.cost,
+            settlement_input_tokens=settlement.input_tokens,
             force_charge=True,
         )
+    settlement.capture_stream_usage(settings, logical_model)
     if prefetch_failed is not None:
         await _close_quietly(context)
         await set_backend_cooldown(
@@ -1716,11 +1964,10 @@ async def _google_streaming_attempt(
         return BackendRequestResult(
             response=api_error(502, prefetch_failed, "upstream_error"),
             retryable_failure=False,
-            settlement_cost_usd=fallback_cost,
-            settlement_input_tokens=fallback_input,
+            settlement_cost_usd=settlement.cost,
+            settlement_input_tokens=settlement.input_tokens,
             force_charge=True,
         )
-    settlement.capture_stream_usage(settings, logical_model)
     await set_backend_active(backend_id)
 
     async def cleanup_unstarted() -> None:
@@ -1815,6 +2062,19 @@ async def _prefetch_google_events(
                 if events:
                     prefetched.extend(events)
                     return None
+            if getattr(decoder, "finish_at_prefetch_eof", False):
+                try:
+                    owned_finish = getattr(decoder, "finish_owned", None)
+                    events = (
+                        await owned_finish(deadline=deadline_monotonic)
+                        if callable(owned_finish)
+                        else decoder.finish()
+                    )
+                    prefetched.extend(events)
+                except ValueError:
+                    return "Backend returned an invalid response"
+                decoder.prefetch_finished = True
+                return None
             return "Unable to read the backend stream"
     except TimeoutError:
         if time.monotonic() >= deadline_monotonic:
@@ -1852,6 +2112,10 @@ async def _google_stream_response(
 
     def _settle_from_decoder() -> None:
         nonlocal charged_cost, actual_input_tokens
+        if getattr(decoder, "usage_invalid", False):
+            charged_cost = None
+            actual_input_tokens = None
+            return
         usage = decoder.usage
         if usage[0] is not None:
             actual_input_tokens = usage[0]
@@ -1883,6 +2147,9 @@ async def _google_stream_response(
             # Bound delivery, not just reads: a stalled downstream consumer
             # must not stretch delivery past the reservation lifetime.
             _ensure_stream_deadline(deadline_monotonic)
+            mark_delivered = getattr(decoder, "mark_delivered", None)
+            if callable(mark_delivered):
+                mark_delivered(event)
             yield event
         chunk_iterator = chunks.__aiter__()
         while True:
@@ -1899,9 +2166,12 @@ async def _google_stream_response(
             for event in events:
                 _ensure_stream_deadline(deadline_monotonic)
                 yield event
-        terminal = decoder.finish()
+        terminal = [] if getattr(decoder, "prefetch_finished", False) else decoder.finish()
         for event in terminal:
             _ensure_stream_deadline(deadline_monotonic)
+            mark_delivered = getattr(decoder, "mark_delivered", None)
+            if callable(mark_delivered):
+                mark_delivered(event)
             yield event
         _settle_from_decoder()
     except ValueError:

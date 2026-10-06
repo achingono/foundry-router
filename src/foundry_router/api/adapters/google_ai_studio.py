@@ -1,7 +1,7 @@
 """Google AI Studio compatibility adapter (Responses <-> Chat Completions).
 
-First-release subset: text Responses, stateless text history, instructions,
-streaming, usage normalization, and text embeddings. Unsupported fields fail
+Baseline: text Responses/embeddings. Default-off profiles extend this with unsigned
+functions, bounded schemas and small PNG input. Unsupported fields fail
 explicitly before any egress.
 
 Vendor basis (verified 2026-10-05 against public docs):
@@ -25,13 +25,24 @@ import json
 import math
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from foundry_router.api.google_pdf import PreparedGoogleMedia
 
 from foundry_router.api.adapters.base import (
     AdapterRejection,
     TranslatedError,
     TranslatedSuccess,
 )
+from foundry_router.api.adapters.google_tools import (
+    GoogleRequestContext,
+    build_messages,
+    request_context,
+    requested_features,
+    translate_calls,
+)
+from foundry_router.config.google_features import GoogleFeatureProfile
 
 _ALLOWED_TOP_LEVEL = frozenset(
     {
@@ -46,6 +57,10 @@ _ALLOWED_TOP_LEVEL = frozenset(
         "background",
         "include",
         "metadata",
+        "tools",
+        "tool_choice",
+        "parallel_tool_calls",
+        "text",
     }
 )
 _ALLOWED_ROLES = frozenset({"system", "developer", "user", "assistant"})
@@ -65,35 +80,6 @@ def _rejection(message: str, code: str = "unsupported_parameter") -> AdapterReje
 
 def _is_nonempty_str(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
-
-
-def _validate_text_parts(content: Any) -> str | None:
-    """Return rejection message if content is not supported text, else None."""
-    if isinstance(content, str):
-        return None if content.strip() else "Message content text must not be empty"
-    if isinstance(content, list):
-        if not content:
-            return "Content array must not be empty"
-        for part in content:
-            if isinstance(part, str):
-                if not part.strip():
-                    return "Text content parts must carry non-empty text"
-                continue
-            if not isinstance(part, dict):
-                return "Content parts must be text strings or objects"
-            part_type = part.get("type", "input_text")
-            if part_type not in _ALLOWED_PART_TYPES:
-                return f"Unsupported content type '{part_type}'"
-            text = part.get("text")
-            if not isinstance(text, str):
-                return "Text content parts must carry a string 'text' field"
-            if not text.strip():
-                return "Text content parts must carry non-empty text"
-            extra = set(part.keys()) - {"type", "text"}
-            if extra:
-                return f"Unsupported content part field '{sorted(extra)[0]}'"
-        return None
-    return "Content must be a string or array of text parts"
 
 
 def _extract_text(content: Any) -> str:
@@ -125,18 +111,47 @@ class GoogleAiStudioAdapter:
 
     provider = "google_ai_studio"
 
+    def __init__(self, *, profile: object = None) -> None:
+        self.profile = (
+            profile if isinstance(profile, GoogleFeatureProfile) else GoogleFeatureProfile()
+        )
+
     def supports_operation(self, operation: str) -> bool:
         # Operation allow-list is enforced by BackendConfig.supported_operations;
         # the adapter additionally gates per-operation validation.
         return operation in {"responses", "embeddings", "chat/completions"}
 
     # -- request validation -------------------------------------------------
-    def check_request(self, operation: str, body: dict[str, Any]) -> AdapterRejection | None:
+    def check_request(
+        self,
+        operation: str,
+        body: dict[str, Any],
+        *,
+        deadline_monotonic: float | None = None,
+        prepared_media: PreparedGoogleMedia | None = None,
+    ) -> AdapterRejection | None:
+        _ = prepared_media
         if operation == "embeddings":
             return self._check_embeddings_request(body)
         if operation in {"responses", "chat/completions"}:
-            return self._check_responses_request(body)
+            return self._check_feature_request(body, deadline=deadline_monotonic)
         return _rejection(f"Unsupported operation '{operation}'", "unsupported_operation")
+
+    def _check_feature_request(
+        self, body: dict[str, Any], *, deadline: float | None = None
+    ) -> AdapterRejection | None:
+        rejection = self._check_responses_request(body)
+        if rejection is not None:
+            return rejection
+        try:
+            context = request_context(body, self.profile)
+            features = requested_features(body, context)
+            if not self.profile.permits(features):
+                return _rejection("Request feature combination is not enabled for this backend")
+            build_messages(body, self.profile, context, deadline=deadline)
+        except (ValueError, TypeError, RecursionError):
+            return _rejection("Invalid or unsupported Google tools, schema, media or history")
+        return None
 
     def _check_responses_request(self, body: dict[str, Any]) -> AdapterRejection | None:
         for key in body:
@@ -222,31 +237,29 @@ class GoogleAiStudioAdapter:
                 return AdapterRejection(
                     422, "invalid_request", "The 'input' field must be non-empty"
                 )
+            # Detailed history/media validation belongs to the bounded feature helper.
             for item in input_value:
-                if not isinstance(item, dict):
-                    return _rejection("Input messages must be objects", "unsupported_input")
-                role = item.get("role")
-                if role not in _ALLOWED_ROLES:
-                    return _rejection(f"Unsupported input role '{role}'", "unsupported_input")
-                if "content" not in item:
-                    return AdapterRejection(422, "invalid_request", "Input messages need 'content'")
-                err = _validate_text_parts(item["content"])
-                if err is not None:
-                    if "empty" in err:
-                        return AdapterRejection(422, "invalid_request", err)
-                    return _rejection(err, "unsupported_input")
-                if not _extract_text(item["content"]).strip():
-                    return AdapterRejection(
-                        422, "invalid_request", "Message content must be non-empty"
-                    )
-                extra = set(item.keys()) - {"role", "content", "type"}
-                # Reject tool-call items and other message shapes explicitly.
-                if item.get("type") not in (None, "message"):
-                    return _rejection("Only text messages are supported", "unsupported_input")
-                if extra - {"role", "content", "type"}:
-                    return _rejection(
-                        f"Unsupported input field '{sorted(extra)[0]}'", "unsupported_input"
-                    )
+                if isinstance(item, dict) and item.get("type", "message") == "message":
+                    content = item.get("content")
+                    if content in ("", [], None) or (
+                        isinstance(content, str) and not content.strip()
+                    ):
+                        return AdapterRejection(
+                            422, "invalid_request", "Message content must be non-empty"
+                        )
+                    if isinstance(content, list) and any(
+                        (isinstance(part, str) and not part.strip())
+                        or (
+                            isinstance(part, dict)
+                            and part.get("type", "input_text") in _ALLOWED_PART_TYPES
+                            and isinstance(part.get("text"), str)
+                            and not part["text"].strip()
+                        )
+                        for part in content
+                    ):
+                        return AdapterRejection(
+                            422, "invalid_request", "Message content must be non-empty"
+                        )
             return None
         return AdapterRejection(422, "invalid_request", "The 'input' field must be text")
 
@@ -287,38 +300,45 @@ class GoogleAiStudioAdapter:
         *,
         deployment: str,
         default_output_tokens: int,
+        prepared_media: PreparedGoogleMedia | None = None,
     ) -> dict[str, Any]:
+        _ = prepared_media
         if operation == "embeddings":
             out: dict[str, Any] = {"model": deployment, "input": body["input"]}
             if body.get("dimensions") is not None:
                 out["dimensions"] = body["dimensions"]
             out["encoding_format"] = "float"
             return out
-        messages: list[dict[str, Any]] = []
-        instructions = body.get("instructions")
-        if isinstance(instructions, str) and instructions.strip():
-            messages.append({"role": "system", "content": instructions})
-        input_value = body.get("input")
-        if isinstance(input_value, str):
-            messages.append({"role": "user", "content": input_value})
-        elif isinstance(input_value, list):
-            for item in input_value:
-                role = item["role"]
-                mapped_role = "system" if role == "developer" else role
-                content = item["content"]
-                if isinstance(content, str):
-                    messages.append({"role": mapped_role, "content": content})
-                elif mapped_role == "system":
-                    messages.append({"role": mapped_role, "content": _extract_text(content)})
-                else:
-                    parts = []
-                    for part in content:
-                        if isinstance(part, str):
-                            parts.append({"type": "text", "text": part})
-                        else:
-                            parts.append({"type": "text", "text": str(part.get("text", ""))})
-                    messages.append({"role": mapped_role, "content": parts})
+        context = request_context(body, self.profile)
+        if not self.profile.permits(requested_features(body, context)):
+            raise ValueError("Google request features are disabled")
+        messages = build_messages(body, self.profile, context)
         upstream: dict[str, Any] = {"model": deployment, "messages": messages}
+        if context.tools:
+            upstream["tools"] = [
+                {
+                    "type": "function",
+                    "function": {key: value for key, value in tool.items() if key != "type"},
+                }
+                for tool in context.tools.values()
+            ]
+            choice = context.choice
+            upstream["tool_choice"] = (
+                {"type": "function", "function": {"name": choice["name"]}}
+                if isinstance(choice, dict)
+                else choice
+            )
+            upstream["parallel_tool_calls"] = context.parallel
+        if context.text_format is not None:
+            fmt = context.text_format
+            upstream["response_format"] = (
+                {
+                    "type": "json_schema",
+                    "json_schema": {key: value for key, value in fmt.items() if key != "type"},
+                }
+                if fmt["type"] == "json_schema"
+                else {"type": "json_object"}
+            )
         max_tokens = body.get("max_output_tokens")
         upstream["max_completion_tokens"] = (
             max_tokens if isinstance(max_tokens, int) else int(default_output_tokens)
@@ -341,6 +361,7 @@ class GoogleAiStudioAdapter:
         expected_input_count: int | None = None,
         expected_dimensions: int | None = None,
         metadata: dict[str, Any] | None = None,
+        request_body: dict[str, Any] | None = None,
     ) -> TranslatedSuccess:
         if operation == "embeddings":
             return self._translate_embeddings_success(
@@ -349,12 +370,22 @@ class GoogleAiStudioAdapter:
                 expected_input_count=expected_input_count,
                 expected_dimensions=expected_dimensions,
             )
-        translated = self._translate_responses_success(upstream, logical_model=logical_model)
+        context = request_context(request_body or {}, self.profile)
+        translated = self._translate_responses_success(
+            upstream, logical_model=logical_model, context=context
+        )
         translated.body["metadata"] = dict(metadata or {})
+        translated.body.update(
+            {
+                "parallel_tool_calls": context.parallel,
+                "tool_choice": context.choice,
+                "tools": list(context.tools.values()),
+            }
+        )
         return translated
 
     def _translate_responses_success(
-        self, upstream: Any, *, logical_model: str
+        self, upstream: Any, *, logical_model: str, context: GoogleRequestContext
     ) -> TranslatedSuccess:
         if not isinstance(upstream, dict):
             raise ValueError("Google success body must be a JSON object")
@@ -369,8 +400,8 @@ class GoogleAiStudioAdapter:
             raise ValueError("Google choice must carry an assistant message")
         if message.get("role", "assistant") != "assistant":
             raise ValueError("Google message role must be assistant")
-        if message.get("tool_calls"):
-            raise ValueError("Google tool calls are not supported in this release")
+        if set(message) - {"role", "content", "tool_calls", "refusal"}:
+            raise ValueError("Unsupported Google output or provider state")
         content = message.get("content")
         # Validate the shape before extraction: anything that is not None, a
         # string, or a list is malformed (e.g. numeric content), as is any
@@ -386,7 +417,7 @@ class GoogleAiStudioAdapter:
                 if not isinstance(part, dict):
                     raise ValueError("Google message content parts must be text")
                 part_type = part.get("type", "text")
-                if part_type not in ("text", None) and "text" not in part:
+                if part_type not in ("text", None) or set(part) - {"type", "text"}:
                     raise ValueError("Google message content must be text")
                 part_text = part.get("text")
                 if not isinstance(part_text, str):
@@ -395,8 +426,20 @@ class GoogleAiStudioAdapter:
         else:
             raise ValueError("Google message content must be text")
         finish_reason = choice.get("finish_reason")
-        if finish_reason not in _ALLOWED_FINISH_REASONS:
+        if finish_reason not in _ALLOWED_FINISH_REASONS | {"tool_calls"}:
             raise ValueError(f"Unsupported Google finish reason '{finish_reason}'")
+        completed = finish_reason in {"stop", "tool_calls"}
+        refusal = message.get("refusal")
+        calls = translate_calls(
+            message.get("tool_calls", []), context, completed=completed, refusal=bool(refusal)
+        )
+        if finish_reason == "tool_calls" and not calls:
+            raise ValueError("Google tool finish must carry calls")
+        refusal = message.get("refusal")
+        if refusal is not None and not isinstance(refusal, str):
+            raise ValueError("Google refusal must be text")
+        if not refusal:
+            context.validate_text(text, completed=completed, has_calls=bool(calls))
         usage = upstream.get("usage")
         input_tokens: int | None = None
         output_tokens: int | None = None
@@ -427,7 +470,7 @@ class GoogleAiStudioAdapter:
         response_id = f"resp_{uuid.uuid4().hex[:24]}"
         message_id = f"msg_{uuid.uuid4().hex[:24]}"
         created_at = int(time.time())
-        if finish_reason == "stop":
+        if completed:
             status = "completed"
             item_status: str | None = None
             incomplete_details: dict[str, Any] | None = None
@@ -447,7 +490,11 @@ class GoogleAiStudioAdapter:
             "id": message_id,
             "role": "assistant",
             "status": item_status or "completed",
-            "content": [{"type": "output_text", "text": text, "annotations": []}],
+            "content": (
+                [{"type": "refusal", "refusal": refusal}]
+                if refusal
+                else [{"type": "output_text", "text": text, "annotations": []}]
+            ),
         }
         public: dict[str, Any] = {
             "id": response_id,
@@ -455,7 +502,7 @@ class GoogleAiStudioAdapter:
             "created_at": created_at,
             "model": logical_model,
             "status": status,
-            "output": [output_item],
+            "output": ([output_item] if text or refusal or not calls else []) + calls,
             "error": error,
             "incomplete_details": incomplete_details,
             "usage": (
@@ -558,21 +605,56 @@ class GoogleAiStudioAdapter:
             return TranslatedError(status_code, "upstream_error", "Backend request failed")
         return TranslatedError(status_code, "upstream_error", "Backend request failed")
 
+    def extract_usage(self, operation: str, upstream: Any) -> tuple[int | None, int | None]:
+        usage = upstream.get("usage") if isinstance(upstream, dict) else None
+        if not isinstance(usage, dict):
+            return None, None
+        prompt = usage.get("prompt_tokens")
+        completion = 0 if operation == "embeddings" else usage.get("completion_tokens")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (prompt, completion)
+        ):
+            return None, None
+        return prompt, completion
+
     def create_stream_decoder(
         self,
         *,
         logical_model: str,
         request_input: Any = None,
         metadata: dict[str, Any] | None = None,
+        request_body: dict[str, Any] | None = None,
     ) -> GoogleStreamDecoder:
         _ = request_input
-        return GoogleStreamDecoder(logical_model=logical_model, metadata=metadata)
+        return GoogleStreamDecoder(
+            logical_model=logical_model,
+            metadata=metadata,
+            context=request_context(request_body or {}, self.profile),
+        )
 
 
 class GoogleStreamDecoder:
     """Incremental Google SSE -> Responses SSE translator with bounded state."""
 
-    def __init__(self, *, logical_model: str, metadata: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        logical_model: str,
+        metadata: dict[str, Any] | None = None,
+        context: GoogleRequestContext | None = None,
+    ) -> None:
+        self._context = context or request_context({}, GoogleFeatureProfile())
+        self._call_fragments: dict[int, dict[str, Any]] = {}
+        self._calls: list[dict[str, Any]] = []
+        self._calls_emitted = False
+        self._call_ids: dict[int, str] = {}
+        self._sent_arguments: dict[int, int] = {}
+        self._public_call_indices: dict[int, int] = {}
+        self._message_index: int | None = None
+        self._archived_messages: list[tuple[int, dict[str, Any]]] = []
+        self._next_output_index = 0
+        self._refusal_parts: list[str] = []
         self._metadata = dict(metadata or {})
         self._logical_model = logical_model
         self._response_id = f"resp_{uuid.uuid4().hex[:24]}"
@@ -607,6 +689,9 @@ class GoogleStreamDecoder:
 
     def _header_events(self) -> list[bytes]:
         base_response = {
+            "parallel_tool_calls": self._context.parallel,
+            "tool_choice": self._context.choice,
+            "tools": list(self._context.tools.values()),
             "metadata": dict(self._metadata),
             "id": self._response_id,
             "object": "response",
@@ -630,11 +715,19 @@ class GoogleStreamDecoder:
                     "response": dict(base_response),
                 }
             ),
+        ]
+
+    def _open_message(self, *, refusal: bool = False) -> list[bytes]:
+        if self._message_index is not None:
+            return []
+        self._message_index = self._next_output_index
+        self._next_output_index += 1
+        return [
             self._sse(
                 {
                     "type": "response.output_item.added",
                     "sequence_number": self._next_sequence(),
-                    "output_index": 0,
+                    "output_index": self._message_index,
                     "item": {
                         "type": "message",
                         "id": self._item_id,
@@ -649,9 +742,13 @@ class GoogleStreamDecoder:
                     "type": "response.content_part.added",
                     "sequence_number": self._next_sequence(),
                     "item_id": self._item_id,
-                    "output_index": 0,
+                    "output_index": self._message_index,
                     "content_index": 0,
-                    "part": {"type": "output_text", "text": "", "annotations": []},
+                    "part": (
+                        {"type": "refusal", "refusal": ""}
+                        if refusal
+                        else {"type": "output_text", "text": "", "annotations": []}
+                    ),
                 }
             ),
         ]
@@ -709,6 +806,10 @@ class GoogleStreamDecoder:
             raise ValueError("Malformed Google stream event") from exc
         if not isinstance(payload, dict):
             raise ValueError("Malformed Google stream event")
+        return self._handle_payload(payload)
+
+    def _handle_payload(self, payload: dict[str, Any]) -> list[bytes]:
+        """Shared validated text/call event construction; transport framing stays separate."""
         if "error" in payload:
             # Provider text may contain secrets or client content; never echo it.
             raise ValueError("Google stream reported an upstream failure")
@@ -718,6 +819,9 @@ class GoogleStreamDecoder:
         choices = payload.get("choices", [])
         if not isinstance(choices, list):
             raise ValueError("Malformed Google stream event")
+        # Known usage survives output conversion errors in the same chunk.
+        if isinstance(usage, dict):
+            self._absorb_usage(usage)
         if not choices:
             # Usage-only chunk: validate usage, retain it, emit no downstream event yet.
             usage = payload.get("usage")
@@ -732,12 +836,28 @@ class GoogleStreamDecoder:
         delta = choice.get("delta", {})
         if not isinstance(delta, dict):
             raise ValueError("Malformed Google stream event")
-        if delta.get("tool_calls"):
-            raise ValueError("Google tool calls are not supported in this release")
+        if set(delta) - {"role", "content", "tool_calls", "refusal"}:
+            raise ValueError("Unsupported Google delta or provider state")
+        raw_calls = delta.get("tool_calls")
+        if raw_calls is not None:
+            self._absorb_calls(raw_calls)
         content = delta.get("content")
+        refusal = delta.get("refusal")
+        if refusal is not None and not isinstance(refusal, str):
+            raise ValueError("Malformed Google refusal")
+        if refusal and (content or raw_calls or self._text_parts or self._call_fragments):
+            raise ValueError("Google refusal cannot mix with generated output")
+        if self._refusal_parts and (content or raw_calls):
+            raise ValueError("Google generated output cannot follow a refusal")
         finish_reason = choice.get("finish_reason")
-        if finish_reason is not None and finish_reason not in _ALLOWED_FINISH_REASONS:
+        if finish_reason is not None and finish_reason not in _ALLOWED_FINISH_REASONS | {
+            "tool_calls"
+        }:
             raise ValueError(f"Unsupported Google finish reason '{finish_reason}'")
+        if self._finish_reason is not None and (
+            content or raw_calls or refusal or finish_reason is not None
+        ):
+            raise ValueError("Google output arrived after its finish reason")
         text = ""
         if isinstance(content, str):
             text = content
@@ -746,6 +866,11 @@ class GoogleStreamDecoder:
                 if isinstance(part, str):
                     text += part
                 elif isinstance(part, dict):
+                    if part.get("type", "text") not in ("text", None) or set(part) - {
+                        "type",
+                        "text",
+                    }:
+                        raise ValueError("Unsupported Google text part or provider state")
                     part_text = part.get("text", "")
                     if not isinstance(part_text, str):
                         raise ValueError("Malformed Google stream event")
@@ -761,14 +886,40 @@ class GoogleStreamDecoder:
         if finish_reason is not None:
             self._finish_reason = finish_reason
         out: list[bytes] = []
+        ready_call = any(
+            fragment["id"]
+            and fragment["name"] in self._context.tools
+            and (fragment.get("ready") or finish_reason is not None)
+            for fragment in self._call_fragments.values()
+        )
         if not self._validated:
-            if not text and finish_reason is None:
-                # Role-only/empty deltas do not commit the downstream stream.
+            if not text and not refusal and not ready_call and finish_reason is None:
                 return []
-            # First translatable provider event commits the downstream stream.
             self._validated = True
             out.extend(self._header_events())
             self._header_sent = True
+        if text or refusal:
+            out.extend(self._open_message(refusal=bool(refusal)))
+        elif finish_reason is not None and not self._call_fragments and self._message_index is None:
+            out.extend(self._open_message())
+        out.extend(self._flush_call_deltas(force=finish_reason is not None))
+        if refusal:
+            self._assembled += len(refusal.encode())
+            if self._assembled > MAX_GOOGLE_ASSEMBLED_TEXT_BYTES:
+                raise ValueError("Google refusal exceeds bound")
+            self._refusal_parts.append(refusal)
+            out.append(
+                self._sse(
+                    {
+                        "type": "response.refusal.delta",
+                        "sequence_number": self._next_sequence(),
+                        "item_id": self._item_id,
+                        "output_index": self._message_index,
+                        "content_index": 0,
+                        "delta": refusal,
+                    }
+                )
+            )
         if text:
             if self._assembled + len(text.encode()) > MAX_GOOGLE_ASSEMBLED_TEXT_BYTES:
                 raise ValueError("Google stream output exceeds bound")
@@ -780,13 +931,157 @@ class GoogleStreamDecoder:
                         "type": "response.output_text.delta",
                         "sequence_number": self._next_sequence(),
                         "item_id": self._item_id,
-                        "output_index": 0,
+                        "output_index": self._message_index,
                         "content_index": 0,
                         "delta": text,
                     }
                 )
             )
         return out
+
+    def _absorb_calls(self, calls: Any) -> None:
+        if not self._context.tools or not isinstance(calls, list):
+            raise ValueError("Unsupported Google tool deltas")
+        for call in calls:
+            if not isinstance(call, dict) or set(call) - {"index", "id", "type", "function"}:
+                raise ValueError("Unsupported Google call or provider state")
+            index = call.get("index")
+            if (
+                isinstance(index, bool)
+                or not isinstance(index, int)
+                or not 0 <= index < self._context.max_calls
+            ):
+                raise ValueError("Google call index exceeds its bound")
+            if call.get("type", "function") != "function":
+                raise ValueError("Unsupported Google tool type")
+            fragment = self._call_fragments.setdefault(
+                index, {"id": "", "name": "", "arguments": ""}
+            )
+            function = call.get("function", {})
+            if not isinstance(function, dict) or set(function) - {"name", "arguments"}:
+                raise ValueError("Unsupported Google function or provider state")
+            if index in self._call_ids and (call.get("id") or function.get("name")):
+                raise ValueError("Google call identity changed after downstream output")
+            fragment["ready"] = fragment.get("ready", False) or (
+                "arguments" in function and not call.get("id") and not function.get("name")
+            )
+            for key, value in (
+                ("id", call.get("id")),
+                ("name", function.get("name")),
+                ("arguments", function.get("arguments")),
+            ):
+                if value is None:
+                    continue
+                if not isinstance(value, str):
+                    raise ValueError("Google call fragments must be strings")
+                fragment[key] += value
+                bound = self._context.max_argument_bytes if key == "arguments" else 256
+                if len(fragment[key].encode()) > bound:
+                    raise ValueError("Google call fragments exceed their bound")
+                self._assembled += len(value.encode())
+                if self._assembled > MAX_GOOGLE_ASSEMBLED_TEXT_BYTES:
+                    raise ValueError("Google stream output exceeds bound")
+
+    def _flush_call_deltas(self, *, force: bool) -> list[bytes]:
+        events: list[bytes] = []
+        for index in sorted(self._call_fragments):
+            fragment = self._call_fragments[index]
+            if not force and not fragment.get("ready"):
+                continue
+            if not fragment["id"] or fragment["name"] not in self._context.tools:
+                if force:
+                    raise ValueError("Incomplete Google function identity")
+                continue
+            if index not in self._call_ids:
+                item = {
+                    "type": "function_call",
+                    "id": f"fc_{uuid.uuid4().hex[:24]}",
+                    "call_id": fragment["id"],
+                    "name": fragment["name"],
+                    "arguments": "",
+                    "status": "in_progress",
+                }
+                self._call_ids[index] = item["id"]
+                self._public_call_indices[index] = self._next_output_index
+                self._next_output_index += 1
+                self._sent_arguments[index] = 0
+                events.append(
+                    self._sse(
+                        {
+                            "type": "response.output_item.added",
+                            "sequence_number": self._next_sequence(),
+                            "output_index": self._public_call_indices[index],
+                            "item": item,
+                        }
+                    )
+                )
+            arguments = fragment["arguments"]
+            sent = self._sent_arguments[index]
+            if len(arguments) > sent:
+                events.append(
+                    self._sse(
+                        {
+                            "type": "response.function_call_arguments.delta",
+                            "sequence_number": self._next_sequence(),
+                            "output_index": self._public_call_indices[index],
+                            "item_id": self._call_ids[index],
+                            "delta": arguments[sent:],
+                        }
+                    )
+                )
+                self._sent_arguments[index] = len(arguments)
+        return events
+
+    def _call_events(self, *, completed: bool) -> list[bytes]:
+        if self._calls_emitted:
+            return []
+        indices = sorted(self._call_fragments)
+        if indices != list(range(len(indices))):
+            raise ValueError("Google call indices must be contiguous")
+        raw = [
+            {
+                "id": self._call_fragments[index]["id"],
+                "type": "function",
+                "function": {
+                    "name": self._call_fragments[index]["name"],
+                    "arguments": self._call_fragments[index]["arguments"],
+                },
+            }
+            for index in indices
+        ]
+        self._calls = translate_calls(
+            raw, self._context, completed=completed, refusal=bool(self._refusal_parts)
+        )
+        events: list[bytes] = []
+        events.extend(self._flush_call_deltas(force=True))
+        for provider_index, call in enumerate(self._calls):
+            index = self._public_call_indices[provider_index]
+            call["id"] = self._call_ids[provider_index]
+            if completed:
+                events.append(
+                    self._sse(
+                        {
+                            "type": "response.function_call_arguments.done",
+                            "sequence_number": self._next_sequence(),
+                            "item_id": call["id"],
+                            "output_index": index,
+                            "arguments": call["arguments"],
+                            "name": call["name"],
+                        }
+                    )
+                )
+            events.append(
+                self._sse(
+                    {
+                        "type": "response.output_item.done",
+                        "sequence_number": self._next_sequence(),
+                        "output_index": index,
+                        "item": call,
+                    }
+                )
+            )
+        self._calls_emitted = True
+        return events
 
     def _absorb_usage(self, usage: dict[str, Any]) -> None:
         prompt = usage.get("prompt_tokens")
@@ -807,10 +1102,21 @@ class GoogleStreamDecoder:
         if self._finish_reason is None:
             # Never present a stream without terminal evidence as successful completion.
             raise ValueError("Google stream ended without a finish reason")
-        self._terminal_sent = True
         full_text = "".join(self._text_parts)
+        validation_text = (
+            "".join(item["content"][0]["text"] for _, item in self._archived_messages) + full_text
+        )
         reason = self._finish_reason
-        if reason == "stop":
+        completed = reason in {"stop", "tool_calls"}
+        call_events = self._call_events(completed=completed)
+        if reason == "tool_calls" and not self._calls:
+            raise ValueError("Google tool finish must carry calls")
+        if not self._refusal_parts:
+            self._context.validate_text(
+                validation_text, completed=completed, has_calls=bool(self._calls)
+            )
+        self._terminal_sent = True
+        if completed:
             status = "completed"
             terminal_type = "response.completed"
         elif reason == "length":
@@ -826,58 +1132,86 @@ class GoogleStreamDecoder:
                 "output_tokens": self._output_tokens,
                 "total_tokens": self._input_tokens + self._output_tokens,
             }
-        events = [
-            self._sse(
-                {
-                    "type": "response.output_text.done",
-                    "sequence_number": self._next_sequence(),
-                    "item_id": self._item_id,
-                    "output_index": 0,
-                    "content_index": 0,
-                    "text": full_text,
-                }
-            ),
-            self._sse(
-                {
-                    "type": "response.content_part.done",
-                    "sequence_number": self._next_sequence(),
-                    "item_id": self._item_id,
-                    "output_index": 0,
-                    "content_index": 0,
-                    "part": {"type": "output_text", "text": full_text, "annotations": []},
-                }
-            ),
+        content_part = (
+            {"type": "refusal", "refusal": "".join(self._refusal_parts)}
+            if self._refusal_parts
+            else {"type": "output_text", "text": full_text, "annotations": []}
+        )
+        output: list[tuple[int, dict[str, Any]]] = [
+            (index, {**item, "status": status}) for index, item in self._archived_messages
+        ]
+        events = list(call_events)
+        events.extend(
             self._sse(
                 {
                     "type": "response.output_item.done",
                     "sequence_number": self._next_sequence(),
-                    "output_index": 0,
-                    "item": {
-                        "type": "message",
-                        "id": self._item_id,
-                        "role": "assistant",
-                        "status": status,
-                        "content": [{"type": "output_text", "text": full_text, "annotations": []}],
-                    },
+                    "output_index": index,
+                    "item": item,
                 }
-            ),
-        ]
+            )
+            for index, item in output
+        )
+        if self._message_index is not None:
+            output_item = {
+                "type": "message",
+                "id": self._item_id,
+                "role": "assistant",
+                "status": status,
+                "content": [content_part],
+            }
+            output.append((self._message_index, output_item))
+            events.extend(
+                [
+                    self._sse(
+                        {
+                            "type": "response.refusal.done"
+                            if self._refusal_parts
+                            else "response.output_text.done",
+                            "sequence_number": self._next_sequence(),
+                            "item_id": self._item_id,
+                            "output_index": self._message_index,
+                            "content_index": 0,
+                            **(
+                                {"refusal": content_part["refusal"]}
+                                if self._refusal_parts
+                                else {"text": full_text}
+                            ),
+                        }
+                    ),
+                    self._sse(
+                        {
+                            "type": "response.content_part.done",
+                            "sequence_number": self._next_sequence(),
+                            "item_id": self._item_id,
+                            "output_index": self._message_index,
+                            "content_index": 0,
+                            "part": content_part,
+                        }
+                    ),
+                    self._sse(
+                        {
+                            "type": "response.output_item.done",
+                            "sequence_number": self._next_sequence(),
+                            "output_index": self._message_index,
+                            "item": output_item,
+                        }
+                    ),
+                ]
+            )
+        for provider_index, call in enumerate(self._calls):
+            output.append((self._public_call_indices[provider_index], call))
         terminal_response: dict[str, Any] = {
+            "parallel_tool_calls": self._context.parallel,
+            "tool_choice": self._context.choice,
+            "tools": list(self._context.tools.values()),
             "metadata": dict(self._metadata),
             "id": self._response_id,
             "object": "response",
             "created_at": self._created_at,
             "model": self._logical_model,
             "status": status,
-            "output": [
-                {
-                    "type": "message",
-                    "id": self._item_id,
-                    "role": "assistant",
-                    "status": status,
-                    "content": [{"type": "output_text", "text": full_text, "annotations": []}],
-                }
-            ],
+            "output": [item for _index, item in sorted(output, key=lambda pair: pair[0])],
         }
         if usage is not None:
             terminal_response["usage"] = usage
@@ -908,23 +1242,64 @@ class GoogleStreamDecoder:
         self._terminal_sent = True
         full_text = "".join(self._text_parts)
         failed_response: dict[str, Any] = {
+            "parallel_tool_calls": self._context.parallel,
+            "tool_choice": self._context.choice,
+            "tools": list(self._context.tools.values()),
             "metadata": dict(self._metadata),
             "id": self._response_id,
             "object": "response",
             "created_at": self._created_at,
             "model": self._logical_model,
             "status": "failed",
-            "output": [
-                {
-                    "type": "message",
-                    "id": self._item_id,
-                    "role": "assistant",
-                    "status": "failed",
-                    "content": [{"type": "output_text", "text": full_text, "annotations": []}],
-                }
-            ],
+            "output": (
+                [
+                    {
+                        "type": "message",
+                        "id": self._item_id,
+                        "role": "assistant",
+                        "status": "incomplete",
+                        "content": (
+                            [{"type": "refusal", "refusal": "".join(self._refusal_parts)}]
+                            if self._refusal_parts
+                            else [{"type": "output_text", "text": full_text, "annotations": []}]
+                        ),
+                    }
+                ]
+                if self._message_index is not None
+                else []
+            ),
             "error": {"message": message, "type": "upstream_error"},
         }
+        for index, item_id in self._call_ids.items():
+            fragment = self._call_fragments[index]
+            failed_response["output"].append(
+                {
+                    "type": "function_call",
+                    "id": item_id,
+                    "call_id": fragment["id"],
+                    "name": fragment["name"],
+                    "arguments": fragment["arguments"],
+                    "status": "incomplete",
+                }
+            )
+        indexed_output = [
+            (index, {**item, "status": "incomplete"}) for index, item in self._archived_messages
+        ]
+        for item in failed_response["output"]:
+            output_index = (
+                self._message_index
+                if item["type"] == "message"
+                else next(
+                    self._public_call_indices[key]
+                    for key, value in self._call_ids.items()
+                    if value == item["id"]
+                )
+            )
+            if output_index is not None:
+                indexed_output.append((output_index, item))
+        failed_response["output"] = [
+            item for _, item in sorted(indexed_output, key=lambda pair: pair[0])
+        ]
         if self._input_tokens is not None and self._output_tokens is not None:
             failed_response["usage"] = {
                 "input_tokens": self._input_tokens,
