@@ -31,3 +31,11 @@ sessionledger and reviewedimmutablecases; helpernewpaths aretest-only, notbudget
 
 Latest fullcheckpoint1203passed,2Linux-onlyskips,15Docker/Azuritedeselected,89.05%coverage;
 Ruff/format/mypy pass. Dormantruntime finalreview pending; noproviderinference/productionwrites.
+
+Synthetic dormant fixtures committed 2026-10-06: `../live-discovery.json` and
+`live-runner/manifest.json` contain 61 synthetic validation IDs (not live provider
+discovery and not evidence of model support). Both CLI dry-run and `--execute`
+perform zero provider requests; `--execute` rejects missing protocol evidence.
+`scripts/quality/google-live-validation.py` accepts an explicit `--catalog` path
+and fails closed on missing or malformed catalog/manifest. Seven manifest/CLI
+regressions pass from a clean checkout.

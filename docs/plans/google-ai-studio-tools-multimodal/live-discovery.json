@@ -1,0 +1,1860 @@
+{
+  "note": "Synthetic dormant fixture for offline CLI validation only; not live provider discovery and not evidence of model support.",
+  "projects": [
+    {
+      "label": "synthetic-project-1",
+      "models": [
+        {
+          "id": "synthetic-validation-model-001",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-002",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-003",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-004",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-005",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-006",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-007",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-008",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-009",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-010",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-011",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-012",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-013",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-014",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-015",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-016",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-017",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-018",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-019",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-020",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-021",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-022",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-023",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-024",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-025",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-026",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-027",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-028",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-029",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-030",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-031",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-032",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-033",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-034",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-035",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-036",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-037",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-038",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-039",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-040",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-041",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-042",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-043",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-044",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-045",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-046",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-047",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-048",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-049",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-050",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-051",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-052",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-053",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-054",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-055",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-056",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-057",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-058",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-059",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-060",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-061",
+          "methods": [
+            "generateContent"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "synthetic-project-2",
+      "models": [
+        {
+          "id": "synthetic-validation-model-001",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-002",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-003",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-004",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-005",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-006",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-007",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-008",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-009",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-010",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-011",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-012",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-013",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-014",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-015",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-016",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-017",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-018",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-019",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-020",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-021",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-022",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-023",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-024",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-025",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-026",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-027",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-028",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-029",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-030",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-031",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-032",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-033",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-034",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-035",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-036",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-037",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-038",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-039",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-040",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-041",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-042",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-043",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-044",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-045",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-046",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-047",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-048",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-049",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-050",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-051",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-052",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-053",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-054",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-055",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-056",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-057",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-058",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-059",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-060",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-061",
+          "methods": [
+            "generateContent"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "synthetic-project-3",
+      "models": [
+        {
+          "id": "synthetic-validation-model-001",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-002",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-003",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-004",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-005",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-006",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-007",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-008",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-009",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-010",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-011",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-012",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-013",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-014",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-015",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-016",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-017",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-018",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-019",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-020",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-021",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-022",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-023",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-024",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-025",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-026",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-027",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-028",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-029",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-030",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-031",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-032",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-033",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-034",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-035",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-036",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-037",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-038",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-039",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-040",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-041",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-042",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-043",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-044",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-045",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-046",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-047",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-048",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-049",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-050",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-051",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-052",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-053",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-054",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-055",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-056",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-057",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-058",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-059",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-060",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-061",
+          "methods": [
+            "generateContent"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "synthetic-project-4",
+      "models": [
+        {
+          "id": "synthetic-validation-model-001",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-002",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-003",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-004",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-005",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-006",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-007",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-008",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-009",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-010",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-011",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-012",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-013",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-014",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-015",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-016",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-017",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-018",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-019",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-020",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-021",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-022",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-023",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-024",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-025",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-026",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-027",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-028",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-029",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-030",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-031",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-032",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-033",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-034",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-035",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-036",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-037",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-038",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-039",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-040",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-041",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-042",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-043",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-044",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-045",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-046",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-047",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-048",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-049",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-050",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-051",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-052",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-053",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-054",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-055",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-056",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-057",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-058",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-059",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-060",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-061",
+          "methods": [
+            "generateContent"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "synthetic-project-5",
+      "models": [
+        {
+          "id": "synthetic-validation-model-001",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-002",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-003",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-004",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-005",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-006",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-007",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-008",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-009",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-010",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-011",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-012",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-013",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-014",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-015",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-016",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-017",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-018",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-019",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-020",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-021",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-022",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-023",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-024",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-025",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-026",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-027",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-028",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-029",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-030",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-031",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-032",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-033",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-034",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-035",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-036",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-037",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-038",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-039",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-040",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-041",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-042",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-043",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-044",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-045",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-046",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-047",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-048",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-049",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-050",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-051",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-052",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-053",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-054",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-055",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-056",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-057",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-058",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-059",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-060",
+          "methods": [
+            "generateContent"
+          ]
+        },
+        {
+          "id": "synthetic-validation-model-061",
+          "methods": [
+            "generateContent"
+          ]
+        }
+      ]
+    }
+  ]
+}

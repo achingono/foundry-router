@@ -168,9 +168,17 @@ operator/model evidence before enablement; names do not infer support.
 
 See [profile example and resource bounds](../operations/google-features.md).
 `FOUNDRY_INTAKE_TIMEOUT_SECONDS` defaults to 30 (range 0.1–120), starting before Responses
-body intake. Remaining intake time and the original reservation deadline bound admission and
-Google delivery without reset. Body parsing rejects duplicate keys, nonfinite values and
-excessive depth/work. The default request cap remains 2 MiB.
+and embeddings body intake. Remaining intake time bounds admission; Google delivery is bounded
+by the tighter of remaining intake time and the original reservation deadline without reset.
+Azure execution uses the reservation deadline only and is never truncated by body intake.
+Body parsing rejects duplicate keys, nonfinite values and excessive depth/work. The default
+request cap remains 2 MiB. Malformed `input` shapes fail with controlled validation errors.
+Inspector child cleanup is bounded: a stalled reap transfers its single wait task to explicit
+orphan tracking (never a second waiter) and releases capacity promptly. Tracking clears only
+after successful, confirmed reaping (exit observed); failed or cancelled waits stay retained
+against the admission limit with a warning diagnostic. At most eight killed-but-unreaped
+children per inspector pool are retained, and further inspection is rejected until reaping
+catches up, without suppressing request cancellation.
 
 Google backends may explicitly select `api_surface: "native"` (Partially implemented local code;
 review gates in progress). Default `openai_compat` preserves existing routing. Native requires

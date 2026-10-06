@@ -482,7 +482,9 @@ async def test_preparation_snapshot_cannot_bind_uninspected_mutation(monkeypatch
         facts.validate(body, profile())
 
 
-async def test_repeated_cancellation_retains_slot_until_child_reap(monkeypatch):
+async def test_repeated_cancellation_releases_promptly_and_tracks_orphan(monkeypatch):
+    from foundry_router.api import google_pdf as pdf_module
+
     released = asyncio.Event()
     waiting = asyncio.Event()
 
@@ -491,9 +493,10 @@ async def test_repeated_cancellation_retains_slot_until_child_reap(monkeypatch):
         stdout = None
         returncode = None
         reaped = False
+        killed = False
 
         def kill(self):
-            pass
+            self.killed = True
 
         async def wait(self):
             waiting.set()
@@ -507,7 +510,8 @@ async def test_repeated_cancellation_retains_slot_until_child_reap(monkeypatch):
     async def spawn(*_a, **_k):
         return child
 
-    monkeypatch.setattr("asyncio.create_subprocess_exec", spawn)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    base_orphans = pdf_module.pdf_orphaned_children()
     task = asyncio.create_task(
         PdfPreparer().inspect(b"x", deadline=asyncio.get_running_loop().time() + 5)
     )
@@ -515,10 +519,15 @@ async def test_repeated_cancellation_retains_slot_until_child_reap(monkeypatch):
     for _ in range(3):
         task.cancel()
         await asyncio.sleep(0)
-    assert not child.reaped and not task.done()
-    released.set()
+    # Bounded cleanup never suppresses cancellation for a stalled reap.
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, 2)
+    assert child.killed
+    assert pdf_module.pdf_orphaned_children() == base_orphans + 1
+    released.set()
+    async with asyncio.timeout(2):
+        while pdf_module.pdf_orphaned_children() > base_orphans:  # noqa: ASYNC110
+            await asyncio.sleep(0.01)
     assert child.reaped
 
 
@@ -560,7 +569,8 @@ async def test_readiness_selftest_cached_and_infrastructure_failure(monkeypatch,
     monkeypatch.setattr(preparer, "inspect", inspect)
     assert await preparer.ready() is available
     assert await preparer.ready() is available
-    assert len(calls) == 1
+    # Success stays cached; transient failure retries so recovery is observed.
+    assert len(calls) == (1 if available else 2)
 
 
 def test_pinned_worker_version_readiness(monkeypatch):

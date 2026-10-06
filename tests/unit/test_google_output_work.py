@@ -75,8 +75,16 @@ async def test_nonqueued_capacity_and_cancel_retains_until_child_done(monkeypatc
     with pytest.raises(ValueError, match="busy"):
         OutputInspectionLease()
     gate.set()
-    await asyncio.sleep(0.02)
-    third = OutputInspectionLease()
+    # Bounded poll: the worker releases deterministically once gated, but a
+    # fixed sleep flakes under load and a failure would leak slots file-wide.
+    async with asyncio.timeout(5):
+        while True:
+            try:
+                third = OutputInspectionLease()
+            except ValueError:
+                await asyncio.sleep(0.01)
+                continue
+            break
     assert child.returncode == 0
     third.close()
     if second is not None:
@@ -229,9 +237,16 @@ async def test_delayed_spawn_repeated_caller_cancel_keeps_slot_until_reap(monkey
     with pytest.raises(ValueError, match="busy"):
         OutputInspectionLease()
     spawn_gate.set()
-    await asyncio.sleep(0.03)
+    # Bounded poll for the same file-wide isolation reason as above.
+    async with asyncio.timeout(5):
+        while True:
+            try:
+                replacement = OutputInspectionLease()
+            except ValueError:
+                await asyncio.sleep(0.01)
+                continue
+            break
     assert child.killed and child.returncode is not None
-    replacement = OutputInspectionLease()
     replacement.close()
     second.close()
 

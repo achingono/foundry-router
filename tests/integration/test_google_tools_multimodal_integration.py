@@ -391,6 +391,20 @@ async def test_body_read_intake_timeout():
 
 
 @respx.mock
+@pytest.mark.parametrize("bad_input", [None, 123])
+def test_malformed_input_shape_returns_controlled_error_not_500(monkeypatch, bad_input):
+    settings = _settings({"g": backend(PROFILE)}, {"m": {"backends": {"g": 1}}})
+    _wire(monkeypatch, settings)
+    response = client.post(
+        "/openai/v1/responses",
+        headers=HEADERS,
+        json={"model": "m", "input": bad_input},
+    )
+    assert response.status_code == 422
+    assert not respx.calls
+
+
+@respx.mock
 def test_duplicate_outer_schema_keys_rejected_before_egress(monkeypatch):
     settings = _settings({"g": backend(PROFILE)}, {"m": {"backends": {"g": 1}}})
     _wire(monkeypatch, settings)

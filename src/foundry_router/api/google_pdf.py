@@ -8,11 +8,14 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import json
+import logging
 import re
 import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from foundry_router.api.google_audio import PreparedAudio
@@ -23,6 +26,149 @@ _MAX_BYTES = 65536
 _MAX_TOTAL_BYTES = 131072
 _MAX_DOCUMENTS = 4
 _WORKER_SECONDS = 2
+# Bounded best-effort child reap detached from request cancellation. A stalled
+# spawn/wait must never hold inspection capacity or suppress cancellation: on
+# expiry the child is killed and its single in-flight wait task is transferred
+# to explicit orphan tracking. No second waiter is ever started. At most
+# _MAX_PDF_ORPHANS killed-but-unreaped children may exist; further inspection
+# is rejected until reaping catches up.
+_CLEANUP_SECONDS = 1.0
+_MAX_PDF_ORPHANS = 8
+_ORPHANED_PDF_CHILDREN: set[Any] = set()
+
+
+def pdf_orphaned_children() -> int:
+    """Return the count of explicitly tracked unreaped PDF inspector children."""
+    return len(_ORPHANED_PDF_CHILDREN)
+
+
+def _wait_confirmed(done: asyncio.Task[Any], child: Any) -> bool:
+    """Task completion alone never confirms reaping: require success and exit."""
+    if done.cancelled():
+        return False
+    if done.exception() is not None:
+        return False
+    return getattr(child, "returncode", None) is not None
+
+
+def _track_orphan_wait(child: Any, wait_task: asyncio.Task[Any]) -> None:
+    """Take ownership of an in-flight child-wait task as a tracked orphan.
+
+    The wait task is never duplicated: this same task is the sole waiter, and
+    tracking is cleared only after successful, confirmed reaping. A failed or
+    cancelled wait stays retained against the admission limit with an
+    actionable warning, so unconfirmed children can never silently reopen
+    capacity. In-flight orphans are always tracked; the capacity bound is
+    enforced at inspection admission so persistent failures fail closed
+    instead of accumulating children.
+    """
+    _ORPHANED_PDF_CHILDREN.add(child)
+
+    def _settle(done: asyncio.Task[Any]) -> None:
+        if _wait_confirmed(done, child):
+            _ORPHANED_PDF_CHILDREN.discard(child)
+        else:
+            _LOGGER.warning(
+                "pdf_inspector_reap_unconfirmed returncode=%r orphans=%d limit=%d",
+                getattr(child, "returncode", None),
+                len(_ORPHANED_PDF_CHILDREN),
+                _MAX_PDF_ORPHANS,
+            )
+
+    wait_task.add_done_callback(_settle)
+
+
+def _settle_pdf_spawn(spawn: asyncio.Task[Any]) -> None:
+    """Consume a detached spawn task; any late process becomes a tracked orphan."""
+    try:
+        child = spawn.result()
+    except BaseException:
+        return
+    if child is None:
+        return
+    try:
+        if child.returncode is None:
+            with suppress(ProcessLookupError):
+                child.kill()
+    except Exception:
+        return
+    try:
+        wait_task = asyncio.create_task(child.wait())
+    except RuntimeError:
+        return
+    _track_orphan_wait(child, wait_task)
+
+
+def _orphan_pdf_spawn(spawn: asyncio.Task[Any] | None) -> None:
+    if spawn is None or spawn.done():
+        if spawn is not None:
+            _settle_pdf_spawn(spawn)
+        return
+    spawn.cancel()
+    spawn.add_done_callback(_settle_pdf_spawn)
+
+
+async def _bounded_pdf_reap(
+    process: asyncio.subprocess.Process | Any | None,
+    spawn: asyncio.Task[Any] | None,
+) -> None:
+    """Resolve, kill and reap a PDF inspector child within a fixed bound.
+
+    Never suppresses caller cancellation: a CancelledError during cleanup
+    transfers the single wait task to explicit tracking and propagates, so the
+    request finishes promptly while reaping still completes exactly once.
+    """
+    child = process
+    if child is None and spawn is not None:
+        try:
+            async with asyncio.timeout(_CLEANUP_SECONDS):
+                child = await asyncio.shield(spawn)
+        except (TimeoutError, OSError):
+            _orphan_pdf_spawn(spawn)
+            child = None
+        except asyncio.CancelledError:
+            _orphan_pdf_spawn(spawn)
+            raise
+        except Exception:
+            child = None
+    if child is None:
+        return
+    try:
+        stdin = getattr(child, "stdin", None)
+        if stdin is not None:
+            stdin.close()
+    except Exception:
+        pass
+    try:
+        transport = getattr(getattr(child, "stdout", None), "_transport", None)
+        if transport is not None:
+            transport.close()
+    except Exception:
+        pass
+    try:
+        if child.returncode is None:
+            with suppress(ProcessLookupError):
+                child.kill()
+    except Exception:
+        pass
+    try:
+        wait_task = asyncio.create_task(child.wait())
+    except RuntimeError:
+        return
+    try:
+        async with asyncio.timeout(_CLEANUP_SECONDS):
+            await asyncio.shield(wait_task)
+    except TimeoutError:
+        _track_orphan_wait(child, wait_task)
+    except asyncio.CancelledError:
+        _track_orphan_wait(child, wait_task)
+        raise
+    except (OSError, Exception):
+        # A failed wait is still tracked until its confirmation callback runs,
+        # so every child has exactly one owner from creation to reaping.
+        if not wait_task.done():
+            wait_task.cancel()
+        _track_orphan_wait(child, wait_task)
 
 
 @dataclass(frozen=True, repr=False)
@@ -146,6 +292,13 @@ class PdfPreparer:
         self.probe: asyncio.Task[bool] | None = None
 
     async def ready(self) -> bool:
+        """Cache successful probes; retry transient failures on the next call.
+
+        A single wedged or unavailable worker must not permanently poison
+        readiness. Concurrent callers share one in-flight probe (single-flight);
+        a completed ``False`` result or task failure is cleared so recovery is
+        observed without a process restart. Successful probes stay cached.
+        """
         if not pdf_worker_available():
             return False
         if self.probe is None:
@@ -153,7 +306,22 @@ class PdfPreparer:
                 return False
             self.active += 1
             self.probe = asyncio.create_task(self._probe())
-        return await asyncio.shield(self.probe)
+        task = self.probe
+        try:
+            result = await asyncio.shield(task)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Task failure (not a clean False) never poisons readiness.
+            if self.probe is task:
+                self.probe = None
+            return False
+        if result:
+            return True
+        # Transient False is not cached; next readiness check retries.
+        if self.probe is task and task.done():
+            self.probe = None
+        return False
 
     async def _probe(self) -> bool:
         objects = [
@@ -219,6 +387,8 @@ class PdfPreparer:
             self.active -= 1
 
     async def inspect(self, data: bytes, *, deadline: float) -> int:
+        if pdf_orphaned_children() >= _MAX_PDF_ORPHANS:
+            raise PdfPreparationError(503, "PDF inspector unavailable")
         process: asyncio.subprocess.Process | None = None
         spawn: asyncio.Task[asyncio.subprocess.Process] | None = None
         try:
@@ -278,40 +448,7 @@ class PdfPreparer:
                 raise
             raise PdfPreparationError(422, "PDF document failed bounded inspection") from exc
         finally:
-
-            async def cleanup() -> None:
-                try:
-                    child = (
-                        process
-                        if process is not None
-                        else await spawn
-                        if spawn is not None
-                        else None
-                    )
-                except OSError:
-                    return
-                if child is None:
-                    return
-                if child.stdin is not None:
-                    child.stdin.close()
-                transport = getattr(child.stdout, "_transport", None)
-                if transport is not None:
-                    transport.close()
-                if child.returncode is None:
-                    with suppress(ProcessLookupError):
-                        child.kill()
-                await child.wait()
-
-            reaper = asyncio.create_task(cleanup())
-            cancelled = False
-            while not reaper.done():
-                try:
-                    await asyncio.shield(reaper)
-                except asyncio.CancelledError:
-                    cancelled = True
-            reaper.result()
-            if cancelled:
-                raise asyncio.CancelledError
+            await _bounded_pdf_reap(process, spawn)
 
 
 pdf_preparer = PdfPreparer()

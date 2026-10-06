@@ -92,6 +92,9 @@ def _preflight_png(raw: bytes, max_pixels: int) -> None:
     saw_header = False
     saw_data = False
     ended_data = False
+    width = height = 0
+    channels = 0
+    idat_parts: list[bytes] = []
     while offset + 12 <= len(raw):
         size = int.from_bytes(raw[offset : offset + 4])
         kind = raw[offset + 4 : offset + 8]
@@ -119,18 +122,55 @@ def _preflight_png(raw: bytes, max_pixels: int) -> None:
                 or interlace != 0
             ):
                 raise ValueError("PNG dimensions or encoding exceed the supported profile")
+            channels = 3 if color == 2 else 4
             saw_header = True
         elif kind == b"IDAT":
-            if not saw_header or ended_data:
+            if not saw_header or ended_data or not size:
                 raise ValueError("Invalid PNG data ordering")
             saw_data = True
+            idat_parts.append(data)
         elif kind == b"IEND":
             ended_data = True
             if not saw_data or size != 0 or end != len(raw):
                 raise ValueError("Invalid PNG ending")
+            _check_png_raster_complete(b"".join(idat_parts), width, height, channels)
             return
         else:
             # Reject compressed ancillary metadata, animation and unfamiliar chunks.
             raise ValueError("Unsupported PNG container chunk")
         offset = end
     raise ValueError("Incomplete PNG container")
+
+
+def _check_png_raster_complete(compressed: bytes, width: int, height: int, channels: int) -> None:
+    """Require exact zlib completion and exact scanline expansion.
+
+    Pillow tolerates truncated Adler footers and surplus raster bytes, so
+    container/CRC checks alone cannot establish raster integrity. Decompress
+    the concatenated IDAT stream with a one-byte surplus allowance: truncated
+    streams fail with missing EOF, and surplus compressed or expanded data is
+    rejected before the native decoder runs.
+    """
+    if not compressed:
+        raise ValueError("Incomplete PNG raster")
+    row_size = 1 + width * channels
+    expected = row_size * height
+    decompressor = zlib.decompressobj()
+    try:
+        # One-byte surplus allowance detects over-expansion without unbounded inflate.
+        inflated = decompressor.decompress(compressed, expected + 1)
+        # Drain any remaining output without expanding beyond the bound.
+        if not decompressor.eof:
+            inflated += decompressor.decompress(b"", expected + 1 - len(inflated))
+    except zlib.error as exc:
+        raise ValueError("Invalid PNG compressed stream") from exc
+    if (
+        len(inflated) != expected
+        or not decompressor.eof
+        or decompressor.unused_data
+        or decompressor.unconsumed_tail
+    ):
+        raise ValueError("Incomplete PNG raster")
+    for row_start in range(0, expected, row_size):
+        if inflated[row_start] > 4:
+            raise ValueError("Invalid PNG row filter")

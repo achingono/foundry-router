@@ -41,7 +41,37 @@ STATUSES = {
 }
 
 
-def validate_manifest(manifest: Any) -> dict[str, Any]:
+def _load_catalog(catalog_path: Path) -> dict[str, list[str]]:
+    """Load the synthetic dormant catalog; any shape problem fails closed."""
+    if catalog_path.stat().st_size > MAX_MANIFEST_BYTES:
+        raise ValueError("Catalog bound exceeded")
+    catalog = load_bounded_json(catalog_path.read_text(), max_bytes=MAX_MANIFEST_BYTES)
+    if (
+        not isinstance(catalog, dict)
+        or not isinstance(catalog.get("projects"), list)
+        or not catalog["projects"]
+        or not isinstance(catalog["projects"][0], dict)
+        or not isinstance(catalog["projects"][0].get("models"), list)
+        or not 1 <= len(catalog["projects"][0]["models"]) <= MAX_MODELS
+    ):
+        raise ValueError("Invalid validation catalog")
+    catalog_models: dict[str, list[str]] = {}
+    for row in catalog["projects"][0]["models"]:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("id"), str)
+            or not row["id"]
+            or row["id"] in catalog_models
+            or not isinstance(row.get("methods"), list)
+            or not row["methods"]
+            or any(not isinstance(method, str) or not method for method in row["methods"])
+        ):
+            raise ValueError("Invalid catalog model row")
+        catalog_models[row["id"]] = list(row["methods"])
+    return catalog_models
+
+
+def validate_manifest(manifest: Any, *, catalog_path: Path = CATALOG) -> dict[str, Any]:
     if not isinstance(manifest, dict) or (
         manifest.get("version") != 1
         or manifest.get("max_requests_per_project") != REQUEST_LIMIT
@@ -52,8 +82,7 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not 1 <= len(manifest["models"]) <= MAX_MODELS
     ):
         raise ValueError("Invalid validation manifest")
-    catalog = json.loads(CATALOG.read_text())
-    catalog_models = {row["id"]: row["methods"] for row in catalog["projects"][0]["models"]}
+    catalog_models = _load_catalog(catalog_path)
     if len(manifest["models"]) != len(catalog_models):
         raise ValueError("Invalid catalog coverage")
     seen = set()
@@ -93,13 +122,15 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--catalog", type=Path, default=CATALOG)
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     try:
         if args.manifest.stat().st_size > MAX_MANIFEST_BYTES:
             raise ValueError("Manifest bound exceeded")  # noqa: TRY301
         summary = validate_manifest(
-            load_bounded_json(args.manifest.read_text(), max_bytes=MAX_MANIFEST_BYTES)
+            load_bounded_json(args.manifest.read_text(), max_bytes=MAX_MANIFEST_BYTES),
+            catalog_path=args.catalog,
         )
         if args.execute:
             print(json.dumps({**summary, "execution": "rejected_missing_protocol_evidence"}))

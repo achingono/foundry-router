@@ -61,6 +61,31 @@ from foundry_router.routing import (
 )
 
 
+def _backend_execution_deadline(
+    settings: Any,
+    backend_id: str,
+    reservation_deadline_monotonic: float,
+    intake_deadline_monotonic: float | None,
+) -> float:
+    """Bound Google delivery by remaining intake time; Azure uses reservation only.
+
+    Admission/selection is already intake-bounded inside routing. Applying the
+    intake deadline to every backend would truncate Azure inference and
+    streaming after body intake. Google delivery retains the tighter bound
+    without reset, matching the documented intake + reservation lifetime.
+    """
+    if intake_deadline_monotonic is None:
+        return reservation_deadline_monotonic
+    try:
+        backends = getattr(settings, "backends", None)
+        config = backends.get(backend_id) if isinstance(backends, dict) else None
+        if getattr(config, "provider", "") == "google_ai_studio":
+            return min(reservation_deadline_monotonic, intake_deadline_monotonic)
+    except Exception:
+        return reservation_deadline_monotonic
+    return reservation_deadline_monotonic
+
+
 def build_router(
     *,
     load_settings_fn: Any,
@@ -267,9 +292,12 @@ def build_router(
                     return api_error(408, "Request intake exceeded its deadline", "request_timeout")
                 except (ProviderStateError, ValueError, TypeError, KeyError):
                     return api_error(422, "Invalid provider state", "invalid_provider_state")
-            elif STATE_FIELD in canonical_body or any(
-                isinstance(item, dict) and STATE_FIELD in item
-                for item in canonical_body.get("input", [])
+            elif STATE_FIELD in canonical_body or (
+                isinstance(canonical_body.get("input"), list)
+                and any(
+                    isinstance(item, dict) and STATE_FIELD in item
+                    for item in canonical_body["input"]
+                )
             ):
                 return api_error(
                     422, "Provider state requires a bound-history pool", "invalid_provider_state"
@@ -298,7 +326,12 @@ def build_router(
                             credit_store=credit_store,
                             metrics_store=metrics_store,
                             rate_limit_store=rate_limit_store,
-                            reservation_deadline_monotonic=reservation_deadline_monotonic,
+                            reservation_deadline_monotonic=_backend_execution_deadline(
+                                settings,
+                                backend_id,
+                                reservation_deadline_monotonic,
+                                intake_deadline,
+                            ),
                             **media_options,
                         )
                     ),
@@ -338,7 +371,12 @@ def build_router(
                         set_backend_cooldown=health_store.set_backend_cooldown,
                         sleep=sleep_fn,
                         api_error=api_error,
-                        reservation_deadline_monotonic=reservation_deadline_monotonic,
+                        reservation_deadline_monotonic=_backend_execution_deadline(
+                            settings,
+                            backend_id,
+                            reservation_deadline_monotonic,
+                            intake_deadline,
+                        ),
                         **media_options,
                     )
                 ),
@@ -379,8 +417,12 @@ def build_router(
     )
     async def create_embeddings(request: Request) -> Response:
         settings = load_settings_fn()
+        intake_deadline = time.monotonic() + settings.intake_timeout_seconds
         body = await request_body(
-            request, "embeddings", max_body_bytes=settings.max_request_body_bytes
+            request,
+            "embeddings",
+            max_body_bytes=settings.max_request_body_bytes,
+            deadline_monotonic=intake_deadline,
         )
         if isinstance(body, JSONResponse):
             return body
@@ -409,7 +451,12 @@ def build_router(
                     set_backend_cooldown=health_store.set_backend_cooldown,
                     sleep=sleep_fn,
                     api_error=api_error,
-                    reservation_deadline_monotonic=reservation_deadline_monotonic,
+                    reservation_deadline_monotonic=_backend_execution_deadline(
+                        settings,
+                        backend_id,
+                        reservation_deadline_monotonic,
+                        intake_deadline,
+                    ),
                 )
             ),
             health_store=health_store,
@@ -425,6 +472,7 @@ def build_router(
             ),
             requested_model=resolution.requested_model,
             is_alias=resolution.is_alias,
+            intake_deadline_monotonic=intake_deadline,
         )
 
     return router

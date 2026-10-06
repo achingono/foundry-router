@@ -1,0 +1,1169 @@
+{
+  "version": 1,
+  "note": "Synthetic dormant fixture; zero dispatch-eligible cases; protocol gates pending.",
+  "max_requests_per_project": 20,
+  "max_tokens_per_project": 20000,
+  "max_paid_spend_usd": 0,
+  "initial_discovery_requests_per_project": 1,
+  "models": [
+    {
+      "id": "synthetic-validation-model-001",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-002",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-003",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-004",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-005",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-006",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-007",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-008",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-009",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-010",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-011",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-012",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-013",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-014",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-015",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-016",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-017",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-018",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-019",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-020",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-021",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-022",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-023",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-024",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-025",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-026",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-027",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-028",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-029",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-030",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-031",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-032",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-033",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-034",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-035",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-036",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-037",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-038",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-039",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-040",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-041",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-042",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-043",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-044",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-045",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-046",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-047",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-048",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-049",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-050",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-051",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-052",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-053",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-054",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-055",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-056",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-057",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-058",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-059",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-060",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    },
+    {
+      "id": "synthetic-validation-model-061",
+      "methods": [
+        "generateContent"
+      ],
+      "free_tier_text": false,
+      "capabilities": {
+        "text_nonstream": "pending_case",
+        "text_stream": "pending_case",
+        "tools": "pending_case",
+        "structured_text": "pending_case",
+        "image_input": "pending_case",
+        "pdf_input": "pending_case",
+        "wav_input": "pending_case",
+        "avi_input": "pending_case",
+        "image_output": "pending_case",
+        "audio_output": "pending_case"
+      }
+    }
+  ]
+}

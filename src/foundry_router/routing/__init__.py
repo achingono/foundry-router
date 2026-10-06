@@ -922,10 +922,11 @@ async def execute_with_single_failover(
 ) -> Response:
     started_at = time.monotonic()
     # Start before admission so storage latency cannot grant a fresh lifetime
-    # to a reservation already created inside initial selection.
+    # to a reservation already created inside initial selection. The intake
+    # deadline bounds admission/selection only; execution uses the reservation
+    # lifetime. Google delivery applies the tighter intake bound explicitly at
+    # the API boundary so Azure inference is never truncated by body intake.
     reservation_deadline = _reservation_deadline_monotonic(settings)
-    if intake_deadline_monotonic is not None:
-        reservation_deadline = min(reservation_deadline, intake_deadline_monotonic)
     effective_requested = requested_model if requested_model is not None else model
     effective_is_alias = bool(is_alias)
 

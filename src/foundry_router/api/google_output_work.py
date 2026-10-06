@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import math
 import struct
 import sys
@@ -11,14 +12,145 @@ import threading
 import zlib
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
 from foundry_router.api.adapters.google_schema import load_bounded_json
 from foundry_router.api.google_output_png import MAX_PNG_BYTES
+
+_LOGGER = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(2)
 _SLOT_LOCK = threading.Lock()
 _WORKER_SECONDS = 2
 _METADATA_BYTES = 1024
+# Bounded best-effort child reap detached from request cancellation. A stalled
+# spawn/wait must never hold an inspection slot indefinitely: on expiry the
+# child is killed and its single in-flight wait task is transferred to explicit
+# orphan tracking. No second waiter is ever started. At most _MAX_ORPHANS
+# killed-but-unreaped children may exist; further inspection is rejected until
+# reaping catches up.
+_CLEANUP_SECONDS = 1.0
+_MAX_ORPHANS = 8
+_ORPHANED_OUTPUT_CHILDREN: set[Any] = set()
+
+
+def output_orphaned_children() -> int:
+    """Return the count of explicitly tracked unreaped inspector children."""
+    return len(_ORPHANED_OUTPUT_CHILDREN)
+
+
+def _wait_confirmed(done: asyncio.Task[Any], child: Any) -> bool:
+    """Task completion alone never confirms reaping: require success and exit."""
+    if done.cancelled():
+        return False
+    if done.exception() is not None:
+        return False
+    return getattr(child, "returncode", None) is not None
+
+
+def _track_orphan_wait(child: Any, wait_task: asyncio.Task[Any]) -> None:
+    """Take ownership of an in-flight child-wait task as a tracked orphan.
+
+    The wait task is never duplicated: this same task is the sole waiter, and
+    tracking is cleared only after successful, confirmed reaping. A failed or
+    cancelled wait stays retained against the admission limit with an
+    actionable warning, so unconfirmed children can never silently reopen
+    capacity. In-flight orphans are always tracked; the capacity bound is
+    enforced at inspection admission so persistent failures fail closed
+    instead of accumulating children.
+    """
+    _ORPHANED_OUTPUT_CHILDREN.add(child)
+
+    def _settle(done: asyncio.Task[Any]) -> None:
+        if _wait_confirmed(done, child):
+            _ORPHANED_OUTPUT_CHILDREN.discard(child)
+        else:
+            _LOGGER.warning(
+                "generated_output_reap_unconfirmed returncode=%r orphans=%d limit=%d",
+                getattr(child, "returncode", None),
+                len(_ORPHANED_OUTPUT_CHILDREN),
+                _MAX_ORPHANS,
+            )
+
+    wait_task.add_done_callback(_settle)
+
+
+def _settle_output_spawn(spawn: asyncio.Task[Any]) -> None:
+    """Consume a detached spawn task; any late process becomes a tracked orphan."""
+    try:
+        child = spawn.result()
+    except BaseException:
+        return
+    if child is None:
+        return
+    try:
+        if getattr(child, "returncode", None) is None:
+            with suppress(ProcessLookupError):
+                child.kill()
+    except Exception:
+        return
+    try:
+        wait_task = asyncio.create_task(child.wait())
+    except RuntimeError:
+        return
+    _track_orphan_wait(child, wait_task)
+
+
+def _orphan_output_spawn(spawn: asyncio.Task[Any] | None) -> None:
+    if spawn is None or spawn.done():
+        if spawn is not None:
+            _settle_output_spawn(spawn)
+        return
+    spawn.cancel()
+    spawn.add_done_callback(_settle_output_spawn)
+
+
+async def _bounded_output_reap(process: Any | None, spawn: asyncio.Task[Any] | None) -> None:
+    """Resolve, kill and reap an inspector child within a fixed bound.
+
+    Never suppresses caller cancellation: a CancelledError during cleanup
+    transfers the single wait task to explicit tracking and propagates, so the
+    request finishes promptly while reaping still completes exactly once.
+    """
+    child = process
+    if child is None and spawn is not None:
+        try:
+            async with asyncio.timeout(_CLEANUP_SECONDS):
+                child = await asyncio.shield(spawn)
+        except (TimeoutError, OSError):
+            _orphan_output_spawn(spawn)
+            child = None
+        except asyncio.CancelledError:
+            _orphan_output_spawn(spawn)
+            raise
+        except Exception:
+            child = None
+    if child is None:
+        return
+    try:
+        if getattr(child, "returncode", None) is None:
+            with suppress(ProcessLookupError):
+                child.kill()
+    except Exception:
+        pass
+    try:
+        wait_task = asyncio.create_task(child.wait())
+    except RuntimeError:
+        return
+    try:
+        async with asyncio.timeout(_CLEANUP_SECONDS):
+            await asyncio.shield(wait_task)
+    except TimeoutError:
+        _track_orphan_wait(child, wait_task)
+    except asyncio.CancelledError:
+        _track_orphan_wait(child, wait_task)
+        raise
+    except (OSError, Exception):
+        # A failed wait is still tracked until its confirmation callback runs,
+        # so every child has exactly one owner from creation to reaping.
+        if not wait_task.done():
+            wait_task.cancel()
+        _track_orphan_wait(child, wait_task)
 
 
 def _probe_png() -> bytes:
@@ -92,6 +224,8 @@ class OutputInspectionLease:
     async def inspect(self, raw: bytes, *, deadline: float) -> PreparedOutputPng:
         if self._closed or self._active or not 1 <= len(raw) <= MAX_PNG_BYTES:
             raise ValueError("Generated output inspection unavailable")
+        if output_orphaned_children() >= _MAX_ORPHANS:
+            raise ValueError("Generated output inspection is busy")
         if sys.platform != "linux":
             raise ValueError("Generated output inspector requires Linux")
         self._active = True
@@ -167,19 +301,11 @@ class OutputInspectionLease:
                     hashlib.sha256(raw).hexdigest(), len(raw), facts["expanded_bytes"]
                 )
         finally:
-            if process is None and spawn is not None:
-                # Spawn is shielded: await it before releasing the child-owned slot.
-                try:
-                    process = await spawn
-                except (OSError, asyncio.CancelledError):
-                    process = None
-            if process is not None:
-                if process.returncode is None:
-                    with suppress(ProcessLookupError):
-                        process.kill()
-                await process.wait()
-            self._active = False
-            self._release()
+            try:
+                await _bounded_output_reap(process, spawn)
+            finally:
+                self._active = False
+                self._release()
 
 
 def _observe_task(task: asyncio.Task[PreparedOutputPng]) -> None:

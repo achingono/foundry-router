@@ -233,6 +233,36 @@ def test_unavailable_inspector_fails_before_admission(monkeypatch):
 
 
 @respx.mock
+def test_exhausted_orphan_capacity_returns_503_without_egress(monkeypatch):
+    """Saturated orphan tracking fails closed at HTTP with no upstream dispatch."""
+    from foundry_router.api import google_output_work as output_module
+    from foundry_router.api.google_output_work import OutputInspectionLease
+
+    wire(monkeypatch)
+    # Exercise the real lease admission path (not a fake): the cap check in
+    # inspect() rejects before any worker spawn, so ready() is False.
+    monkeypatch.setattr(
+        "foundry_router.api.routes.openai.OutputInspectionLease", OutputInspectionLease
+    )
+    monkeypatch.setattr("foundry_router.api.routes.openai.sys.platform", "linux")
+    markers = [object() for _ in range(output_module._MAX_ORPHANS)]
+    for marker in markers:
+        output_module._ORPHANED_OUTPUT_CHILDREN.add(marker)
+    try:
+        assert output_module.output_orphaned_children() == output_module._MAX_ORPHANS
+        route = respx.post(URL).mock(return_value=httpx.Response(500))
+        response = client.post("/openai/v1/responses", headers={"api-key": "client-key"}, json=BODY)
+        assert response.status_code == 503 and route.call_count == 0
+        live = client.get("/admin/status", headers={"x-admin-key": "admin-key"}).json()["backends"][
+            "g"
+        ]["live"]
+        assert live["estimated_remaining_usd"] == 200 and live["reserved_inflight_usd"] == 0
+    finally:
+        for marker in markers:
+            output_module._ORPHANED_OUTPUT_CHILDREN.discard(marker)
+
+
+@respx.mock
 @pytest.mark.parametrize(
     "patch",
     [
