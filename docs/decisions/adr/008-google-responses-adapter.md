@@ -25,7 +25,7 @@ Vendor references (verified 2026-10-05; pages may change, re-confirm before rele
 
 ## Consequences
 
-- Google backends serve text Responses and embeddings through the existing API with explainable capability errors; tool/multimodal/structured-output clients fail fast instead of silently degrading.
+- Google backends serve text Responses and embeddings through the existing API with explainable capability errors; unconfigured tool/media/schema features fail fast. ADR-010 adds opt-in unsigned tools, structured text and small PNG input; signed/additional media remain disabled.
 - Estimates cover instructions/history/overhead and the reserved output bound is enforced upstream.
 - Ambiguous Google dispatches never produce a second billable generation from one reservation.
 - Real inference, provider failure traffic, and production cut-over remain separate unverified gates; the adapter must be reported as **Implemented** (mocked) with live validation **Planned** until W7 passes.

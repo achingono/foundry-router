@@ -7,9 +7,16 @@
 - [x] Independent plan review complete with findings addressed.
 - [x] Documentation links, whitespace and final secret/status claims checked.
 
+## Current code gate
+
+The [implementation amendment](implementation/exit-criteria.md) records the passing restricted
+unsigned-tools/structured-text/small-PNG code gates. The full modality/signature/live checklist
+below remains the design target and is not claimed complete. The
+[full requirement audit](completion-audit.md) maps each activity to evidence and remaining work.
+
 ## Prerequisites for Runtime Work
 
-- [ ] Predecessor adapter code gate passed and actual interfaces re-inspected.
+- [x] Predecessor adapter code gate passed and actual interfaces re-inspected.
 - [ ] T1 vendor/client/capability contracts and necessary public API ADRs verified/reviewed.
 - [ ] Profiles default new features off; exact combinations/surfaces are validated before routing.
 - [ ] Needed schema/media estimates, price/quota dimensions and finite limits are defined.

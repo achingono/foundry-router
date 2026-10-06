@@ -8,7 +8,7 @@ Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-versio
 
 ## Google AI Studio Adapter (Implemented, Mocked Verification)
 
-Configured `google_ai_studio` backends are usable through the existing Responses and embeddings API via an explicit protocol adapter (`src/foundry_router/api/adapters/`). Google's OpenAI-compatible surface is `POST {endpoint-root}/v1beta/openai/chat/completions` and `POST {endpoint-root}/v1beta/openai/embeddings` with `Authorization: Bearer <server-side key>` (verified 2026-10-05). Client authentication is never forwarded. This is a text/embeddings compatibility subset, verified with strict mocked Chat Completions/envelope contracts; real Google inference remains **Planned** (opt-in live gate). It must not be advertised as full compatibility with tool-dependent coding-agent workflows.
+Configured `google_ai_studio` backends are usable through the existing Responses and embeddings API via an explicit protocol adapter (`src/foundry_router/api/adapters/`). Google's OpenAI-compatible surface is `POST {endpoint-root}/v1beta/openai/chat/completions` and `POST {endpoint-root}/v1beta/openai/embeddings` with `Authorization: Bearer <server-side key>` (verified 2026-10-05). Client authentication is never forwarded. The baseline text/embeddings subset and opt-in [tools, structured text and bounded inline image input](../operations/google-features.md) are verified with strict mocked Chat Completions/envelope contracts; real Google inference remains **Planned** (opt-in live gate). It must not be advertised as full compatibility with tool-dependent coding-agent workflows.
 
 | Public input | Google mapping or outcome |
 | --- | --- |
@@ -21,9 +21,9 @@ Configured `google_ai_studio` backends are usable through the existing Responses
 | `stream: true` | Upstream requests `stream_options: {"include_usage": true}`; downstream emits Responses lifecycle events |
 | `store: false`, `background: false`, `include: []` | Accepted stateless values; omitted upstream |
 | `metadata` | Validated; echoed in the public response only, never logged or forwarded |
-| Tools, `previous_response_id`, stored conversations/background, structured output, reasoning, multimodal, other unlisted fields | Rejected with HTTP 422 (`unsupported_parameter`/`unsupported_input`) before reservation/egress |
+| `previous_response_id`, stored conversations/background, reasoning, unconfigured features and other unlisted fields | Rejected with HTTP 422 (`unsupported_parameter`/`unsupported_input`) before reservation/egress |
 
-Non-streaming Google success requires a single-choice Chat Completions envelope with an assistant text message and a documented finish reason (`stop` → completed; `length` → incomplete `max_output_tokens`; `content_filter` → incomplete `content_filter`). Usage maps `prompt_tokens` → `input_tokens` and `completion_tokens` → `output_tokens`. Missing usage retains conservative estimates; invalid usage, unknown finish reasons, tool calls, and malformed envelopes are sanitized 502 protocol failures. Embeddings accept string/nonempty string lists (float only); the returned count/order/dimensions are validated against the request (including requested dimensions) with mismatches rejected as protocol failures, and actual input tokens are reconciled.
+Non-streaming Google success requires a single-choice Chat Completions envelope with an assistant text message and a documented finish reason (`stop` → completed; `length` → incomplete `max_output_tokens`; `content_filter` → incomplete `content_filter`). Usage maps `prompt_tokens` → `input_tokens` and `completion_tokens` → `output_tokens`. Missing usage retains conservative estimates; invalid usage, unknown finish reasons, undeclared/invalid tool calls, and malformed envelopes are sanitized 502 protocol failures. Embeddings accept string/nonempty string lists (float only); the returned count/order/dimensions are validated against the request (including requested dimensions) with mismatches rejected as protocol failures, and actual input tokens are reconciled.
 
 Google streaming decodes Chat SSE incrementally (split UTF-8, LF/CRLF, multiline data, keepalives, multiple events per chunk, usage-only final chunks) and emits ordered Responses events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta*`, done events, exactly one `response.completed`/`response.incomplete`/`response.failed`) with consistent IDs and monotonically increasing sequence numbers. Post-commit failures emit a schema-valid `response.failed` carrying the same response identity, continued sequencing, and `failed` status. No synthetic lifecycle event is sent before the first validated upstream event; after the first downstream event there is no retry or failover. EOF without the documented `[DONE]` terminator is a truncation failure. Google attempts are single-shot per backend: only 429 is failover-eligible (admitted fresh with both attempts counted); ambiguous dispatched failures (partial writes, read failures, timeouts, truncated 200 streams, 5xx, cancellation after possible dispatch) settle known usage or the estimate and terminate. Google 401/403 enters backend-local `ERROR_COOLDOWN` without same-request key cycling. Reads, prefetch, and delivery are bounded by the reservation deadline, which routing anchors at reservation creation and retains across failover.
 
@@ -36,6 +36,22 @@ in configured order followed by configured aliases in sorted order, each exactly
 `GET /admin/status` adds a separate `model_aliases` map. Upstream response and SSE
 bodies are untouched, so the provider's reported `model` may differ from the alias;
 live inference and approval-client compatibility remain separately gated.
+
+Opt-in `google_features` profiles support caller-executed function tools and complete stateless
+function-call/result history, serial/parallel arguments deltas/done, JSON-object and strict
+JSON-schema text, and user bounded inline images `input_image` data URIs. Explicit tool strictness is required;
+JSON schema text requires name/schema/strict true. Named choice requires exactly one call.
+Generated arguments/text validate locally before a successful terminal outcome; failures remain
+billable and never retry. Refusals and token/filter limits preserve distinct public outcomes.
+Public output indices are contiguous independently of provider call indices. Call IDs remain
+separate from output item IDs and server reservation IDs; every result turn authenticates anew.
+
+PNG defaults to 8-bit RGB/RGBA noninterlaced at <=384×384. Explicit format opt-in also accepts
+bounded baseline JPEG (<=128 dimensions, shared384 coded-block budget) and static lossless VP8L
+(<=384 dimensions); see the exact [format limits](../operations/google-features.md). Remote URLs,
+foreign file IDs, progressive/larger JPEG, lossy/animated WebP, video and generated
+media are rejected. Native PDF input is implemented locally. Finite WAV input is partially
+implemented and default-off pending gates. Signed continuation remains startup-gated. See [configured bounds and limitations](../operations/google-features.md).
 
 ## Endpoints
 
@@ -626,3 +642,63 @@ Only safe headers are forwarded:
 - Custom headers not in sensitive list
 
 **Never forwarded:** `Authorization`, `api-key`, `x-api-key`, `Cookie`, `X-Forwarded-*`, `Forwarded`
+
+Native Google Responses transport is **Partially implemented** with local fixtures: explicit
+backend surface maps to generateContent or streamGenerateContent, normalized to the public
+Responses protocol. It accepts only reviewed unsigned/thinking-disabled text/tool/schema/image
+profiles. Native SSE terminates at clean EOF with valid finish evidence; compatibility continues
+to require `[DONE]`. Surface selection is server configuration and never a public request field.
+Native foundation independent review passed; document/resource/live gates remain in progress.
+
+Inline PDF input is **Implemented locally**; exact-model live validation remains pending.
+Opt-in native user content uses `{"type":"input_file","filename":"fixture.pdf",
+"file_data":"data:application/pdf;base64,..."}`; only canonical inline encoding and bounded ASCII
+display filenames are accepted. Google URLs/file IDs/paths remain unsupported. The restricted
+parser accepts classic uncompressed PDFs with bounded standard-font text and page trees,
+rejecting actions, images/compression, encryption and custom font maps. API preparation runs
+before reservation in at most two isolated Linux workers; saturated intake returns503 and
+invalid documents422. Azure file inputs retain existing pass-through behavior.
+
+Signed native continuation remains **Partially implemented** behind its startup gate; see the
+[reviewed signed design](../plans/google-ai-studio-tools-multimodal/signed-continuation/design.md).
+Its synthetic OpenAI Python 2.8.1 tool replay recipe serializes function output items with
+`model_dump(exclude_none=True, exclude={"parsed_arguments"})`: the streaming helper adds that
+client-only parsed field. Keep the emitted arguments string, IDs, status and state carrier exact.
+This does not establish live Google or coding-agent compatibility.
+
+Finite WAV input is **Partially implemented** and default-off. Native-only `inline_audio` accepts
+user `input_file` with canonical `data:audio/wav;base64,...`; optional filename matches
+`[A-Za-z0-9_.-]{1,60}\.wav`. Only RIFF/WAVE fmt(16)/data, PCM mono 16 kHz 16-bit is accepted:
+10 seconds/320044 bytes per file, at most two files/20 seconds/640088 bytes across history.
+No IDs, URLs, compression, additional chunks or trailing data. Full caller history retains audio.
+Exact combinations require opt-in; generated audio is unsupported. See
+[audio evidence and pending gates](../plans/google-ai-studio-tools-multimodal/audio-input/evidence.md).
+
+Finite raw AVI input is **Partially implemented**, default-off pending
+[video gates](../plans/google-ai-studio-tools-multimodal/video-input/evidence.md). User input_file
+accepts canonical data:video/avi;base64 with optional bounded ASCII .avi filename. Only one
+raw24-bit bottom-up DIB/BGR stream, one frame/second,1–4frames,1–64width/height, no audio/index/
+metadata/compression is supported. At most2clips/8frames/131072bytes across history. Native
+videoMetadata.fps1 is server-owned. Exact-model codec support remains unverified.
+
+Generated PNG output is **Partially implemented behind a startup gate**; configured
+`image_output` currently prevents startup. The synthetic tested non-streaming request uses
+`tools: [{"type":"image_generation","output_format":"png","size":"1024x1024"}]` with
+omitted tool choice. Auto may return text alone or one validated PNG as standard
+`image_generation_call` with canonical base64 `result`; text/image order is preserved.
+The finite PNG inspector accepts only 1024 RGB/RGBA images up to 1 MiB, without ancillary
+chunks. Streaming, other tools/formats/sizes and implicit generated-item replay are unsupported.
+Refusal and truncation never fabricate completed image artifacts. See
+[implementation evidence](../plans/google-ai-studio-tools-multimodal/generated-image/evidence.md).
+
+Generated WAV output is **Partially implemented behind a startup gate**. The finite synthetic
+request uses `extra_body={"foundry_audio_generation":{"version":1,"format":"wav","voice":"Kore"}}`
+with OpenAI Python 2.8.1 `responses.create`. Only plain nonempty input up to4096 UTF-8 bytes,
+instructions up to1024 bytes and bounded metadata are accepted; tools, history, media, streaming
+and stored responses are unsupported. A completed response retains `output: []` and exposes
+`foundry_generated_audio` through SDK `model_extra` and `model_dump`: version1,id,format`wav`,
+media_type`audio/wav`,sample_rate_hz24000,channels1,sample_width_bits16 and canonical base64`data`.
+No transcript or standard audio output item is fabricated. WAV is PCM mono24kHz16bit,
+max10seconds/480044bytes; it cannot replay unchanged through the16kHz input profile.
+Refusal/truncation never returns a complete artifact. Exact Google transport/codec compatibility
+remains unverified; see [audio output evidence](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md).

@@ -2,8 +2,9 @@
 
 ## Status
 
-**Planned**. Drafting and review evidence only. No runtime implementation, current vendor
-verification, media inference, tool round trip or production enablement is established here.
+**Partially implemented**. Historical draft evidence below predates the implemented predecessor.
+Current code, client, review and verification evidence is in the
+[implementation amendment](implementation/evidence.md). No live Google or production claim.
 
 ## Evidence Log
 
@@ -56,3 +57,50 @@ test/coverage/lint/type/Azurite/Docker results and independent code reviews. Rec
 signature/tool replay separately from actual provider results. Keep live evidence to test case IDs,
 versions, result assertions and usage/redacted diagnostics; never retain keys, signature envelopes,
 prompts, arguments/results, generated content or media payloads. Synthetic fixtures are separate.
+
+## Implementation progress
+
+The full plan remains **Partially implemented**; see [completion audit](completion-audit.md).
+[Native/PDF evidence](native-pdf/evidence.md) now records local PDF gate completion: independent
+review,801 full local tests/87.95% coverage,92 actual Linux PDF tests, and current full-path
+8×100 mixed/aggregate/late-invalid resource measurements. No live Google calls or production
+enablement. [Signed continuation design](signed-continuation/design.md) is under independent
+review; signed runtime and remaining media directions remain required.
+
+2026-10-06 continuation: [Finite WAV](audio-input/evidence.md) and
+[raw DIB AVI](video-input/evidence.md) are partially implemented with independently reviewed
+bounded input parsers, native mapping, MIME-specific estimates, actual SDK fixtures and Linux
+measurements. Combined/state/live gates remain open. Five authorized model-list GETs discovered
+61models/project; no inference. [Dormant live runner](live-runner/evidence.md) owns budget and
+isolated synthetic runtime; all-model manifest has zero approved dispatch cases.
+
+Latest local checkpoint:1203passed,2Linux-onlyskips,15Docker/Azuritedeselected,89.05%coverage;
+Ruff/format/mypy, Python3.12Dockerbuild/health and184relative links pass. Sonarscriptabsent.
+Signed startupgate unchanged; generatedimage/audio,largerimage and all exactmodellive gates
+remain incomplete. Production unchanged. Do not mark the full objective complete.
+
+2026-10-06 generated-audio continuation: gated integration, SDK/lifecycle/input-quota tests
+and exact maximum/malformed Linux WAV measurements added. Local checkpoint1404passed,89.17%;
+Ruff/format/mypy pass. Corrected mixed Linux resource and final independent review remain
+pending after external approval/reviewer service503; no command bypass. See
+[scoped evidence](generated-audio/evidence.md). Full plan remains partially implemented;
+startup gates and production configuration unchanged. No new provider inference requests.
+
+2026-10-06 continuation closes local generated-audio mixed-resource/deepreview and actualsigned
+fresh-process replay gates. Final full1409passed/89.17%, Ruff518/mypy61 and100relative links pass.
+Corrected mixedWAV/PNG78,069,760B aggregateRSS with4WAV/34PNG, zero activecredit/quota rows;
+independentreviewclear. Signed local3.14/Linux3.12 sequentialSDK replay and changedkey422 pass;
+boundedpipeoverflow/cancel regressions and deepreviewclear. Evidence is syntheticonly; container/
+TCPrestart, combinedmaxstate/media and all exact-model live requirements remain open. See
+[process evidence](signed-continuation/evidence.md) and
+[audio output evidence](generated-audio/evidence.md). Startup gates remain closed, no live
+inference or production/config changes. Next [combined-resource amendment](signed-continuation/combined-resource-design.md)
+is submitted for independent preimplementation review.
+
+2026-10-06 quotedmaximum continuation: validated125historyitem/exactcontext fixture and actualSDK
+streamcompletion/newcarrier/headroom/wire checks implemented. FullLinux8×100completed26valid/
+774busy,correctbilling/cleanup, but failed152846336BRSS/158.35msloop. Independentlyreviewedhybrid
+JSONscanner optimization passes167focused/39531differential,full1422/89.18%,Ruff522/mypy61,
+Dockerbuild/health27.92sec. Onecaller43.31msloop passesbutdoesnotreplacefailedconcurrentgate.
+Next [verification-only attribution](signed-continuation/resource-attribution-design.md) approved;
+startup/live/production unchanged. Remaining parentrequirements preserved in completionaudit.

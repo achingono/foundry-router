@@ -49,3 +49,9 @@ The initial target is Azure Container Apps Consumption with 0.25 vCPU, 0.5 GiB m
 ## Technology Direction
 
 The preferred stack is Python 3.12+, FastAPI, asynchronous `httpx` (with HTTP/2 and connection limits), Pydantic settings, Docker, Azure Container Apps, Bicep IaC, GitHub Actions, pytest, Ruff, and mypy. All are **Implemented** except multi-worker metrics aggregation, which remains **Planned**.
+
+Google feature helpers remain inside `api/adapters/`: bounded schema validation, ordered tool
+history and bounded inline image intake (PNG, opt-in baseline JPEG/static VP8L). Default-off configuration profiles own declared combinations;
+credit owns estimates and routing owns eligibility/reservations. Immutable request-local tool/
+format context flows to translation and decoders. No conversation cache or native surface exists.
+See [feature implementation](../plans/google-ai-studio-tools-multimodal/implementation/index.md).

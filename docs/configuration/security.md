@@ -1,5 +1,12 @@
 # Security
 
+Google PDF preparation is **Implemented locally**, with independent review/resource/client gates passed; exact-model live validation remains pending.
+Owned immutable metadata binds exact inspected data before admission; caller page counts cannot
+reduce reservations. The worker inherits OS read/network capabilities but the reviewed parser
+performs no document-directed I/O. POSIX CPU/address-space/file/fd limits and parent deadlines
+bound work; they are not an OS syscall sandbox. Raw PDF grammar and pypdf interpretations must
+agree before forwarding. Only Linux currently enforces the required worker limits.
+
 ## Status: Implemented (auth, allow-list, redaction, intake bounds, constant-time HMAC; TLS/network remain deployment responsibilities)
 
 The proxy must not be an unrestricted public relay. Client requests require authentication, and `/admin/status` requires separate authentication. The implemented backend client accepts only each configured backend's HTTPS origin and base path, disables redirects, injects only the selected backend credential per attempt, propagates the validated correlation ID, and strips sensitive headers. Retry/failover reuse the same credential-isolation rules and do not forward client secrets upstream. User input must not create arbitrary outbound destinations or an SSRF path. Public listener TLS and network controls remain deployment responsibilities.
@@ -40,3 +47,20 @@ Logical model aliases inherit all target-pool policy without creating capacity o
 bypassing capability and continuation rules. Alias configuration adds no per-client
 ACLs, wildcard matching, or unknown-model fallback; unconfigured names remain 404
 with no reservation or egress.
+
+## Google tool and media boundaries
+
+The adapter executes no tools and fetches no media/schema URLs. Tool arguments/results are
+untrusted inert data; each continuation authenticates and reserves independently. Signature
+state and unsupported provider fields fail closed in unsigned profiles. Media accepts bounded
+inline PNG plus explicitly enabled small baseline JPEG/static VP8L. It checks container/type,
+rejects ancillary metadata/animation, validates JPEG entropy completeness under pixel/block/work
+budgets, and decodes only bounded small RGB/RGBA rasters. No files, uploads, OCR or transcoding are introduced.
+Schema validation resolves no references or regexes. Logs/errors/admin diagnostics contain
+configured feature IDs and redacted errors, never arguments, results, media or signatures.
+
+Signed continuation is **Partially implemented** as unattached codec/key/history helpers.
+Optional secret configuration is never exposed in settings representations; validation string
+errors hide inputs. Do not log ValidationError.errors()/json() with raw inputs. The immutable
+key ring derives caller scope only after successful authentication and keeps the matching
+key-configuration snapshot for intake binding. No signed output is enabled by configured keys.

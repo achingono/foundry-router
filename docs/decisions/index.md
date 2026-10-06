@@ -22,3 +22,5 @@ The backend model supports arbitrary backend counts and leaves room for subscrip
 - [ADR-006: Explainable Credit-Aware Routing](adr/006-routing-algorithm.md)
 - [ADR-007: Provider-Aware Quota Routing](adr/007-provider-aware-quota-routing.md) (Proposed; maintainer approval pending)
 - [ADR-008: Google Responses Compatibility Adapter](adr/008-google-responses-adapter.md) (Accepted; live validation Planned)
+
+- [ADR-010: Default-off Google feature profiles](adr/010-google-feature-profiles.md) (Accepted; live enablement Planned)

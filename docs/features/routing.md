@@ -4,7 +4,7 @@
 
 For each request: identify the model, filter candidates by declared `supported_operations` and provider request capabilities, find its configured candidates, remove disabled and cooldown backends when alternatives exist, estimate request cost, evaluate local credit safety reserve/capacity, score viable candidates, reserve before dispatch, forward, release reservation on completion, and return the response.
 
-Operation-aware routing applies identically on initial selection and failover, before either store reserves. If no configured candidate supports the operation, routing returns HTTP 422 `unsupported_operation` without egress; if candidates support the operation but none support the request features (for example tools on Google-only pools), routing returns the relevant unsupported-field error; capable Azure candidates stay eligible, including during failover. Google embedding models require explicit `supported_operations: ["embeddings"]`.
+Operation-aware routing applies identically on initial selection and failover, before either store reserves. If no configured candidate supports the operation, routing returns HTTP 422 `unsupported_operation` without egress; if candidates support the operation but none support the request features (for example tools on Google pools without an enabled profile), routing returns the relevant unsupported-field error; capable Azure candidates stay eligible, including during failover. Google embedding models require explicit `supported_operations: ["embeddings"]`.
 
 ## Logical Model Aliases (Implemented with mocked verification)
 
@@ -114,3 +114,13 @@ Retry only transient `429`, `500`, `502`, `503`, and `504` failures by default. 
 ## State Store Abstractions (Phases 5–6, Implemented)
 
 Single-instance deployments use `InMemoryCreditStore` and `InMemoryHealthStore`; table mode selects `AzureTableCreditStore` and `AzureTableHealthStore` (`src/foundry_router/state/table.py`) through the lifespan store factory. Adapter code, the concrete client, conditional provisioning template, and Azurite tests are **Implemented**; deployed multi-replica shared state is **Partially implemented** until Azure validation and a two-replica deployment pass. Azure Table Storage same-backend-partition transactions (ETag-guarded `balance` + `req-{id}` rows) protect shared credit reservations, while timestamped health snapshots use ADR-005's eventually consistent semantics. Redis remains an optional later cache and cannot replace the authoritative store.
+
+## Configured Google feature admission
+
+Feature/combinations and bounded schema/history/media validation precede reservations on both
+selection and failover. Unsigned tools are explicit; signed profiles stay disabled. Admission
+includes serialized UTF-8 tool/schema/history/text overhead, instructions and configured small
+image token ceilings. Google image profiles require separate Google-only logical pools; quotas
+and local dollar estimates stay separate, including on non-metered keys. Valid generated usage
+settles schema/tool failures; unknown usage retains the full reserve. Intake/storage waits and
+original reservation lifetime are bounded without restarting on failover.

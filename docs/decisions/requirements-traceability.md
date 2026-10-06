@@ -209,3 +209,42 @@ Azure Responses v1 deployment substitution, bounded SSE usage inspection and nes
 | --- | --- | --- |
 | Preserve explicit ingress IP restrictions during a memory-state deployment | `infra/main.bicep`, `infra/typed.bicep`, `infra/types/containers.bicep`, `infra/modules/containers/router.bicep` | Typed Bicep compilation and deployment passed with observed empty restrictions preserved; ingress mutation was explicitly prohibited. Exact credit continuity remains unverified; see [production rollout evidence](../plans/model-aliases-production/evidence.md) |
 | Pin fresh estimated startup credit to an immutable secret version | `infra/main.bicep`, `infra/typed.bicep` | Loaded startup estimates matched fresh snapshot less existing reservations; [production rollout evidence](../plans/model-aliases-production/evidence.md) |
+
+## Google tools and multimodal follow-up (Partially implemented)
+
+| Requirement | Status | Boundary | Evidence |
+| --- | --- | --- | --- |
+| Default-off capabilities and exact combinations before initial/failover reservation | Implemented | config/google_features, routing | Feature unit/integration tests; implementation evidence |
+| Unsigned function declarations/choices, complete serial/parallel history and independently charged caller turns | Implemented | api/adapters/google_tools | Pinned client round-trip and HTTP/quota tests |
+| Bounded incremental call events, contiguous public indices, no retry after commitment | Implemented | Google decoder, forwarding | OpenAI 2.8.1 stream state and lifecycle regressions |
+| Strict schemas/JSON objects, local completion validation and billable conversion failures | Implemented | google_schema, forwarding | Schema/refusal/usage/settlement tests |
+| Small inline PNG container/raster bounds and conservative Google-only pool metering | Implemented | google_media, credit/config | Media, quota, pool and estimate tests |
+| Bounded intake work/storage deadlines and cleanup before dispatch | Implemented | common/routing | Body/storage expiry and lifecycle tests |
+| Native Google Responses surface | Partially implemented | Fixed URL/auth, ordered SDK replay, conservative usage/finish, independent local review | Native/PDF evidence; local PDF gate passed; live model validation pending |
+| Inline native PDF input | Implemented locally | Independently reviewed bounded parser/isolated worker/immutable facts/conservative quota estimates | Native/PDF evidence; local resource/client gates passed; exact-model live gate pending |
+| Signed continuation and finite WAV/AVI | Partially implemented | Owned state/media, exact profiles and accounting | Local code/client gates; signed startup and live gates remain closed |
+| Larger images and generated media | Planned | Per-modality protocol/parser/pricing gates | Deferred decisions in ADR-010 |
+| Live exact-model/client capability and production enablement | Planned | Operator validation | No live inference or deployment performed |
+
+See [implementation evidence](../plans/google-ai-studio-tools-multimodal/implementation/evidence.md).
+
+| Baseline JPEG entropy completeness/static VP8L with format opt-in and concurrent resource gates | Implemented | google_raster/google_media/profile | [Image-format evidence](../plans/google-ai-studio-tools-multimodal/jpeg-input/evidence.md); synthetic/local code gates |
+
+| Finite native PCM WAV input and MIME-specific credit/input-TPM bounds | Partially implemented | google_audio, google_features, credit, native adapter | [Audio evidence](../plans/google-ai-studio-tools-multimodal/audio-input/evidence.md); SDK/routing/settlement and audio-only Linux maximum pass; combined/cancellation/live gates pending |
+
+| Finite native raw DIB AVI and MIME-specific inputTPM/credit | Partially implemented | google_video, media facts, native/profile/credit | [Video evidence](../plans/google-ai-studio-tools-multimodal/video-input/evidence.md); exact-model codec and combined gates pending |
+
+Generated image output is **Partially implemented**, with standard SDK image items, native
+modality mapping, isolated bounded PNG inspection, pre-admission capacity/readiness and
+conservative per-image settlement behind an unconditional startup gate. Synthetic local
+and Linux HTTP evidence does not establish exact-model or production support; remaining
+requirements are tracked in the [completion audit](../plans/google-ai-studio-tools-multimodal/completion-audit.md)
+and [generated image evidence](../plans/google-ai-studio-tools-multimodal/generated-image/evidence.md).
+
+Generated-audio T6/T7 is **Partially implemented** under an unconditional startup gate:
+versioned SDK request/root output carrier, finite24kHzPCM WAV, strict audio-only native mapping,
+separate seconds pricing/full billable reserve, shared two-unit admission and actual outer
+middleware delivery/drain regressions. Maximum/malformed Linux resource checks passed;
+corrected mixed-resource verification and final scoped review passed; exact-model live evidence
+remains open.
+See [audio output evidence](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md).

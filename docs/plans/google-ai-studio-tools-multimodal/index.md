@@ -9,37 +9,32 @@
 - [Risk Register](risk-register.md)
 - [Evidence](evidence.md)
 - [Capability and protocol contract](capability-contract.md)
+- [Full requirement completion audit](completion-audit.md)
+- [Image-format increment](jpeg-input/index.md)
 
 ## Status
 
-**Planned**. This draft follows the [Google adapter plan](../google-ai-studio-adapter/index.md),
-committed as `d3a6dec` on 2026-10-05. That commit contains planning documents, not a working
-Responses adapter. The prerequisite adapter implementation and Google live verification remain
-pending. This document does not claim any current Google model or client supports these features.
-Independent draft review is complete with no blocking findings; see [Evidence](evidence.md).
+**Partially implemented** (2026-10-05). The predecessor adapter is Implemented with mocked
+verification at baseline `153b1b8`. The [reviewed implementation amendment](implementation/index.md)
+delivers opt-in unsigned function round trips, serial/parallel SSE, JSON-object/strict-schema text
+and bounded inline PNG input. The [image-format increment](jpeg-input/index.md) adds opt-in
+baseline JPEG/static VP8L with measured local work limits. All capabilities default off. The public client gate uses OpenAI
+Python 2.8.1; real Google inference and model-specific capability verification remain Planned.
 
 ## Objective
 
-Extend the planned Google Responses adapter so callers can perform function-tool round trips,
-request structured text, and submit supported media without losing call identity, provider
-continuation state, content order or usage. Preserve per-request routing, conservative admission,
-credential isolation and stream lifecycle guarantees. Deliver capabilities in separately verified
-increments instead of treating all Gemini models and API surfaces as interchangeable.
+Preserve function identity, ordered history, output validation, conservative admission and
+stream lifecycle while adding independently gated capabilities to the Google Responses adapter.
 
 ## Baseline and Prerequisites
 
-- **Implemented:** Google configuration, provider URL/header/model selection, in-process
-  project-group quotas and the existing credit/health stores. These are Phase 09 foundations.
-- **Partially implemented:** Responses forwarding currently substitutes a Google route/model
-  without complete body or output translation.
-- **Planned:** the predecessor's typed adapters, capability filtering, bounded Responses SSE,
-  embeddings quota integration, attempt accounting and billable-failure settlement.
-- **Planned:** all Google tool, structured-output, signature and media translation in this plan.
-  Source/test inspection found no implementation or dedicated tests for these contracts.
-
-Planning and synthetic contract research may begin now. Feature implementation starts only after
-the predecessor code gate passes and its shared interfaces are re-inspected; update this plan if
-the actual implementation differs. Each real capability needs its own live-provider evidence.
+- **Implemented:** predecessor typed adapters, operation filtering, bounded transport/SSE,
+  usage, quota/credit cleanup and billable-failure settlement (mocked tests).
+- **Implemented:** this amendment's unsigned tools, structured text, exact feature combinations
+  and bounded small PNG/baseline JPEG/static VP8L input (synthetic/client tests).
+- **Planned:** signed continuation carrier, larger images, PDFs, native transport,
+  audio/video input and generated media. Their parser/protocol/pricing gates remain unresolved.
+- **Planned:** real Google and production enablement; no live calls or deployment here.
 
 ## In Scope
 
@@ -115,3 +110,10 @@ multimodal compatibility from text-only inference or a permissive HTTP mock.
 - Owner: Runtime/adapter contributor.
 - Reviewer: Independent plan session, followed by independent implementation deep review.
 - Approver: Project maintainer for public API additions and operational enablement.
+
+## Current increments
+
+[Full requirement audit](completion-audit.md) remains **Partially implemented**.
+[Native/PDF local gates](native-pdf/evidence.md) passed; exact-model live validation remains pending.
+[Signed continuation design](signed-continuation/design.md) is drafted for independent review and
+public extension approval before runtime changes.

@@ -155,3 +155,91 @@ Keep these sources separate:
 - Ephemeral health, cooldown, and inflight reservation state.
 
 Local estimates must be labeled as estimates and must never be presented as exact balances.
+
+## Opt-in Google tool, structured text and image profiles
+
+`google_features` is a validated per-backend profile, defaulting to no enabled features.
+Features: `function_tools`, `parallel_calls`, `json_object`, `json_schema`, `inline_images`.
+Every multi-feature request must match an explicit `combinations` entry; individual support
+never enables combinations. Tools require `continuation_policy: "unsigned"`. Signed
+profiles are rejected at startup. Images require `image_input_tokens >= 258`,
+`image_token_pricing: true`, and a Google-only logical pool. These declarations require actual
+operator/model evidence before enablement; names do not infer support.
+
+See [profile example and resource bounds](../operations/google-features.md).
+`FOUNDRY_INTAKE_TIMEOUT_SECONDS` defaults to 30 (range 0.1–120), starting before Responses
+body intake. Remaining intake time and the original reservation deadline bound admission and
+Google delivery without reset. Body parsing rejects duplicate keys, nonfinite values and
+excessive depth/work. The default request cap remains 2 MiB.
+
+Google backends may explicitly select `api_surface: "native"` (Partially implemented local code;
+review gates in progress). Default `openai_compat` preserves existing routing. Native requires
+`supported_operations: ["responses"]`, service root and a profile affirming
+`native_thinking_disabled: true`; no automatic surface switch or native embeddings route exists.
+See [native contract/gates](../plans/google-ai-studio-tools-multimodal/native-pdf/index.md).
+
+PDF profiles are **Implemented locally**, with independent review/resource/client gates passed; exact-model live validation remains pending. Default-off
+`inline_pdfs` requires native transport and Google-native-only pools, `pdf_token_pricing: true`,
+`pdf_input_tokens_per_page >= 258` and `pdf_native_text_tokens_per_page >= 65536` affirmed for the
+exact model. Bounds: `max_pdfs`<=4, `max_pdf_bytes`<=65536, `max_total_pdf_bytes`<=131072,
+`max_pdf_pages`<=4. Estimates reserve the full configured visual/text page ceiling and document
+byte ceiling for every document. Worker readiness requires Linux, pinned pypdf and a successful
+bounded isolated self-test. Do not enable pending profiles before their remaining gates pass.
+
+Optional `FOUNDRY_GOOGLE_STATE_KEYS_JSON` is **Partially implemented** for the signed-continuation
+increment. It contains secret canonical32byte caller-scope and1–3distinct Fernet keys, active key
+ID, configuration generation and bounded TTL. Parsing rejects duplicate keys, invalid IDs, key
+reuse and oversized configuration; keys are excluded from settings serialization. Successful
+authentication derives a nonpublic caller binding under that scope key. This setting enables
+no signed capability: profiles remain disabled until history/routing/native/client gates pass.
+See [signed design/evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).
+
+Finite WAV `inline_audio` is **Partially implemented**, default-off pending
+[audio gates](../plans/google-ai-studio-tools-multimodal/audio-input/evidence.md). It requires
+native Google-only pools, `audio_input_tokens_per_second` (32–10000), `audio_token_pricing: true`
+and `audio_tpm_tokens: true`. Each file reserves configured seconds × rate + 64 input tokens;
+pools use the maximum enabled backend bound. Free-tier zero-price still consumes input TPM.
+Bounds: `max_audio_files`<=2, `max_audio_bytes`<=320044, `max_total_audio_bytes`<=640088,
+`max_audio_seconds`<=10 and `max_total_audio_seconds`<=20. Exact model pricing and provider TPM
+semantics must be verified before opt-in; operator declaration alone is not live evidence.
+
+Finite AVI `inline_video` is **Partially implemented**, default-off; native Google-only pool,
+`video_input_tokens_per_frame`>=258 (operator-affirmed ceiling), `video_token_pricing: true`,
+`video_tpm_tokens: true`. Each clip reserves maxframes×rate+maxbytes+64; largest enabled backend
+bound applies to the pool. Bounds: max_video_files2, max_video_bytes65536, max_total_video_bytes
+131072, max_video_frames4, max_total_video_frames8, max_video_pixels4096. Fixed1fps determines
+duration from frames; it does not establish model token counting. Exact combinations explicit.
+See [video evidence](../plans/google-ai-studio-tools-multimodal/video-input/evidence.md).
+
+Generated image `image_output` is **Partially implemented and startup gated**. Its finite
+profile requires `generated_output_tokens_bound` (2048–32768),
+`image_output_price_ceiling_usd`, `image_output_input_token_pricing`,
+`image_output_quota_via_rpm`, `image_output_input_tpm_tokens`, `image_output_ipm` and
+`native_thinking_disabled`. Only native Google pools with identical output profiles and
+explicit project quota groups are eligible; RPM must not exceed IPM and input TPM is required.
+Emergency fallback is incompatible. Separate `PricingConfig.image_output_per_image` must match
+the declared ceiling; non-metered pools require zero image price. Every billable outcome retains
+the full conservative input/output/image reserve. These estimates are not provider balances.
+Settings rejects this feature until the remaining gates in
+[generated image evidence](../plans/google-ai-studio-tools-multimodal/generated-image/evidence.md)
+are cleared; adding profile fields does not enable it.
+
+The gated generated-image implementation reserves both output capacity units for every request
+in an `inline_images` output pool, including auto text-only requests. Such pools admit one
+request at a time; output-only pools may admit two one-unit requests. Both share the same global
+nonqueued capacity. This policy follows exact combined-cap resource measurements and does not
+change project quotas, token bounds or full-reserve settlement.
+
+Generated audio `audio_output` is **Partially implemented and startup gated**. The audio-only
+native profile requires `generated_output_tokens_bound` (2048–32768), `audio_output_voices`,
+`audio_output_thinking_policy` (`omit` or `disable_zero`) and explicit
+`audio_output_thinking_affirmed`. Required price/quota fields are
+`audio_output_price_ceiling_usd_per_second`, `audio_output_input_token_pricing`,
+`audio_output_quota_via_rpm`, `audio_output_input_tpm_tokens` and `audio_output_rpm`.
+Identical native profiles across a pool and explicit shared project groups are required;
+project RPM cannot exceed the audio ceiling, input TPM must be configured, and emergency
+fallback is incompatible. Separate `PricingConfig.audio_output_per_second` must match the
+ceiling; non-metered audio pools require zero price. Every billable outcome retains the full
+input/server TOTAL token allowance plus10seconds of audio cost; known usage updates input TPM
+and public usage without generic output repricing. Settings rejects `audio_output` until
+[remaining gates](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md) pass.

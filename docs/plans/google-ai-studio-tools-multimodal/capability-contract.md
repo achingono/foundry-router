@@ -2,7 +2,10 @@
 
 ## Status and Ownership
 
-**Design target**. Every new field or behavior below is proposed; T1 must pin exact vendor
+**Design target** for the full feature set. The [implementation amendment](implementation/contract.md)
+records the Implemented unsigned tools/structured text/small PNG subset and deferred gates.
+The [image-format increment](jpeg-input/index.md) extends bounded image input.
+The remaining fields below are proposed; T1 must pin exact vendor
 and public-client schemas. This contract extends the predecessor's immutable request, typed
 attempt outcome, bounded transport/SSE and independent settlement/cleanup requirements.
 

@@ -5,7 +5,7 @@
 | Input | Source | Owner |
 |---|---|---|
 | Predecessor plan and safety decisions | [Adapter plan](../google-ai-studio-adapter/index.md), [contract](../google-ai-studio-adapter/adapter-contract.md), [review evidence](../google-ai-studio-adapter/evidence.md) | Runtime contributor |
-| Implemented predecessor interfaces | Future code-gate evidence; the plan commit `d3a6dec` is not implementation evidence | Runtime contributor |
+| Implemented predecessor interfaces | Predecessor implementation evidence at baseline `153b1b8` | Runtime contributor |
 | Owning boundaries/public contracts | [Architecture](../../architecture/index.md), [API](../../api/index.md), [configuration](../../configuration/index.md), [security](../../configuration/security.md), [routing](../../features/routing.md) | Adapter contributor |
 | Current source baseline | [Config](../../../src/foundry_router/config/__init__.py), [backend client](../../../src/foundry_router/backends/__init__.py), [API validation](../../../src/foundry_router/api/common.py), [credit estimates](../../../src/foundry_router/credit.py), [forwarding](../../../src/foundry_router/forwarding/__init__.py) | Runtime contributor |
 | Existing regressions | [API tests](../../../tests/unit/test_api_common.py), [backend tests](../../../tests/unit/test_backends.py), [credit tests](../../../tests/unit/test_credit.py), [stream tests](../../../tests/unit/test_forwarding_stream.py), [integration](../../../tests/integration/test_full_flow.py) | Test contributor |
@@ -42,18 +42,13 @@ These URLs are research inputs, not evidence that the pages or features were ver
 drafting. Record current canonical URLs, dates and conclusions in T1. If a public schema or
 lossless carrier is absent, keep that capability disabled and record the API decision required.
 
-## Baseline Constraints
+## Current Implementation Constraints
 
-- The current `BackendConfig` has no per-feature/media capabilities or API-surface selector.
-  Even `supported_operations` belongs to the unimplemented predecessor plan.
-- Current Responses input validation is broad; nested media/tool safety is not established.
-- Credit estimation walks text under `input` and uses one logical-model input/output price.
-  Base64 size, image pixels, PDF pages, durations, tool declarations and generated media units
-  are not a modality-aware admission model.
-- Client authentication currently verifies keys without exposing a stable principal to the
-  adapter. Any caller-bound continuation extension needs a deliberate internal identity change.
-- The 2 MiB request-body default and existing stream/credit lifetime limits remain the starting
-  bounds; increasing them requires measured memory/concurrency evidence.
+Per-backend default-off `google_features` profiles and `supported_operations` are Implemented.
+The amendment adds bounded nested schema/tool/PNG validation and conservative feature estimates.
+Signature-dependent tools remain disabled; no caller scope or sealed provider-state carrier exists.
+Image-enabled pools must be Google-only and use the verified small-image tier; existing Azure
+admission retains its previous estimate. The 2 MiB default body cap is retained.
 
 ## Optional Inputs
 
@@ -66,7 +61,7 @@ lossless carrier is absent, keep that capability disabled and record the API dec
 
 - [x] Current tree, canonical docs, predecessor plan and relevant source/tests inspected.
 - [x] Independent draft review complete and findings addressed.
-- [ ] Predecessor implementation code gate passed before dependent runtime edits.
+- [x] Predecessor implementation code gate passed; 98 focused baseline regressions.
 - [ ] T1 provider/client/schema/signature matrix confirmed before enabling capabilities.
 - [ ] Media parser/estimator bounds and prices confirmed per modality.
 - [ ] Live-only operator inputs supplied before real calls.

@@ -61,3 +61,5 @@ All new infrastructure resource families now have typed module owners; the root 
 The opt-in `infra/typed.bicep` interface is **Implemented** and synthetic memory redeployment verified. CI retains `main.bicep`. Typed registry/vault/state choices reject inactive branch fields; password remains separate and secure. Both entry points retain the same bootstrap and cut-over requirements; see [public interface evidence](../plans/bicep-public-interface/evidence.md).
 
 Fail over an unavailable backend, cooldown 429 and repeated 5xx failures, return a clear error when all backends are unavailable or protected, clamp negative usable credit to zero, reject unknown models and malformed requests without outbound calls, and never intentionally cross a safety reserve. Operational priority is safety, availability, quota efficiency, minimizing cycle-end waste, then balancing.
+
+- [Google tool, structured text and small PNG feature operations](google-features.md) (Implemented with synthetic/client verification; live gate Planned)
