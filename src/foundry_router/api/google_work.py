@@ -14,7 +14,7 @@ _SLOTS = threading.BoundedSemaphore(2)
 
 
 class SignedWorkLease:
-    """Close releases capacity only after any shielded worker actually completes."""
+    """Close releases capacity only after any independent worker actually completes."""
 
     def __init__(self) -> None:
         if not _SLOTS.acquire(blocking=False):
@@ -70,8 +70,8 @@ async def bounded_signed_work[T](
 ) -> T:
     """Acquire before scheduling; at most two queued/running executor jobs globally.
 
-    Shield the submitted task so timeout cannot cancel an executor job before its
-    release-finally starts. The task owns the slot until work actually finishes.
+    An owned future hands off the independent task's outcome. Caller cancellation
+    cancels only that future; the task owns capacity until work actually finishes.
     """
     check_deadline(deadline)
     owned = lease is None
@@ -96,14 +96,15 @@ async def bounded_signed_work[T](
                 if owned:
                     capacity.close()
 
-    def run() -> T:
+    def run(owned_work: Callable[[], T] = work) -> T:
         nonlocal started
         with ownership_lock:
             started = True
         try:
             check_deadline(deadline)
-            return work()
+            return owned_work()
         finally:
+            del owned_work
             release_once()
 
     try:
@@ -113,23 +114,39 @@ async def bounded_signed_work[T](
         task = asyncio.create_task(asyncio.to_thread(run))
     except BaseException:
         release_once()
+        del run, work, before_submit
         raise
 
-    def consume(completed: asyncio.Task[T]) -> None:
+    handoff: asyncio.Future[T] = asyncio.get_running_loop().create_future()
+
+    def consume(completed: asyncio.Task[T], owned_handoff: asyncio.Future[T] = handoff) -> None:
         with ownership_lock:
             worker_started = started
         if not worker_started:
             release_once()
-        if not completed.cancelled():
-            completed.exception()
+        if completed.cancelled():
+            if not owned_handoff.done():
+                owned_handoff.cancel()
+            return
+        # Retrieve late failures even when the caller has already abandoned work.
+        # Avoid asyncio.shield's Python 3.14 late-error reporting of raw exceptions.
+        error = completed.exception()
+        if not owned_handoff.done():
+            if error is None:
+                owned_handoff.set_result(completed.result())
+            else:
+                owned_handoff.set_exception(error)
 
     task.add_done_callback(consume)
+    del run
     try:
         async with asyncio.timeout_at(deadline):
-            result = await asyncio.shield(task)
+            result = await handoff
             check_deadline(deadline)
             return result
     except TimeoutError:
         raise SignedIntakeError(
             408, "request_timeout", "Request intake exceeded its deadline"
         ) from None
+    finally:
+        del task, handoff, consume, work, before_submit

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
-from foundry_router.api.adapters.google_schema import load_bounded_json
 from foundry_router.api.adapters.google_tools import request_context
 from foundry_router.api.google_state import (
     ProviderStateError,
@@ -89,10 +89,9 @@ def project_item(item: Any) -> dict[str, Any]:
     projected = {name: value for name, value in item.items() if name != STATE_FIELD}
     projected["type"] = kind
     projected["status"] = "completed"
-    # JSON round trip creates an owned snapshot without retaining caller-owned objects.
-    return cast(
-        "dict[str, Any]", load_bounded_json(canonical_bytes(projected).decode(), max_bytes=2097152)
-    )
+    # Canonical validation already bounds the encoded tree, including subclasses.
+    # Decode that validated wire to own the snapshot without repeating the scan.
+    return cast("dict[str, Any]", json.loads(canonical_bytes(projected)))
 
 
 def project_history(

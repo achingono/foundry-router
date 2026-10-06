@@ -183,3 +183,17 @@ full synthetic SDK125itemmaximum-history workload still failed128MiB incremental
 limits despite correctcompletions/billing/cleanup. Profiles remain startup gated. A passing
 onecaller or scanner microbenchmark does not establish concurrency readiness; see
 [resource attribution plan](../plans/google-ai-studio-tools-multimodal/signed-continuation/resource-attribution-design.md).
+
+Signed continuation remains **Partially implemented**, with startup disabled pending aggregate
+resource and exact-model live gates. In test configurations containing a bound-history pool,
+Responses JSON intake uses two shared signed-work slots before buffering the body. Slow readers
+hold their slot until the original intake deadline; saturated requests return safe 503 without
+reading the body. Declared oversized bodies return 413 during header checks; unknown-size bodies
+can return 503 before their size is known. Unsigned parsing outside those configurations and
+embeddings retain their ordinary intake path. This bounds router-owned offloaded body buffers,
+not client or HTTP transport memory. Runtime callers supply the original intake deadline.
+
+Timeout or cancellation closes the request's lease but does not release capacity while a parser
+thread still runs. Late abandoned parser failures are consumed locally without logging raw
+exceptions; active callers still receive normal failures. Resource failures and verified limits
+are recorded in [signed continuation evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).

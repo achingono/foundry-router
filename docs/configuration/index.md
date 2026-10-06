@@ -176,9 +176,10 @@ request cap remains 2 MiB. Malformed `input` shapes fail with controlled validat
 Inspector child cleanup is bounded: a stalled reap transfers its single wait task to explicit
 orphan tracking (never a second waiter) and releases capacity promptly. Tracking clears only
 after successful, confirmed reaping (exit observed); failed or cancelled waits stay retained
-against the admission limit with a warning diagnostic. At most eight killed-but-unreaped
-children per inspector pool are retained, and further inspection is rejected until reaping
-catches up, without suppressing request cancellation.
+against the admission limit with a warning diagnostic. New inspections are rejected when eight
+killed-but-unreaped children are tracked per inspector pool. Already admitted inspections can
+still transfer their children, temporarily exceeding that threshold; rejection continues until
+reaping catches up, without suppressing request cancellation.
 
 Google backends may explicitly select `api_surface: "native"` (Partially implemented local code;
 review gates in progress). Default `openai_compat` preserves existing routing. Native requires

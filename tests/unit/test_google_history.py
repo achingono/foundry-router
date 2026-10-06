@@ -2,8 +2,9 @@
 
 import pytest
 
+from foundry_router.api.adapters.google_schema import load_bounded_json
 from foundry_router.api.google_history import carrier_tokens, project_history, project_item
-from foundry_router.api.google_state import ProviderStateError
+from foundry_router.api.google_state import ProviderStateError, canonical_wire_bytes
 
 STATE = {"version": 1, "token": "fixture.token"}
 CALL = {
@@ -36,6 +37,42 @@ def test_projection_exact_arguments_defaults_order_and_owned_snapshot():
     body["input"][2]["content"][0]["text"] = "changed"
     assert items[2]["content"][0]["text"] == "fixture"
     MESSAGE["content"][0]["text"] = "fixture"
+
+
+@pytest.mark.parametrize("depth", [30, 31, 32, 33])
+def test_projection_empty_depth_preserves_original_scanner_acceptance(depth):
+    content = []
+    for _ in range(depth - 1):
+        content = [content]
+    item = {"role": "user", "content": content}
+    projected = {**item, "type": "message", "status": "completed"}
+    if depth <= 31:
+        expected = load_bounded_json(canonical_wire_bytes(projected).decode(), max_bytes=2097152)
+        assert project_item(item) == expected
+    else:
+        with pytest.raises(ValueError):
+            project_item(item)
+        with pytest.raises(ValueError):
+            load_bounded_json(canonical_wire_bytes(projected).decode(), max_bytes=2097152)
+
+
+def test_projection_tuple_mapping_and_subclass_children_are_owned():
+    class PlainDict(dict):
+        pass
+
+    child = PlainDict(values=([1],))
+    snapshot = project_item({"role": "user", "content": [child]})
+    child["values"][0].append(2)
+    assert snapshot["content"] == [{"values": [[1]]}]
+
+
+def test_projection_duplicate_emitting_subclass_still_rejects():
+    class DuplicateDict(dict):
+        def items(self):
+            return [("x", 1), ("x", 2)]
+
+    with pytest.raises(ValueError):
+        project_item({"role": "user", "content": [DuplicateDict(x=1)]})
 
 
 @pytest.mark.parametrize(

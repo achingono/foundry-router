@@ -29,9 +29,9 @@ _WORKER_SECONDS = 2
 # Bounded best-effort child reap detached from request cancellation. A stalled
 # spawn/wait must never hold inspection capacity or suppress cancellation: on
 # expiry the child is killed and its single in-flight wait task is transferred
-# to explicit orphan tracking. No second waiter is ever started. At most
-# _MAX_PDF_ORPHANS killed-but-unreaped children may exist; further inspection
-# is rejected until reaping catches up.
+# to explicit orphan tracking. No second waiter is ever started. At
+# _MAX_PDF_ORPHANS tracked children, further inspection is rejected until reaping
+# catches up; already admitted inspections can still transfer their child.
 _CLEANUP_SECONDS = 1.0
 _MAX_PDF_ORPHANS = 8
 _ORPHANED_PDF_CHILDREN: set[Any] = set()

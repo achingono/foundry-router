@@ -248,3 +248,8 @@ middleware delivery/drain regressions. Maximum/malformed Linux resource checks p
 corrected mixed-resource verification and final scoped review passed; exact-model live evidence
 remains open.
 See [audio output evidence](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md).
+
+Signed intake/worker hardening is **Implemented** locally: pre-buffer admission, active-worker
+capacity ownership, abandoned-error redaction, strict canonical depth and owned snapshots.
+Signed enablement remains **Partially implemented** pending resource and live gates. See
+[runtime hardening evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/runtime-hardening.md).

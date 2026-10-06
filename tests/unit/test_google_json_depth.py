@@ -66,3 +66,27 @@ def test_depth_after_dense_escaped_run_is_still_checked_before_decoder():
     assert load_bounded_json(wire) == json.loads(wire)
     with pytest.raises(ValueError, match="depth"):
         load_bounded_json("[" + wire + "]")
+
+
+def test_mixed_wide_unicode_maximum_string_is_lossless():
+    value = "😀" + "x" * 2000000
+    wire = json.dumps(value, ensure_ascii=False)
+    assert load_bounded_json(wire, max_bytes=2097152) == value
+
+
+@pytest.mark.parametrize("escape", [r"\uD800", r"\uDFFF", r"\uD83D\uDE00", r"\u0000"])
+def test_unicode_escape_semantics_match_original_decoder(escape):
+    wire = '"' + escape + '"'
+    assert load_bounded_json(wire) == json.loads(wire)
+
+
+@pytest.mark.parametrize("escape", [r"\u", r"\u123", r"\u123x", r"\U0001F600", r"\x00"])
+def test_malformed_unicode_escapes_have_safe_error(escape):
+    with pytest.raises(ValueError, match="^Invalid bounded JSON$"):
+        load_bounded_json('"' + escape + '"')
+
+
+def test_empty_container_structural_limit_remains_strict():
+    assert load_bounded_json("[" * 32 + "]" * 32)
+    with pytest.raises(ValueError, match="depth"):
+        load_bounded_json("[" * 33 + "]" * 33)

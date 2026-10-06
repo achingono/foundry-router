@@ -30,24 +30,34 @@ def _reject() -> None:
     raise ProviderStateError("Invalid provider state")
 
 
-def _string_keys(value: Any, budget: list[int], *, depth: int = 0) -> None:
+def _string_keys(value: Any, budget: list[int], *, depth: int = 0) -> tuple[bool, bool]:
     budget[0] -= 1
     if depth > 32 or budget[0] < 0:
         _reject()
+    exact = type(value) in {type(None), bool, int, float, str, dict, list, tuple}
+    # JSON's structural depth counts the root container as one. An empty
+    # container at value depth 32 needs the original parser's strict check.
+    structural = not (depth >= 32 and isinstance(value, (dict, list, tuple)))
     if isinstance(value, dict):
         if any(not isinstance(key, str) for key in value):
             _reject()
+        if any(type(key) is not str for key in value):
+            exact = False
         for item in value.values():
-            _string_keys(item, budget, depth=depth + 1)
+            child_exact, child_structural = _string_keys(item, budget, depth=depth + 1)
+            exact = child_exact and exact
+            structural = child_structural and structural
     elif isinstance(value, (list, tuple)):
         for item in value:
-            _string_keys(item, budget, depth=depth + 1)
+            child_exact, child_structural = _string_keys(item, budget, depth=depth + 1)
+            exact = child_exact and exact
+            structural = child_structural and structural
+    return exact, structural
 
 
-def canonical_wire_bytes(value: Any, *, max_bytes: int = 2097152) -> bytes:
-    """Encode an already validated JSON value without a duplicate parsing pass."""
+def _canonical_encoding(value: Any, *, max_bytes: int) -> tuple[bytes, bool]:
     try:
-        _string_keys(value, [16384])
+        exact, structural = _string_keys(value, [16384])
         wire = json.dumps(
             value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
         )
@@ -56,16 +66,22 @@ def canonical_wire_bytes(value: Any, *, max_bytes: int = 2097152) -> bytes:
             _reject()
     except (ValueError, TypeError, UnicodeError, RecursionError) as exc:
         raise ProviderStateError("Invalid provider state") from exc
-    return encoded
+    return encoded, exact and structural
+
+
+def canonical_wire_bytes(value: Any, *, max_bytes: int = 2097152) -> bytes:
+    """Encode a bounded JSON value; callers own any subclass output validation."""
+    return _canonical_encoding(value, max_bytes=max_bytes)[0]
 
 
 def canonical_bytes(value: Any, *, max_bytes: int = 2097152) -> bytes:
-    """One bounded, duplicate-free canonical JSON representation."""
-    encoded = canonical_wire_bytes(value, max_bytes=max_bytes)
-    try:
-        load_bounded_json(encoded.decode("utf-8"), max_bytes=max_bytes)
-    except ValueError as exc:
-        raise ProviderStateError("Invalid provider state") from exc
+    """Bounded canonical JSON; subclasses retain strict encoded-output validation."""
+    encoded, exact = _canonical_encoding(value, max_bytes=max_bytes)
+    if not exact:
+        try:
+            load_bounded_json(encoded.decode("utf-8"), max_bytes=max_bytes)
+        except ValueError as exc:
+            raise ProviderStateError("Invalid provider state") from exc
     return encoded
 
 

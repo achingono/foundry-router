@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from json.decoder import scanstring  # type: ignore[attr-defined]  # CPython decoder primitive
 from typing import Any
 
 MAX_SCHEMA_BYTES = 65536
@@ -13,7 +14,6 @@ MAX_SCHEMA_NODES = 512
 MAX_JSON_DEPTH = 32
 MAX_VALIDATION_WORK = 16384
 _STRUCTURAL_JSON = re.compile(r'["\[\]{}]')
-_ESCAPED_STRING_RUN = re.compile(r'(?:\\[\s\S]|[^"\\]){1,256}')
 _TYPES = {"object", "array", "string", "integer", "number", "boolean", "null"}
 _KEYWORDS = {
     "type",
@@ -44,35 +44,19 @@ def _invalid_constant(value: str) -> Any:
 def load_bounded_json(text: str, *, max_bytes: int = 262144) -> Any:
     if not isinstance(text, str) or len(text.encode()) > max_bytes:
         raise ValueError("JSON exceeds the byte bound")
-    # Scan depth before the recursive decoder, skipping disjoint string runs.
-    # The constant single-character pattern has no repetition/backtracking stack.
+    # Scan container depth before the recursive decoder. Its strict string
+    # primitive skips escaped structure in C with bounded temporary allocation.
     depth = 0
     position = 0
     while match := _STRUCTURAL_JSON.search(text, position):
         char = match.group()
         position = match.end()
         if char == '"':
-            segment_start = position
-            while True:
-                quote = text.find('"', segment_start)
-                if quote < 0:
-                    position = len(text)
-                    break
-                segment = text[segment_start:quote]
-                slash_count = len(segment) - len(segment.rstrip("\\"))
-                position = quote + 1
-                if slash_count % 2 == 0:
-                    break
-                # Skip dense escaped runs with constant bounded regex state.
-                # Ordinary strings retain the fast find path. Every run starts
-                # after the previous escaped quote, so no distant suffix rescans.
-                while position < len(text) and text[position] == "\\":
-                    run = _ESCAPED_STRING_RUN.match(text, position)
-                    if run is None:
-                        position = len(text)
-                        break
-                    position = run.end()
-                segment_start = position
+            try:
+                decoded, position = scanstring(text, position, True)
+                del decoded
+            except ValueError as exc:
+                raise ValueError("Invalid bounded JSON") from exc
         elif char in "[{":
             depth += 1
             if depth > MAX_JSON_DEPTH:

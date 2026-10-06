@@ -12,7 +12,7 @@ replace the full plan. A checked local code gate does not establish live provide
 | T2 default-off bounded exact capabilities | [Profile code](../../../src/foundry_router/config/google_features.py), configuration/combination tests | Additional profiles after each protocol/parser/accounting gate |
 | T2 pre-reservation selection/failover eligibility | Existing Google/Azure and exact-combination tests | Signed pinning/missing-state HTTP tests pass under startup gate; complete lifecycle/resource review pending |
 | T2 caller binding/key readiness/redaction | [Reviewed unattached codec/key/auth helpers](signed-continuation/evidence.md) | Runtime integration added under startup gate; concurrency/deadline/lifecycle gates remain |
-| T2 bounded intake, reservation lifetime/cleanup | Body/schema/image/storage deadline tests; feature/lifecycle regression | Validated-profile quote-heavy125item fullSDK measurement failsRSS/loop despite safecompletion; reviewedattribution pending, jointlyfeasiblestate/media next; legacycopiedprofiles insufficient |
+| T2 bounded intake, reservation lifetime/cleanup | [Reviewed intake/worker hardening](signed-continuation/runtime-hardening.md), deadline and lifecycle regressions | Rerun resource checks on reconciled runtime; earlier quote-heavy full SDK checks failed RSS/loop; combined state/media gates remain |
 | T2 conservative text/tool/schema/image accounting | UTF-8 upper bounds, 258 minimum small-image ceiling, Google-only media pools | Larger/PDF/audio/video/generated-media price/quota dimensions and verified upper bounds |
 | T3 declarations/choices/calls/results | Explicit strictness; names; distinct IDs; complete ordered serial/parallel histories | Required signed-state association/validation |
 | T3 signed continuation validation/routing | Disabled; unattached authenticated codec and structural projection tested | Owned caller/backend/model/surface/config/history binding and repeated HTTP replay/billing implemented under startup gate; expiry/key overlap/revocation and fresh-process replay pass; maximum combined resource/lifecycle/live remains |
@@ -34,7 +34,7 @@ replace the full plan. A checked local code gate does not establish live provide
 | T7 cancellation/slow clients/cleanup failures | Existing deadline and retained-usage prefetch tests | Signed worker timeout/cancellation, direct ASGI blocked-send and bounded fresh-process cleanup tests passed; realdisconnect/combinedmedia cleanup remain |
 | T7 secret/content redaction/no extra egress | Existing safe errors and restricted adapter architecture | Explicit signed/new-media marker regressions and dependency/resource review |
 | T7 canonical API/config/security/ops/traceability | Updated for implemented subset | New features and key rotation/drain behavior as implemented |
-| T7 quality/deep review | Latest local:1422 passed,89.18%; prior14actualAzurite; Ruff/mypy; Python3.12 Docker smoke; independent review, [evidence](native-pdf/evidence.md) | Final docs links and gates after additional increments; Sonar conditional script absent |
+| T7 quality/deep review | Latest reconciled local:1509 passed,88.86%; prior14actualAzurite; Ruff/mypy; Python3.12 Docker smoke; independent review, [evidence](native-pdf/evidence.md) | Final docs links and gates after additional increments; Sonar conditional script absent |
 | T8 opt-in live runner and exact capability evidence | Five model-list GETs discovered61models/project,44generateContent; [dormant runner/ledger](live-runner/evidence.md) and all-model manifest partially implemented | Exact protocol/free-tier capability review and guarded execution, generated media and signed startup gates; zero inference so far |
 | T8 full-plan status and production separation | Explicitly partial; production unchanged | All code/client/live rows proven before full completion; production remains a separate gate |
 
@@ -42,4 +42,14 @@ replace the full plan. A checked local code gate does not establish live provide
 
 The [image-format amendment](jpeg-input/index.md) closes bounded JPEG/VP8L and local concurrency evidence.
 Signed runtime remains gated despite local codec/client/lifecycle progress; aggregate state resource gates and each Increment C direction remain required follow-up work.
-Missing live inputs have been requested while independent local work continues.
+Live authorization is recorded; exact protocol cases and guarded execution remain incomplete.
+
+## Remote reconciliation
+
+Remote `45cbb70` is integrated on main with preserved local changes. Its fixes cover Azure
+execution versus intake deadlines, safe non-list provider-state checks, embeddings intake, exact
+PNG raster completion, transient PDF readiness and bounded inspector orphan cleanup. Local
+worker lifetime/redaction, strict canonical depth, owned snapshots, scanner and early body
+admission changes coexist. The full reconciled suite passes 1,509 tests with 88.86% coverage.
+Actual discovery artifacts are preserved separately from the remote synthetic offline fixtures;
+no inference or production change occurred. Remaining resource/live gates remain incomplete.

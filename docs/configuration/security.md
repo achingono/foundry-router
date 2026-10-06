@@ -64,3 +64,11 @@ Optional secret configuration is never exposed in settings representations; vali
 errors hide inputs. Do not log ValidationError.errors()/json() with raw inputs. The immutable
 key ring derives caller scope only after successful authentication and keeps the matching
 key-configuration snapshot for intake binding. No signed output is enabled by configured keys.
+
+Signed runtime integration is **Partially implemented** under its startup gate. Test configurations
+with a bound-history pool admit offloaded Responses intake before buffering, using the existing
+two signed-work slots and original intake deadline. Saturation returns safe 503 before reading;
+slow readers occupy those slots until deadline. Parser cancellation retains active-worker ownership,
+and abandoned failures do not reach the asyncio exception logger. These local controls do not
+establish the remaining aggregate resource or live-provider gates. See
+[signed evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).

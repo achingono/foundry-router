@@ -26,9 +26,9 @@ _METADATA_BYTES = 1024
 # Bounded best-effort child reap detached from request cancellation. A stalled
 # spawn/wait must never hold an inspection slot indefinitely: on expiry the
 # child is killed and its single in-flight wait task is transferred to explicit
-# orphan tracking. No second waiter is ever started. At most _MAX_ORPHANS
-# killed-but-unreaped children may exist; further inspection is rejected until
-# reaping catches up.
+# orphan tracking. No second waiter is ever started. At _MAX_ORPHANS tracked
+# children, further inspection is rejected until reaping catches up. Already
+# admitted inspections can still transfer their child after that threshold.
 _CLEANUP_SECONDS = 1.0
 _MAX_ORPHANS = 8
 _ORPHANED_OUTPUT_CHILDREN: set[Any] = set()

@@ -10,7 +10,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from foundry_router.api.adapters.google_schema import load_bounded_json
-from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
+from foundry_router.api.google_work import SignedIntakeError, SignedWorkLease, bounded_signed_work
 from foundry_router.credit import (
     estimate_response_usage_cost,
     extract_response_usage_tokens,
@@ -64,33 +64,46 @@ async def request_body(
                 413, "Request body exceeds the maximum allowed size", "invalid_request"
             )
 
-    raw_body = bytearray()
-    async for chunk in request.stream():
-        raw_body.extend(chunk)
-        if len(raw_body) > max_body_bytes:
-            return api_error(
-                413, "Request body exceeds the maximum allowed size", "invalid_request"
-            )
-
+    intake_lease = None
     try:
         if offload_json:
-            wire = b""
+            try:
+                intake_lease = SignedWorkLease()
+            except ValueError:
+                return api_error(
+                    503, "Provider state preparation is busy", "provider_state_unavailable"
+                )
+        raw_body = bytearray()
+        async for chunk in request.stream():
+            if len(chunk) > max_body_bytes - len(raw_body):
+                return api_error(
+                    413, "Request body exceeds the maximum allowed size", "invalid_request"
+                )
+            raw_body.extend(chunk)
 
-            def capture() -> None:
-                nonlocal wire
-                wire = bytes(raw_body)
+        try:
+            if offload_json:
+                wire = b""
 
-            body = await bounded_signed_work(
-                lambda: load_bounded_json(wire.decode(), max_bytes=max_body_bytes),
-                deadline=deadline_monotonic or time.monotonic() + 5,
-                before_submit=capture,
-            )
-        else:
-            body = load_bounded_json(bytes(raw_body).decode(), max_bytes=max_body_bytes)
-    except SignedIntakeError as exc:
-        return api_error(exc.status, str(exc), exc.code)
-    except (ValueError, UnicodeDecodeError, RecursionError):
-        return api_error(400, "Request body must contain valid JSON", "invalid_request")
+                def capture() -> None:
+                    nonlocal wire
+                    wire = bytes(raw_body)
+
+                body = await bounded_signed_work(
+                    lambda: load_bounded_json(wire.decode(), max_bytes=max_body_bytes),
+                    deadline=deadline_monotonic or time.monotonic() + 5,
+                    before_submit=capture,
+                    lease=intake_lease,
+                )
+            else:
+                body = load_bounded_json(bytes(raw_body).decode(), max_bytes=max_body_bytes)
+        except SignedIntakeError as exc:
+            return api_error(exc.status, str(exc), exc.code)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return api_error(400, "Request body must contain valid JSON", "invalid_request")
+    finally:
+        if intake_lease is not None:
+            intake_lease.close()
     if not isinstance(body, dict):
         return api_error(400, "Request body must be a JSON object", "invalid_request")
     model = body.get("model")
