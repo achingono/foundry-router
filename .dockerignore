@@ -20,6 +20,7 @@ htmlcov/
 .env.local
 .env.*.local
 *.local.json
+infra/google-aistudio-keys.json
 .venv/
 venv/
 *.egg-info/
