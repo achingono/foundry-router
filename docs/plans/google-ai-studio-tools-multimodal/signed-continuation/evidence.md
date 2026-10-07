@@ -397,3 +397,192 @@ quote/historyresourcefixture is still authoritative for actualSDKmixedclient+rou
 reviewedverificationattribution separates SDKserialization, MockProviderJSONdecode and harness
 postresponsecanonical checks from synchronous routercriticalsections; preencodedHTTP scope will
 be labeled separately and cannot replace the original failedSDKbudget. No gates lifted.
+
+Reviewedattribution added synchronousinclusivecount/max/total timings bymain/workerthread;
+sourcepath/SHA/upstreamwire recorded. InitialpreencodedstrictSDKmodel_validate incorrectly
+requiredmissingusage details (17invalidcompletions); retained
+[failedartifact](quote-resource-preencoded-profile.json) isnotresourcepass. FaithfulpinnedSDK
+AsyncAPIResponse.parse/AsyncStream replacesstrictfixture, inventingnousagefields.
+[Faithfulpreencoded8×100](quote-resource-preencoded-sdkparse.json):27nonstream29streamvalid,
+744busy,correctbilling/cleanup,**fails**138715136BRSS/53.38msloop. It omitsSDKrequestserialization
+andoffloadsMockProviderdecode/harnessprospectivechecks; originalSDKgate remainsseparate.
+[SDKprofile](quote-resource-sdk-profile.json):34valid/766busy,correctsettlement,
+134549504BRSS/259.79msloopfails. Profilesareinclusive/overlapping; nosummingtotalsasCPU.
+
+Attributioncanonical_bytes129738calls/59dispatches,workerbuildmax284.88ms/check149.52ms/digest
+56.33ms. MainthreadSDKHTTPXencode34.18ms/harnesspostcheck33.05ms inoriginalclientfixture;
+preencodedmainestimate2.75ms/validate_dispatch0.54ms. This motivates
+[reviewpendingcanonicalvalidationdesign](canonical-validation-design.md), no runtimeedityet.
+Currentharness tracks/shieldsownedthreadjobs,waitsfinitelyfordrainbeforefacts,protectedcleanup
+waitsactualcompletion/closesownedclients/restorespatches throughrepeatedcancel. Fourmeaningful
+profile/drain/repeatedcanceltests pass; finalindependentreview/fullverification pending.
+
+Attributionverificationfullcheckpoint1426passed/89.21%,3Linuxskips,15Docker/Azuritedeselected,
+15.36sec; Ruffcheck/format528files,mypy61 andwhitespacepass. Profiling changesonly scripts/tests;
+lastcurrentruntimeDockerbuild/health remains applicable. Resourcegatefails remainexplicit;
+independentreviewofcleanup/nextcanonicalvalidation stillpending.
+
+Finalattributiondeepreviewcleared4focusedworkerdrain/repeatedcancel/profiletests withnoCritical/
+Major. OwnedfiniteJSONthreadtasks arejoinedoncleanupaftera2secfailed-drainfact; nohard2seckill
+claim (Pythonthreadscannotbekilled). Watcherjoin hardenedsoerrorscannotbypassclient/profileclose.
+Canonicaloptimization unrestrictedparse-removalproposal rejectedbeforeimplementation: malicious
+Pythoncontainer subclass canemitduplicatedJSONkeys; generalcanonicalparsefallback mustremain.
+Amendedexactbuiltintreefastpath isunderreview; no runtimeeditsyet.
+
+Exactbuiltincanonicalfastpathimplementedafterindependentreview: eagerexistingdepth/node/keywalk
+also determineseligibility; exactbuiltinsskipredundantlocallyencodedJSONparse, subclassesretain
+strictoriginalparsefallback.154focusedand25008independentreviewdifferentialcasesmatchwire/
+acceptance, includingduplicate-emittingdictsubclass. Full1444passed/89.26%,Ruff529/mypy61 pass;
+noCritical/Major implementationfindings. No cache,digestskip,externalrawparser orlimit changes.
+
+Newprofileswithcanonicalfastpath reduceworkercheck/buildcost, but concurrentresourcegatesstill
+fail. Firsttwo benchmarkcontainersranconcurrently:preencoded178180096B/63.59ms,
+SDK144699392B/155.47ms; retaintheseasrecordedhostcontentionruns, notfinalisolatedgate.
+[Isolatedpreencodedrepeat](quote-canonical-preencoded-isolated.json):40valid/760busy,correct
+billing/cleanup,133156864BRSS (below134217728Bcap) but51.71msloopfails50ms. FullSDKisolatedrepeat
+pending. Privatewire/context/history/carrierbounds unchanged. SourceSHA/pathincluded artifacts.
+
+A separateGCdisabledweakrefprobe detectscompletedfailedsignedworker retainingcapturedpayload
+untilcyclicGC; [reviewpendingretentiondesign](worker-retention-design.md) proposeslifetimefix
+withoutreleasingactiveworkers early. This isnotproofthatretentionexplainsallresourcegrowth.
+No helperruntimeedityet; startupgate remainsclosed.
+
+IsolatedfullSDKcanonicalrepeat41valid/759busy,correctbilling/cleanup,butfails135450624BRSS/
+127.16msloop [artifact](quote-canonical-sdk-isolated.json). CurrentcanonicalruntimeDockerbuild/
+synthetichealth22.77sec passed; optimizationcodegateonly, resourcegateunresolved.
+
+Narrowapprovedworkerretentionfixadded defaultownedwork anddetachescompletedTask/work/runrefs;
+completedfailedGCdisabledpayloadtestpasses. Requiredactivecancel/timeoutlatefailuretestreproduces
+knownPython3.14asyncio.shield loop exceptionevent with PRIVATE_LATE_FAILUREmarker andretained
+payload. Two newlyaddedtests currentlyfailthisknownredactiongate; do notclaimfinalfullgreen or
+retentionclearance yet. Separate [lateerrorhandoffdesign](late-worker-error-design.md) submitted
+beforechanging awaitmechanism. No globalhandler/logging suppression orsilentfailure proposed;
+normalexceptionpropagation/activecapacity/lifetime mustremain.
+
+The independently approved [late-error handoff](late-worker-error-design.md) is implemented.
+A request-owned plain future receives the independent worker task's exact result or exception;
+caller timeout/cancellation cancels only that future. The completion callback consumes abandoned
+failures without Python 3.14 shield logging, and completed helper/worker references are detached.
+Active workers retain their capacity and payload until actual completion. No global logging or
+exception handler behavior changes.
+
+All 15 lifetime/intake tests pass on local Python 3.14.7 and isolated Linux Python 3.12.15,
+including GC-disabled success/failure payload release, late failure after timeout/cancellation,
+completion/cancellation races, delayed submission, cancelled inner task and submission failure.
+Independent deep review found no Critical/Major issues: 49 focused tests and 1,000 additional
+completion/cancellation races passed. These checks close the earlier two failing late-error tests;
+they do not establish the aggregate resource gate.
+
+Full verification: 1,452 passed, three platform skips, 15 Docker/Azurite deselected, 89.27%
+coverage. Ruff check and formatting (532 files), mypy (61 source files), and diff whitespace pass.
+The runtime Docker build and synthetic health test pass on Python 3.12 (26.46 seconds).
+The conditional Sonar scan script is absent. Maximum signed resource repeats remain pending;
+signed startup, exact-model live validation, and production gates remain closed.
+
+Current isolated resource repeats, sequential network-disabled Linux 512 MiB / two CPUs,
+8 callers × 100 attempts: [preencoded artifact](quote-worker-preencoded-isolated.json) records
+131,366,912 B incremental RSS and 76.93 ms maximum loop delay; [full SDK artifact](quote-worker-sdk-isolated.json)
+records 133,566,464 B and 117.50 ms. Both RSS values satisfy 134,217,728 B, but both loop delays
+exceed 50 ms. There are respectively 59 and 33 valid completions, all other load requests return
+pre-admission 503, and known billing/quota, worker drain and zero active reservations pass.
+The aggregate resource gate remains failed. A [projection snapshot proposal](projection-snapshot-design.md)
+is awaiting independent review; no snapshot optimization is implemented.
+
+A further boundary audit found the earlier exact-builtin canonical differential tests omitted
+33 nested empty containers. The fast path accepted that tree while the original scanner rejected
+its structural nesting. The independently approved [depth correction](canonical-empty-depth-design.md)
+now tracks structural eligibility during the same eager bounds traversal and retains original
+parser fallback when the structural limit is exceeded. The wire-only helper's acceptance remains
+unchanged. Sixteen empty list/dict/tuple/mixed boundary regressions pass locally, together with
+existing scalar-depth, node, subclass, finite and wire tests. Final independent review and full
+verification for this correction are pending. No projection snapshot optimization is implemented.
+
+The depth correction independently cleared 173 focused tests and 25,324 differential cases.
+The subsequent [projection snapshot change](projection-snapshot-design.md) is implemented exactly
+as reviewed: structural projection and canonical validation remain, then `json.loads` decodes
+only the validated local bytes to create an owned snapshot. External/sealed JSON parsers remain
+unchanged. Six added projection regressions cover root-adjusted empty depth, tuple/subclass
+ownership and duplicate-emitting subclasses. Independent final review found no Critical/Major
+issues: 132 focused tests including actual SDK streamed/nonstreamed signed replay, mutation
+rejection, no egress, repeated known billing and fresh-process restart passed; 10,000 additional
+projection differential cases matched the original strict snapshot decoder.
+
+Projection verification: full 1,474 passed, three platform skips, 15 Docker/Azurite deselected,
+89.27% coverage; Ruff check/format (534 files), mypy (61 files), and whitespace pass. Linux
+Python 3.12 runs 99 canonical/projection/actual SDK signed integration tests successfully.
+Profiled sequential repeats still fail: [preencoded](quote-projection-preencoded-isolated.json)
+153,235,456 B RSS / 63.75 ms loop; [SDK](quote-projection-sdk-isolated.json) 143,355,904 B /
+117.17 ms. Both preserve known billing/quota and successful completion/drain. These are resource
+failures, not enablement evidence. Unprofiled repeats will distinguish timing-wrapper overhead;
+no claim that profiling explains all failure. A first unprofiled run overlaps the required Docker
+build and is treated as host-contention evidence only; it needs an isolated repeat.
+
+The final projection runtime Docker build and synthetic health test pass (26.54 seconds).
+An [unprofiled preencoded run](quote-projection-preencoded-unprofiled.json) overlapped that build
+and failed 189,669,376 B / 74.95 ms; retain as contention evidence, not an isolated result.
+
+The [isolated unprofiled preencoded repeat](quote-projection-preencoded-unprofiled-isolated.json)
+still fails: 198,008,832 B incremental RSS / 98.52 ms loop, 30 valid completions and 770 busy
+responses, correct known billing/quota and drain. Removing profiling does not establish the
+resource gate. A [standard decoder string-scan proposal](../json-depth-scan/decoder-string-design.md)
+is submitted for independent review; no scanner changes yet.
+
+The [unprofiled full SDK projection repeat](quote-projection-sdk-unprofiled-isolated.json)
+fails 135,954,432 B / 117.02 ms, with 91 successful completions and 709 busy responses;
+billing/quota/drain remain valid. The independently approved strict string scanner is now
+implemented with focused tests; aggregate signed resource repeats are pending for that change.
+
+Current strict-scanner unprofiled sequential artifacts: [preencoded](quote-decoder-preencoded-isolated.json)
+190,414,848 B / 52.72 ms, 45 completions; [SDK](quote-decoder-sdk-isolated.json) 171,003,904 B /
+113.20 ms, 23 completions. Both fail original resource caps; all other load requests return 503,
+known usage billing/quota and drain remain valid. Existing body buffering precedes shared parsing
+admission; an [early body admission proposal](early-body-admission-design.md) is awaiting review.
+
+Remote reconciliation: main fast-forwarded to `45cbb70` and all local work reapplied without
+conflicts; a recovery stash is retained. The remote provider-aware execution deadline fixes
+coexist with local early parsing admission and worker ownership. Reconciled full verification
+passes 1,509 tests with 88.86% coverage, three platform skips and 15 Docker/Azurite deselected;
+75 focused remote/local tests pass. Ruff check/format (537 files), mypy (61 source files), and
+whitespace pass. Linux/Docker and independent integration review are pending. Historical resource
+artifacts predate these remote changes and must not be presented as measurements of this head.
+
+Reconciled Linux Python 3.12 verification passes all 75 remote/local focused tests; the final
+runtime Docker build and synthetic health test pass (30.96 seconds). Updated local operational,
+security, signed and live-runner documentation links pass (25 files). The conditional Sonar
+script is absent. Independent integration review remains pending; no unresolved Git conflicts.
+
+Final independent reconciliation review found no Critical/Major integration issues; 236 focused
+tests pass with two Linux-only skips. One documentation suggestion is corrected: eight tracked
+inspector orphans is an admission rejection threshold, not an exact maximum while previously
+admitted inspections finish. A two-slot synthetic probe reached nine and confirmed the next
+inspection rejected without spawning. Comments/configuration now describe that behavior; no
+runtime cap or cleanup semantics changed. Remaining resource, codec and live gates stay open.
+
+Reconciled-head resource rerun, 2026-10-06 (`fce71aa`, sequential isolated network-disabled
+Linux 512 MiB / 2 CPUs, 8 callers x 100, quote-heavy feasible-completion fixture): full suite
+1,510 passed, 3 skipped, 14 deselected on the same head. [Preencoded](quote-reconciled-preencoded-isolated.json)
+records 175,767,552 B incremental RSS (cap 134,217,728 B, fail) and 39.17 ms maximum loop delay
+(cap 50 ms, pass), 27 nonstream + 23 stream completions. [Full SDK](quote-reconciled-sdk-isolated.json)
+records 112,230,400 B incremental RSS (pass) and 101.20 ms maximum loop delay (fail), 33 nonstream +
+35 stream completions. Both runs show correct known billing/quota settlement, drained signed
+capacity and zero post-dispatch failures; all other load requests return pre-admission 503.
+The aggregate resource gate therefore remains failed on reconciled code. No runtime change was
+made to force a pass; any memory/loop optimization requires its own reviewed design (early body
+admission and worker-retention proposals remain pending review). Historical failed artifacts are
+retained for comparison, not replaced.
+
+Joint signed-PDF second workload, 2026-10-06 (same head and envelope; `--workload signed-pdf`
+harness extension, test-only): validated sealed profile with `inline_pdfs` plus PDF price bounds
+derived through the unsigned-media-first sequence (no `model_copy` bypass); two maximum 2-page
+65536B PDFs (131072B raw, 4 pages) attached to the second-to-last history item so quote sizing
+absorbs the real media bytes (quote text shrank accordingly); joint dimensions 131072B context,
+125 items, 475488B prospective carriers, 1702704B replay + 393984B headroom within 2 MiB; mock
+provider asserts both PDFs arrive as native `application/pdf` parts. Sequential isolated runs:
+[preencoded](quote-pdf-preencoded-isolated.json) 200/200 completions, 600 pre-admission 503,
+266,797,056 B incremental RSS (fail) / 43.27 ms loop (pass); [full SDK](quote-pdf-sdk-isolated.json)
+36 nonstream + 40 stream completions, 724 pre-admission 503, 193,884,160 B RSS (fail) /
+128.90 ms loop (fail). Settlement, quota, worker drain and capacity reuse valid in both; zero
+post-dispatch failures. First joint state/media evidence therefore fails both resource caps and
+must not enable anything; PDF worker RSS under concurrency is the leading cost driver and needs
+its own reviewed design. WAV/AVI individual and wider joint combinations remain pending per the
+ordered plan. Full suite with the harness and fixture changes: 1,515 passed.

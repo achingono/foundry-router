@@ -39,3 +39,22 @@ perform zero provider requests; `--execute` rejects missing protocol evidence.
 `scripts/quality/google-live-validation.py` accepts an explicit `--catalog` path
 and fails closed on missing or malformed catalog/manifest. Seven manifest/CLI
 regressions pass from a clean checkout.
+
+Remote reconciliation, 2026-10-06: `45cbb70` supplies the synthetic dormant catalog/manifest
+used by offline tests. The earlier actual model-list GET artifacts are preserved separately as
+[actual discovery](../live-discovery-actual.json) and [discovered manifest](manifest-discovered.json).
+They record discovery only, not inference or approved protocol cases. The CLI's default remains
+the committed synthetic catalog; its explicit `--catalog` option permits offline validation of
+the preserved discovered manifest. No live inference ran during reconciliation.
+
+Offline validation of `manifest-discovered.json` against `../live-discovery-actual.json` passes
+with 61 models, zero eligible cases and zero provider requests. Remote defaults continue to use
+synthetic IDs; actual model IDs are preserved only in the separate discovery artifacts.
+
+Reconciled-head dry-run revalidation, 2026-10-06 (`fce71aa`): CLI dry-run (no `--execute`)
+against both the synthetic `manifest.json` and `manifest-discovered.json` with
+`live-discovery-actual.json` reports 61 models, zero dispatch-eligible cases, zero provider
+requests and `protocol_gates_pending` in both cases. Caps verified at 20 requests / 20,000
+tokens per project with zero paid spend. No `--execute` run was performed: no caller credential
+was supplied in this session, the manifest awaits independent review, and protocol gates remain
+pending. No live inference, production reads, or ledger debits occurred.

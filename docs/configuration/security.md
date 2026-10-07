@@ -69,6 +69,10 @@ Signed runtime integration is **Partially implemented** under its startup gate. 
 with a bound-history pool admit offloaded Responses intake before buffering, using the existing
 two signed-work slots and original intake deadline. Saturation returns safe 503 before reading;
 slow readers occupy those slots until deadline. Parser cancellation retains active-worker ownership,
-and abandoned failures do not reach the asyncio exception logger. These local controls do not
-establish the remaining aggregate resource or live-provider gates. See
+and abandoned failures do not reach the asyncio exception logger. The intake 503 body is
+byte-identical to the downstream work-lease 503, so no slot-count oracle is introduced; client
+authentication runs before body intake, so unauthenticated probers observe 401 rather than 503.
+An early 503 may arrive with the request body unconsumed, which can preclude connection reuse;
+callers should treat this 503 as retryable through their normal backoff path. These local controls
+do not establish the remaining aggregate resource or live-provider gates. See
 [signed evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).
