@@ -45,6 +45,13 @@ assert spec is not None and spec.loader is not None
 rss_helpers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rss_helpers)
 
+pdf_spec = importlib.util.spec_from_file_location(
+    "pdf_fixtures", Path(__file__).with_name("google-pdf-benchmark.py")
+)
+assert pdf_spec is not None and pdf_spec.loader is not None
+pdf_fixtures = importlib.util.module_from_spec(pdf_spec)
+pdf_spec.loader.exec_module(pdf_fixtures)
+
 SCANNER_SOURCE_SHA256 = hashlib.sha256(Path(google_schema.__file__).read_bytes()).hexdigest()
 
 RSS_CAP = 128 * 1024 * 1024
@@ -58,6 +65,10 @@ KNOWN_COST = 0.00076
 COST_TOLERANCE = 1e-8
 CONTEXT_QUOTE_CHARS = 65487
 OUTPUT_PARTS = 2
+SEED_TURNS = 3
+JOINT_PDF_DOCUMENTS = 2
+JOINT_PDF_PAGES_EACH = 2
+JOINT_PDF_RAW_BYTES_EACH = 65536
 
 
 def carrier_bytes(history):
@@ -68,15 +79,52 @@ def carrier_bytes(history):
     )
 
 
-async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # noqa: PLR0912, PLR0915 -- complete resource ownership
+async def run(callers=8, attempts=100, *, preencoded=False, profile=False, workload="quote-heavy"):  # noqa: PLR0912, PLR0915 -- complete resource ownership
+    if workload not in {"quote-heavy", "signed-pdf"}:
+        raise ValueError("Unknown synthetic workload")
     timing = StageProfile()
     settings = configured(False)
-    settings.backends["g"].google_features = GoogleFeatureProfile(
-        **{
-            **settings.backends["g"].google_features.model_dump(),
-            "signature_input_token_bound": 2000000,
-        }
-    )
+    if workload == "signed-pdf":
+        # Design-ordered joint fixture: initialize a validated unsigned media
+        # profile first so derived price bounds populate, then replace only the
+        # continuation profile with its validated sealed equivalent. No
+        # model_copy bypass; startup gate bypass stays test-owned only.
+        unsigned_media = GoogleFeatureProfile(
+            features=("inline_pdfs",),
+            native_thinking_disabled=True,
+            pdf_input_tokens_per_page=258,
+            pdf_native_text_tokens_per_page=65536,
+            pdf_token_pricing=True,
+        )
+        settings.backends["g"].google_features = unsigned_media
+        derived = settings.backends["g"].google_features
+        settings.pricing["m"].pdf_document_tokens = (
+            (
+                int(derived.pdf_input_tokens_per_page or 0)
+                + int(derived.pdf_native_text_tokens_per_page or 0)
+            )
+            * derived.max_pdf_pages
+            + derived.max_pdf_bytes
+            + 64
+        )
+        settings.backends["g"].google_features = GoogleFeatureProfile(
+            **{
+                **unsigned_media.model_dump(),
+                "features": ("inline_pdfs", "function_tools"),
+                "continuation_policy": "sealed_native",
+                "native_thinking_disabled": False,
+                "native_thinking_budget": 8,
+                "thought_token_pricing": True,
+                "signature_input_token_bound": 2000000,
+            }
+        )
+    else:
+        settings.backends["g"].google_features = GoogleFeatureProfile(
+            **{
+                **settings.backends["g"].google_features.model_dump(),
+                "signature_input_token_bound": 2000000,
+            }
+        )
     settings.backend_cycle_allowance_usd["g"] = 10000
     settings.backend_initial_estimated_remaining_usd["g"] = 10000
     settings.quota_group_rate_limits["project"] = {"rpm": 100000, "tpm": 100000000}
@@ -136,6 +184,16 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
         ]
         if actual != expected_signed_parts:
             raise ValueError("Synthetic native replay mismatch")
+        if workload == "signed-pdf" and dispatches >= SEED_TURNS:
+            # Seed turns carry no media; measured attempts must carry both PDFs.
+            pdf_parts = [
+                part
+                for message in upstream["contents"]
+                for part in message["parts"]
+                if part.get("inlineData", {}).get("mimeType") == "application/pdf"
+            ]
+            if len(pdf_parts) != JOINT_PDF_DOCUMENTS:
+                raise ValueError("Synthetic signed PDF fixture missing upstream")
         dispatches += 1
         await asyncio.sleep(0.005)
         return httpx.Response(200, json=native)
@@ -298,6 +356,8 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
             try:
                 initial = await create(body)
             except OpenAIError:
+                if asyncio.current_task().cancelling():
+                    raise asyncio.CancelledError from None
                 raise ValueError(f"Synthetic seed {_index} failed") from None
             body["input"].extend(initial["output"])
             body["input"].append({"role": "user", "content": "synthetic-next"})
@@ -308,6 +368,33 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
         history_bound = settings.backends["g"].google_features.max_history_items
         while len(body["input"]) < history_bound - OUTPUT_PARTS - 1:
             body["input"].append({"role": "user", "content": "synthetic-tail"})
+        pdf_raw_bytes = 0
+        if workload == "signed-pdf":
+            # Two maximum 2-page/65536B files exercise bytes and pages together
+            # (131072B total, 4 pages). Attached before sizing so the quote
+            # budget shrinks by the real accepted media bytes; joint dimensions
+            # are recorded below rather than independently maxed.
+            pdf_docs = []
+            for pdf_index in range(JOINT_PDF_DOCUMENTS):
+                raw = pdf_fixtures.fixture("maximum", pages=JOINT_PDF_PAGES_EACH)
+                if len(raw) != JOINT_PDF_RAW_BYTES_EACH:
+                    raise ValueError("Synthetic PDF fixture is not maximum bytes")
+                pdf_raw_bytes += len(raw)
+                pdf_docs.append(
+                    {
+                        "type": "input_file",
+                        "filename": f"synthetic-{pdf_index}.pdf",
+                        "file_data": "data:application/pdf;base64,"
+                        + base64.b64encode(raw).decode(),
+                    }
+                )
+            # Carrier goes on the second-to-last tail message: the sizing step
+            # below rewrites input[-1] with quote text, and the probe measures
+            # body[:-1], so [-2] keeps PDFs inside every budget computation.
+            body["input"][-2] = {
+                "role": "user",
+                "content": [{"type": "input_text", "text": "synthetic-pdf-carrier"}, *pdf_docs],
+            }
         probe = {**body, "input": [*body["input"][:-1], {"role": "user", "content": ""}]}
         base_size = len(canonical_bytes({**probe, "input": [*probe["input"], *initial["output"]]}))
         quote_chars = (WIRE_CAP - SEAL_HEADROOM - base_size - 512) // 2
@@ -332,6 +419,9 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
             "prospective_canonical_bytes": prospective_bytes,
             "reserved_next_turn_headroom_bytes": SEAL_HEADROOM,
             "signature_decoded_bytes_per_turn": 32768,
+            "pdf_raw_bytes_total": pdf_raw_bytes,
+            "pdf_documents": 2 if workload == "signed-pdf" else 0,
+            "pdf_pages_total": 4 if workload == "signed-pdf" else 0,
         }
 
         if preencoded:
@@ -417,7 +507,11 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
                 else "full SDK request/response and router process RSS"
             ),
             "profile": timing.facts() if profile else None,
-            "workload": "quote-heavy-feasible-completion",
+            "workload": (
+                "signed-pdf-feasible"
+                if workload == "signed-pdf"
+                else "quote-heavy-feasible-completion"
+            ),
             "callers": callers,
             "attempts_per_caller": attempts,
             "dimensions": {
@@ -455,17 +549,19 @@ async def run(callers=8, attempts=100, *, preencoded=False, profile=False):  # n
         async def cleanup():
             nonlocal active
             active = False
-            await watcher
-            if owned_workers:
-                await asyncio.gather(*tuple(owned_workers), return_exceptions=True)
             try:
-                await sdk.close()
+                await watcher
+                if owned_workers:
+                    await asyncio.gather(*tuple(owned_workers), return_exceptions=True)
             finally:
                 try:
-                    await backend.aclose()
+                    await sdk.close()
                 finally:
-                    app.dependency_overrides.clear()
-                    timing.close()
+                    try:
+                        await backend.aclose()
+                    finally:
+                        app.dependency_overrides.clear()
+                        timing.close()
 
         cleanup_task = asyncio.create_task(cleanup())
         while not cleanup_task.done():
@@ -482,9 +578,16 @@ if __name__ == "__main__":
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--callers", type=int, default=8)
     parser.add_argument("--attempts", type=int, default=100)
+    parser.add_argument("--workload", choices=("quote-heavy", "signed-pdf"), default="quote-heavy")
     args = parser.parse_args()
     result = asyncio.run(
-        run(args.callers, args.attempts, preencoded=args.preencoded, profile=args.profile)
+        run(
+            args.callers,
+            args.attempts,
+            preencoded=args.preencoded,
+            profile=args.profile,
+            workload=args.workload,
+        )
     )
     print(json.dumps(result, sort_keys=True))
     raise SystemExit(0 if result["passed"] else 1)
