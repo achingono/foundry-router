@@ -10,6 +10,7 @@ import respx
 from test_google_adapter_integration import _settings, _wire, client
 from test_google_native_integration import BACKEND, URL, provider
 
+from foundry_router.config.google_features import GoogleFeatureProfile
 from foundry_router.credit import estimate_request_cost
 
 KEYS = {
@@ -39,10 +40,16 @@ def settings():
     )
     # Startup stays closed pending the complete runtime review. These tests own
     # a validated uniform profile and explicitly exercise the in-flight path.
+    # Constructed through real validation (no model_copy bypass): sealed policy
+    # requires function tools, enabled thinking with budget/pricing ceilings and
+    # a signature bound.
     for backend in configured.backends.values():
-        backend.google_features = backend.google_features.model_copy(
-            update={
+        backend.google_features = GoogleFeatureProfile(
+            **{
+                **backend.google_features.model_dump(),
+                "features": ("json_schema", "function_tools"),
                 "continuation_policy": "sealed_native",
+                "native_thinking_disabled": False,
                 "native_thinking_budget": 8,
                 "thought_token_pricing": True,
                 "signature_input_token_bound": 100000,
