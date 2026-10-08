@@ -23,6 +23,28 @@ whose code gates pass, with explicit profiles/tokenbounds/operatorfacts. Signatu
 models remain unavailable for routerlive because startupgateclosed. Generated output/native-only
 methods unavailable until respective codegates. Free-tiercatalogdeprecatedmodel stillrecorded.
 
+Coverage matrix: this runner validates the Google **native** surface only
+(`v1beta` `generateContent`/`streamGenerateContent`) — native text first, then gated
+native media. It carries no embeddings capability and no compatibility-surface dimension:
+embeddings and OpenAI-compat-surface text/streaming/history/embeddings validation belong
+to the predecessor [Google AI Studio adapter](../../google-ai-studio-adapter/) contract and
+[foundry-inference](../../foundry-inference/) real-inference workflows. Native results here
+never close compat gates and compat results never close native gates; each surface keeps
+its own manifest rows, protocol proofs and enablement decisions.
+
+Free-tier text-first track (2026-10-07 maintainer direction): Google's free tier grants
+usage quotas, not a dollar balance, so validation success is quota admission plus correct
+429/cooldown behavior on non-metered backends — local dollar estimates are informational
+only there, and routing already treats `credit_metered: false` backends as
+quota-gated (`NOT_METERED`, no USD admission fields). The full multimodal plan is
+explicitly **not** a prerequisite for this track. Order: (1) two or three free-tier
+models, text nonstream then streaming, inside recorded caps; (2) unsigned function tools
+for coding-agent use, structured output after; (3) image/PDF input only if real workloads
+need it. Audio/video input, generated image/audio, and further signed-state performance
+work are parked until chosen models and clients require them. Selected 2026-10-07:
+`models/gemini-2.5-flash`, `models/gemini-2.5-flash-lite`, `models/gemini-2.5-pro` —
+all free-tier documented with `generateContent` support.
+
 First finite runnable subset text nonstream native: exact manifest eligiblemodelIDs and documented
 free-tiertext, requestinput literal syntheticshortprompt/max_output_tokens64/thinkingBudget0;
 profilethinkingdisabledtrue. Perrequest reserve inputUTF8bound plusoutput64 (metadataoverhead64);
@@ -52,7 +74,7 @@ Singleprocess sequentialcases; persistent ledger owns cap20/20000. No failed/amb
 knownusage may reduce only documented successful debit. Actual usage above reservation records
 budgetoverrun and haltsproject; cannot claim strictactual ceiling ifproviderignoredtokenbound.
 Exactmodel thinkingdisable proof required; initialeligibletext subset narrowedafterthinkingdocs.
-Manifest now at manifest.json all61rows/13explicitfree-tiertextpricing rows; protocolpending.
+Actual discovered manifest is preserved at manifest-discovered.json: all61rows/13explicitfree-tiertextpricing rows; protocolpending. The committed manifest.json is a separate synthetic offline fixture.
 
 SubclassSettings.settings_customise_sources returns ONLYinit_settings; _env_file=None; disable
 env/dotenv/secrets/CLI sources. BuildnewFastAPI+build_openai_router with newmemorycredit/rate/

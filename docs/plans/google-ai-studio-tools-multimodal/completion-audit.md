@@ -1,21 +1,45 @@
 # Full-plan completion audit
 
-**Partially implemented**, audited 2026-10-06 against the parent activities and exit criteria.
+**Partially implemented**, audited 2026-10-06 against the parent activities and exit criteria,
+reconciled 2026-10-07 (status rows only; no gate claimed). The 2026-10-06 baseline below is
+historical: several rows then listed as outstanding now have reviewed implementations under
+the startup gate, with resource/live/enablement as the remaining blockers — updated inline.
 The restricted implementation amendment is evidence for individual rows only. It does not
 replace the full plan. A checked local code gate does not establish live provider compatibility.
+Exit-criteria checkboxes remain entirely unchecked: implementation evidence alone does not
+check a plan gate, which additionally requires maintainer approval plus its resource/live
+proof. Do not read an updated row as a checked box.
+
+## Delivery triage (2026-10-07 maintainer direction)
+
+The full plan is no longer the prerequisite for every row. Work splits three ways:
+
+- **Required now:** modern-model text (3.5-flash-lite `minimal`, 3.8-flash `low`;
+  separate bounded track in [thinking-level-text-design](live-runner/thinking-level-text-design.md)),
+  streaming text on the same profiles, project/model quota routing with exclusion of
+  inaccessible combinations, thought-inclusive usage settlement, and request/usage
+  cleanup. 2.5 text stays on its proven budget-0 path outside the new track.
+- **Deferred:** PDF/image/audio/video input, generated image/audio output, and maximum
+  signed-history resource benchmarks. No further benchmark or media work is required
+  for the text track; historical failed artifacts stand as recorded.
+- **Conditional:** function tools and signed continuation, for coding-agent clients
+  only — each needs its own round-trip validation before any claim.
+
+Rows below keep their evidence links; triage changes priority and gating order, not
+past evidence.
 
 | Requirement | Current evidence | Remaining work |
 | --- | --- | --- |
 | T1 dated exact model/surface/client capability matrix | Official compatibility/image/function sources and pinned OpenAI Python 2.8.1 fixtures in [contract](implementation/contract.md) | Exact operator model IDs, signed and remaining media contracts, per-combination live evidence |
-| T1 lossless continuation/public extension decision | Signature-bearing output safely rejected | Reviewed carrier ADR, actual-client serialization/stream/replay, schema approval |
+| T1 lossless continuation/public extension decision | Signature-bearing output safely rejected; reviewed codec/key/history/adapter/stream/integration under the startup gate in [signed evidence](signed-continuation/evidence.md) (2026-10-07: also sealed-profile HTTP, expiry/rotation/revocation and fresh-process replay) | Schema approval; maximum combined resource/lifecycle/live gates before enablement |
 | T1 additional-media API decisions/native justification | Parent identifies gates; unsupported shapes rejected | Separate finite audio/video and generated image/audio decisions based on current documented transport/public schemas |
 | T2 default-off bounded exact capabilities | [Profile code](../../../src/foundry_router/config/google_features.py), configuration/combination tests | Additional profiles after each protocol/parser/accounting gate |
 | T2 pre-reservation selection/failover eligibility | Existing Google/Azure and exact-combination tests | Signed pinning/missing-state HTTP tests pass under startup gate; complete lifecycle/resource review pending |
-| T2 caller binding/key readiness/redaction | [Reviewed unattached codec/key/auth helpers](signed-continuation/evidence.md) | Runtime integration added under startup gate; concurrency/deadline/lifecycle gates remain |
-| T2 bounded intake, reservation lifetime/cleanup | [Reviewed intake/worker hardening](signed-continuation/runtime-hardening.md), deadline and lifecycle regressions | Rerun resource checks on reconciled runtime; earlier quote-heavy full SDK checks failed RSS/loop; combined state/media gates remain |
+| T2 caller binding/key readiness/redaction | Reviewed codec/key/auth helpers plus secret-only key configuration, domain-separated caller scope and key-snapshot intake binding ([evidence](signed-continuation/evidence.md)) | Runtime integration added under startup gate; concurrency/deadline/lifecycle gates remain |
+| T2 bounded intake, reservation lifetime/cleanup | [Reviewed intake/worker hardening](signed-continuation/runtime-hardening.md), deadline and lifecycle regressions, plus early body admission with capacity/slot-accounting proofs | Resource checks rerun on reconciled runtime (quote-heavy and first joint signed-PDF runs fail RSS/loop caps, recorded as evidence); combined state/media gates remain |
 | T2 conservative text/tool/schema/image accounting | UTF-8 upper bounds, 258 minimum small-image ceiling, Google-only media pools | Larger/PDF/audio/video/generated-media price/quota dimensions and verified upper bounds |
 | T3 declarations/choices/calls/results | Explicit strictness; names; distinct IDs; complete ordered serial/parallel histories | Required signed-state association/validation |
-| T3 signed continuation validation/routing | Disabled; unattached authenticated codec and structural projection tested | Owned caller/backend/model/surface/config/history binding and repeated HTTP replay/billing implemented under startup gate; expiry/key overlap/revocation and fresh-process replay pass; maximum combined resource/lifecycle/live remains |
+| T3 signed continuation validation/routing | Reviewed implementation under the startup gate ([evidence](signed-continuation/evidence.md)): owned caller/backend/model/surface/config/history binding, repeated HTTP replay/billing, expiry/key overlap/revocation, fresh-process replay, ASGI delivery and early body admission with slot-accounting tests — not merely unattached helpers | Maximum combined resource/lifecycle/live gates before enablement |
 | T3 argument SSE assembly | Actual SDK stream state fixtures, interleaved/fragmented calls and contiguous indices | Late signatures, signed incomplete/stripped-state fixtures |
 | T3 synthetic caller round trip | Nonstream and streamed unsigned full-history replay | Exact-client signed extension retained/dropped-state gates |
 | T4 bounded JSON-object/strict-schema semantics | Bounded subset, no remote refs/normalization, final validation | Exact model/combinations live evidence; larger subset only if required and safe |
