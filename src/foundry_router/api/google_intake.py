@@ -5,7 +5,10 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-from foundry_router.api.adapters.google_native import GoogleNativeAdapter
+from foundry_router.api.adapters.google_native import (
+    GoogleNativeAdapter,
+    unsigned_ordinary_profile,
+)
 from foundry_router.api.adapters.google_schema import load_bounded_json
 from foundry_router.api.google_continuation import prepare_continuation
 from foundry_router.api.google_history import STATE_FIELD, carrier_tokens, project_history
@@ -45,14 +48,7 @@ def _prepare(
         "input": list(projected),
     }
     profile = settings.backends[next(iter(settings.models[model].backends))].google_features
-    ordinary = GoogleNativeAdapter(
-        profile=profile.model_copy(
-            update={
-                "continuation_policy": "unsigned",
-                "native_thinking_disabled": True,
-            }
-        )
-    )
+    ordinary = GoogleNativeAdapter(profile=unsigned_ordinary_profile(profile))
     rejection = ordinary.check_request(
         "responses",
         ordinary_body,

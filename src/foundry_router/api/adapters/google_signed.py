@@ -8,7 +8,11 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from foundry_router.api.adapters.base import AdapterRejection, TranslatedSuccess
-from foundry_router.api.adapters.google_native import GoogleNativeAdapter, native_usage
+from foundry_router.api.adapters.google_native import (
+    GoogleNativeAdapter,
+    native_usage,
+    unsigned_ordinary_profile,
+)
 from foundry_router.api.adapters.google_signed_stream import GoogleSignedStreamDecoder
 from foundry_router.api.google_continuation import (
     PreparedContinuation,
@@ -52,14 +56,7 @@ class GoogleSignedAdapter(GoogleNativeAdapter):
         self.seal_context = seal_context
         self.backend_id = backend_id
         self.prepared = prepared
-        self.ordinary = GoogleNativeAdapter(
-            profile=profile.model_copy(
-                update={
-                    "continuation_policy": "unsigned",
-                    "native_thinking_disabled": True,
-                }
-            )
-        )
+        self.ordinary = GoogleNativeAdapter(profile=unsigned_ordinary_profile(profile))
 
     def check_request(
         self,

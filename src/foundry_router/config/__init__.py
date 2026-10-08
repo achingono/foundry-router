@@ -146,6 +146,7 @@ class BackendConfig(BaseModel):
                 or "/v1beta/openai" in endpoint_path
                 or (
                     not self.google_features.native_thinking_disabled
+                    and self.google_features.native_thinking_level is None
                     and self.google_features.continuation_policy != "sealed_native"
                     and "audio_output" not in self.google_features.features
                 )

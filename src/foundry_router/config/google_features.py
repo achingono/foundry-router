@@ -45,6 +45,7 @@ class GoogleFeatureProfile(BaseModel):
     image_token_pricing: bool = False
     native_thinking_disabled: bool = False
     native_thinking_budget: int | None = Field(default=None, ge=0, le=8192, strict=True)
+    native_thinking_level: Literal["minimal", "low"] | None = None
     thought_token_pricing: bool = False
     signature_input_token_bound: int | None = Field(
         default=None, ge=100000, le=2000000, strict=True
@@ -150,6 +151,28 @@ class GoogleFeatureProfile(BaseModel):
             raise ValueError(
                 "Sealed native policy requires thinking/signature ceilings and token pricing"
             )
+        self._validate_thinking_shape(enabled)
+        self._validate_combinations(enabled)
+        return self
+
+    def _validate_thinking_shape(self, enabled: set[GoogleFeature]) -> None:
+        """Enforce the thinking-configuration matrix (level/budget/disabled)."""
+        if self.native_thinking_level is not None and (
+            # Text-only track: no tools, structured output, media, or sealed policy.
+            # An empty feature set is required (audio/image exclusions below are
+            # then implied, but stated for the audit trail).
+            self.native_thinking_disabled
+            or self.native_thinking_budget is not None
+            or self.continuation_policy == "sealed_native"
+            or enabled
+            or "audio_output" in enabled
+            or "image_output" in enabled
+        ):
+            raise ValueError("Thinking levels require an enabled-thinking text-only profile")
+        if self.native_thinking_budget is not None and self.continuation_policy != "sealed_native":
+            raise ValueError("Thinking budgets require the sealed native policy")
+
+    def _validate_combinations(self, enabled: set[GoogleFeature]) -> None:
         seen: set[frozenset[str]] = set()
         for combination in self.combinations:
             members = frozenset(combination)
@@ -161,7 +184,6 @@ class GoogleFeatureProfile(BaseModel):
             ):
                 raise ValueError("Google combinations must be unique enabled feature sets")
             seen.add(members)
-        return self
 
     def _validate_audio_output(self, enabled: set[GoogleFeature]) -> None:
         if "audio_output" in enabled and (

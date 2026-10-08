@@ -38,7 +38,9 @@ def _token(value: Any) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= _MAX_TOKENS
 
 
-def native_usage(upstream: Any, *, strict: bool = False) -> tuple[int | None, int | None]:
+def native_usage(
+    upstream: Any, *, strict: bool = False, accept_thoughts: bool = False
+) -> tuple[int | None, int | None]:
     usage = upstream.get("usageMetadata") if isinstance(upstream, dict) else None
     if usage is None and (not isinstance(upstream, dict) or "usageMetadata" not in upstream):
         return None, None
@@ -65,13 +67,13 @@ def native_usage(upstream: Any, *, strict: bool = False) -> tuple[int | None, in
         if strict:
             raise ValueError("Invalid native usage dimensions")
         return None, None
-    if strict and (thoughts or tools):
+    if strict and (tools or (thoughts and not accept_thoughts)):
         raise ValueError("Native thinking or tool prompt usage is disabled")
     # Unexpected billed dimensions still retained through conversion failure.
     return cast("int", prompt) + cast("int", tools), cast("int", candidates) + cast("int", thoughts)
 
 
-def _native_output(upstream: Any) -> dict[str, Any]:
+def _native_output(upstream: Any, *, drop_signatures: bool = False) -> dict[str, Any]:
     if not isinstance(upstream, dict) or "error" in upstream:
         raise ValueError("Invalid native response envelope")
     if set(upstream) - _ENVELOPE_FIELDS:
@@ -104,6 +106,7 @@ def _native_output(upstream: Any) -> dict[str, Any]:
                 "refusal": _SAFE_REFUSAL,
                 "finish_reason": "content_filter",
                 "ordered_parts": [],
+                "dropped_signatures": 0,
             }
         raise ValueError("Native response lacks candidate or block evidence")
     if len(candidates) != 1 or not isinstance(candidates[0], dict):
@@ -132,6 +135,7 @@ def _native_output(upstream: Any) -> dict[str, Any]:
     calls: list[dict[str, Any]] = []
     ordered: list[dict[str, Any]] = []
     output_bytes = 0
+    dropped_signatures = 0
     for part in parts:
         if not isinstance(part, dict):
             raise ValueError("Invalid native output part")
@@ -139,6 +143,21 @@ def _native_output(upstream: Any) -> dict[str, Any]:
             text.append(part["text"])
             ordered.append({"content": part["text"]})
             output_bytes += len(part["text"].encode())
+        elif (
+            drop_signatures
+            and set(part) == {"text", "thoughtSignature"}
+            and isinstance(part["text"], str)
+            and isinstance(part["thoughtSignature"], str)
+            and part["thoughtSignature"]
+        ):
+            # Text-pilot decision (level profiles only): thought signatures are
+            # dropped after usage capture. They are never persisted, replayed,
+            # or forwarded, and their presence alone grants no history or tool
+            # support. All other profiles keep rejecting signature state.
+            text.append(part["text"])
+            ordered.append({"content": part["text"]})
+            output_bytes += len(part["text"].encode())
+            dropped_signatures += 1
         elif set(part) == {"functionCall"}:
             function = part["functionCall"]
             if (
@@ -191,6 +210,7 @@ def _native_output(upstream: Any) -> dict[str, Any]:
         "refusal": refusal,
         "finish_reason": finish,
         "ordered_parts": ordered,
+        "dropped_signatures": dropped_signatures,
     }
 
 
@@ -262,6 +282,24 @@ def _contents(messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], lis
     return contents, system
 
 
+def unsigned_ordinary_profile(profile: Any) -> Any:
+    """Return the unsigned thinking-disabled delegate profile for sealed intake.
+
+    Centralizes the two sealed-path constructions so a thinking level can never
+    leak into the unsigned delegate (where the signed overwrite would silently
+    clobber it). ``model_copy`` skips validators, hence the explicit assert.
+    """
+    ordinary = profile.model_copy(
+        update={
+            "continuation_policy": "unsigned",
+            "native_thinking_disabled": True,
+            "native_thinking_level": None,
+        }
+    )
+    assert ordinary.native_thinking_level is None
+    return ordinary
+
+
 class GoogleNativeAdapter(GoogleAiStudioAdapter):
     """Native unsigned, thinking-disabled Responses subset, explicitly configured."""
 
@@ -291,7 +329,17 @@ class GoogleNativeAdapter(GoogleAiStudioAdapter):
         deadline_monotonic: float | None = None,
         prepared_media: PreparedGoogleMedia | None = None,
     ) -> AdapterRejection | None:
-        if not self.supports_operation(operation) or not self.profile.native_thinking_disabled:
+        if not self.supports_operation(operation):
+            return AdapterRejection(422, "unsupported_parameter", "Native capability is disabled")
+        level = self.profile.native_thinking_level
+        if level is None:
+            if not self.profile.native_thinking_disabled:
+                return AdapterRejection(
+                    422, "unsupported_parameter", "Native capability is disabled"
+                )
+        elif (
+            self.profile.native_thinking_disabled or self.profile.native_thinking_budget is not None
+        ):
             return AdapterRejection(422, "unsupported_parameter", "Native capability is disabled")
         try:
             body, image = self._generation_request(body)
@@ -334,9 +382,16 @@ class GoogleNativeAdapter(GoogleAiStudioAdapter):
     ) -> dict[str, Any]:
         _ = deployment
         body, image = self._generation_request(body)
+        level = self.profile.native_thinking_level
+        thinking_ok = (
+            self.profile.native_thinking_disabled
+            if level is None
+            else not self.profile.native_thinking_disabled
+            and self.profile.native_thinking_budget is None
+        )
         if (
             not self.supports_operation(operation)
-            or not self.profile.native_thinking_disabled
+            or not thinking_ok
             or self._check_responses_request(body)
         ):
             raise ValueError("Native request is unsupported")
@@ -353,13 +408,17 @@ class GoogleNativeAdapter(GoogleAiStudioAdapter):
                 prepared_media=prepared_media,
             )
         )
+        if level is None:
+            thinking_config: dict[str, Any] = {"thinkingBudget": 0}
+        else:
+            thinking_config = {"thinkingLevel": level}
         generation: dict[str, Any] = {
             "maxOutputTokens": body.get(
                 "max_output_tokens",
                 self.profile.generated_output_tokens_bound if image else default_output_tokens,
             ),
             "candidateCount": 1,
-            "thinkingConfig": {"thinkingBudget": 0},
+            "thinkingConfig": thinking_config,
             "responseModalities": ["TEXT"],
         }
         if image:
@@ -424,8 +483,15 @@ class GoogleNativeAdapter(GoogleAiStudioAdapter):
         if operation != "responses":
             raise ValueError("Native supports only Responses")
         _ = (expected_input_count, expected_dimensions)
-        input_tokens, output_tokens = native_usage(upstream, strict=True)
-        result = _native_output(upstream)
+        input_tokens, output_tokens = native_usage(
+            upstream,
+            strict=True,
+            accept_thoughts=self.profile.native_thinking_level is not None,
+        )
+        result = _native_output(
+            upstream,
+            drop_signatures=self.profile.native_thinking_level is not None,
+        )
         if result["finish_reason"] is None:
             raise ValueError("Native response requires finish evidence")
         translated = self._translate_responses_success(
@@ -502,6 +568,7 @@ class GoogleNativeAdapter(GoogleAiStudioAdapter):
             logical_model=logical_model,
             metadata=metadata,
             context=request_context(request_body or {}, self.profile),
+            accept_thoughts=self.profile.native_thinking_level is not None,
         )
 
 
@@ -509,6 +576,10 @@ class GoogleNativeStreamDecoder(GoogleStreamDecoder):
     """Native SSE terminates only at clean EOF with validated finish evidence."""
 
     usage_invalid = False
+
+    def __init__(self, *args: Any, accept_thoughts: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._accept_thoughts = accept_thoughts
 
     def _archive_message(self) -> list[bytes]:
         if self._message_index is None:
@@ -583,7 +654,7 @@ class GoogleNativeStreamDecoder(GoogleStreamDecoder):
                 raise ValueError("Native cumulative usage decreased")
             self._input_tokens, self._output_tokens = known
         try:
-            native_usage(payload, strict=True)
+            native_usage(payload, strict=True, accept_thoughts=self._accept_thoughts)
         except ValueError:
             if isinstance(payload, dict) and "usageMetadata" in payload and known == (None, None):
                 self.usage_invalid = True
@@ -596,7 +667,7 @@ class GoogleNativeStreamDecoder(GoogleStreamDecoder):
             if "usageMetadata" in payload:
                 return []
             raise ValueError("Native SSE envelope lacks content")
-        result = _native_output(payload)
+        result = _native_output(payload, drop_signatures=self._accept_thoughts)
         if self._finish_reason is not None:
             raise ValueError("Native content arrived after finish")
         events: list[bytes] = []
