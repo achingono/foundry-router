@@ -45,6 +45,7 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Phase 07 infrastructure & operations plan](plans/phase-07-infrastructure-operations/index.md)
 - [Phase 08 credit-integrity and boundary hardening plan](plans/phase-08-credit-integrity-hardening/index.md)
 - [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
+- [Google AI Studio capacity inventory (Partially implemented; selected quotas measured, remaining quotas pending)](plans/google-ai-studio-capacity-inventory/index.md)
 - [Google AI Studio backends and Responses adapter plan (Implemented with mocked verification; real inference Planned)](plans/google-ai-studio-adapter/index.md)
 - [Google AI Studio tools and multimodal follow-up plan (Partially implemented; unsigned tools/structured text/small PNG, live gate Planned)](plans/google-ai-studio-tools-multimodal/index.md)
 - [Logical model aliases plan (Planned)](plans/model-aliases/index.md)
