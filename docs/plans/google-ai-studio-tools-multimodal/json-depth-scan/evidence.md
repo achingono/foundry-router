@@ -57,3 +57,19 @@ Current runtime Docker build/synthetichealth also passed27.92sec. Independent im
 review additionallyran39,531valid/malformed differentialcases with no semanticmismatch. This
 closes scopedoptimizationcodeverification; fullquote/historyresourcegate remainsfailed. See
 [next attribution design](../signed-continuation/resource-attribution-design.md).
+
+The separately reviewed [standard decoder string scanner](decoder-string-design.md) replaces
+only manual quote/backslash skipping in the structural-depth prescan. Strict `scanstring` advances
+to the end of a string; its temporary decoded string is immediately deleted before final strict
+JSON decoding. Byte, container/value depth, duplicate, finite and node limits remain unchanged.
+Mixed Unicode may allocate approximately four times input bytes plus overhead; this is bounded
+and explicitly documented rather than assumed equal to UTF-8 bytes. Forty-two scanner tests and
+141 JSON/canonical/history/actual SDK signed tests pass locally, including malformed Unicode,
+maximum mixed-wide strings and 33 empty containers. Final deep/full/Linux/resource checks pending.
+
+Final scanner review cleared 180 focused tests (one Linux PDF platform skip) and 44,531
+implemented old/new differential cases with no Critical/Major findings. Full 1,485 tests pass,
+three platform skips, 15 Docker/Azurite deselected, 89.26% coverage; Ruff/format (535 files),
+mypy (61 source files), whitespace pass. A narrowly scoped typeshed attr-defined annotation is
+required because its json.decoder stub omits the CPython scanstring primitive. Linux Python3.12
+passes all 141 scanner/canonical/history/actual SDK signed tests. Runtime Docker check pending.
