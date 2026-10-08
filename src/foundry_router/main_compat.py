@@ -59,6 +59,7 @@ async def _forward_streaming_with_retries(**kwargs: Any) -> BackendRequestResult
 
 
 async def _execute_with_single_failover(*args: Any, **kwargs: Any) -> Any:
+    kwargs.setdefault("exclusion_store", _main()._exclusion_store)
     return await execute_with_single_failover(
         *args,
         **kwargs,

@@ -46,6 +46,22 @@ unchanged (for Google, latched at the first downstream event, including lifecycl
 The in-memory quota store is single-process only. Multi-worker and multi-replica quota aggregation
 is **Planned**; do not interpret local snapshots as authoritative Google quota counters.
 
+## Process-local Combination Exclusion (Implemented, Synthetic Verification)
+
+Repeated terminal 404/5xx failures accumulate per physical backend, operation and
+streaming mode. Three failures exclude that combination for 30 minutes; ordinary
+successes decay its count. HTTP 429 and confirmed pre-dispatch failures do not count.
+Streaming prefetch failures count; failures after streaming handoff do not feed this
+policy. Streaming and nonstreaming remain independent within the Responses operation.
+
+When all otherwise admissible candidates are excluded, routing claims one foreground
+probe per combination after quota/credit admission. A matching successful probe clears
+the exclusion; failure re-arms it. Generation-fenced admission tickets prevent stale
+completions or concurrent requests from clearing a newer window or claiming duplicate
+probes. Exclusion state resets at process startup and is not distributed Table state.
+Admin status exposes combination counts, wall-clock expiry and affected logical pools;
+Prometheus exposes entry/reset counters. Production deployment remains a separate gate.
+
 ## Backend States
 
 - `ACTIVE`: Healthy, routes normally.

@@ -122,6 +122,7 @@ def build_router(
     metrics_store: Any,
     rate_limit_store: Any | None = None,
     reconciliation_status_snapshot: Any,
+    exclusion_store: Any = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -130,6 +131,31 @@ def build_router(
         settings = load_settings_fn()
         backend_ids = list(settings.backends.keys())
         health_snapshots = await health_store.snapshot_backend_health(backend_ids)
+        exclusion_snapshot: dict[str, Any] = {}
+        if exclusion_store is not None:
+            raw_snapshot = await exclusion_store.snapshot()
+            for key, info in raw_snapshot.items():
+                try:
+                    backend_id, operation, stream_mode = key
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(info, dict):
+                    continue
+                logical_models = sorted(
+                    model_name
+                    for model_name, pool in settings.models.items()
+                    if backend_id in getattr(pool, "backends", {})
+                )
+                mode = "stream" if stream_mode else "nonstream"
+                exclusion_snapshot[f"{backend_id}\u241e{operation}\u241e{mode}"] = {
+                    "backend_id": backend_id,
+                    "operation": operation,
+                    "stream_mode": mode,
+                    "consecutive_failures": info.get("consecutive_failures", 0),
+                    "excluded": bool(info.get("excluded", False)),
+                    "excluded_until_wall": info.get("excluded_until_wall"),
+                    "logical_models": logical_models,
+                }
         await credit_store.sync_from_settings(settings)
         aliases = credit_membership(settings)
         groups = sorted(metered_credit_groups(settings))
@@ -182,6 +208,7 @@ def build_router(
                 for name, pool in settings.models.items()
             },
             "model_aliases": dict(getattr(settings, "model_aliases", {}) or {}),
+            "combination_exclusions": exclusion_snapshot,
             "config": {
                 "reconciliation_interval_minutes": settings.reconciliation_interval_minutes,
                 "min_credit_reserve_usd": settings.min_credit_reserve_usd,

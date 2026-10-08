@@ -4,6 +4,19 @@
 model/client compatibility remains **Planned**. Features default off; enabling a profile declares
 operator-verified support for the exact configured model and compatibility surface.
 
+### Repeated-failure exclusion
+
+The memory runtime now retains exclusions across requests for each backend/operation/
+streaming-mode combination. Three qualifying terminal 404/5xx failures open a
+30-minute window. This is process-local scheduling state, not a Google quota balance
+and not cross-restart persistence. Inspect `/admin/status`'s `combination_exclusions`
+and `combination_exclusion_entries_total` / `combination_exclusion_resets_total`.
+If alternatives are unavailable, a generation-fenced foreground probe can test an
+excluded combination without bypassing quota, credit, or operator-disabled health.
+Successful probes clear the window; failed probes re-arm it. Process startup resets
+state and logs `combination_exclusion_reset`. Multi-replica aggregation remains
+unverified; production remains memory-backed with `maxReplicas: 1` until cutover gates.
+
 Example `google_features` value inside a Google backend (model/key/endpoint remain the existing
 backend configuration; use separate Google-only logical pools when enabling images):
 

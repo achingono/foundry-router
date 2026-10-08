@@ -36,6 +36,10 @@ from foundry_router.health import (
     cooldown_exhausted_response,
 )
 from foundry_router.ratelimit import effective_quota_limits
+from foundry_router.routing.exclusion import (
+    classify_exclusion_event,
+    exclusion_stream_mode,
+)
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,7 @@ class BackendSelectionResult:
     rate_limit_unavailable: bool = False
     operation_unsupported: bool = False
     feature_rejection: Any | None = None
+    admission_ticket: Any = None
 
 
 def ranked_model_backends(
@@ -149,6 +154,7 @@ def _emit_routing_decision(
     requested_model: str | None = None,
     resolved_model: str | None = None,
     is_alias: bool = False,
+    combination_excluded_probe: bool | None = None,
 ) -> None:
     """Emit a low-volume INFO summary plus a gated candidate-detail event.
 
@@ -177,6 +183,8 @@ def _emit_routing_decision(
     }
     if protected_quota_fallback is not None:
         summary["protected_quota_fallback"] = protected_quota_fallback
+    if combination_excluded_probe is not None:
+        summary["combination_excluded_probe"] = combination_excluded_probe
     logger.info("routing_decision", **summary)
     detail = {
         "request_id": request_id,
@@ -198,6 +206,67 @@ def _emit_routing_decision(
             logger.info("routing_decision_detail", **detail)
 
 
+async def _record_combination_attempt(
+    exclusion_store: Any,
+    metrics_store: Any,
+    *,
+    backend_id: str | None,
+    operation: str,
+    stream_mode: bool,
+    result: Any,
+    ticket: Any = None,
+) -> None:
+    """Record one terminal attempt outcome for per-combination exclusion.
+
+    Streaming handoffs decay (dispatch succeeded; post-first-byte stalls never
+    reach this hook, per the no-retry-after-meaningful-output rule). Only
+    terminal ``BackendRequestResult`` values observed in the attempt loop are
+    recorded, which is exactly the pre/post-first-byte boundary the design
+    requires — no new result field needed.
+    """
+    if exclusion_store is None or backend_id is None or result is None:
+        return
+    response = getattr(result, "response", None)
+    if isinstance(response, StreamingResponse):
+        transition = await exclusion_store.record_attempt(
+            backend_id,
+            operation,
+            stream_mode,
+            success=True,
+            countable_failure=False,
+            ticket=ticket,
+        )
+    else:
+        status_code = getattr(response, "status_code", None)
+        countable = classify_exclusion_event(
+            status_code,
+            retryable_failure=bool(getattr(result, "retryable_failure", False)),
+            confirmed_pre_dispatch=bool(getattr(result, "confirmed_pre_dispatch", False)),
+        )
+        success = (
+            isinstance(status_code, int)
+            and not isinstance(status_code, bool)
+            and 200 <= status_code < 300
+        )
+        transition = await exclusion_store.record_attempt(
+            backend_id,
+            operation,
+            stream_mode,
+            success=success,
+            countable_failure=countable,
+            ticket=ticket,
+        )
+    if transition in ("entered", "decayed", "cleared") and metrics_store is not None:
+        observe = getattr(metrics_store, "observe_combination_exclusion", None)
+        if callable(observe):
+            await observe(
+                backend=backend_id,
+                operation=operation,
+                stream="stream" if stream_mode else "nonstream",
+                cleared=transition != "entered",
+            )
+
+
 async def select_candidate_backend(
     settings: Any,
     model: str,
@@ -217,6 +286,7 @@ async def select_candidate_backend(
     prepared_media: PreparedGoogleMedia | None = None,
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
+    exclusion_store: Any = None,
 ) -> BackendSelectionResult:
     if intake_deadline_monotonic is not None:
         if time.monotonic() >= intake_deadline_monotonic:
@@ -248,6 +318,7 @@ async def select_candidate_backend(
                     prepared_media=prepared_media,
                     seal_context=seal_context,
                     prepared_continuation=prepared_continuation,
+                    exclusion_store=exclusion_store,
                 )
         except TimeoutError:
             # Storage cancellation can race a committed admission. Always release
@@ -271,6 +342,8 @@ async def select_candidate_backend(
             )
         else:
             if time.monotonic() >= intake_deadline_monotonic:
+                if exclusion_store is not None:
+                    await exclusion_store.release(result.admission_ticket)
                 await credit_store.finalize_request(
                     request_id,
                     backend_id=result.backend_id,
@@ -535,6 +608,33 @@ async def select_candidate_backend(
     if protected_quota_fallback:
         quota_eligible = health_eligible
 
+    # Persistent per-combination exclusion sits above transient cooldown: filter
+    # after health/quota gating, before credit admission and ranking. A last-resort
+    # probe keeps a fully excluded set routable exactly once, marked in telemetry.
+    stream_mode = exclusion_stream_mode(body)
+    exclusion_probe = False
+    probe_candidates: tuple[str, ...] = ()
+    exclusion_markers: list[dict[str, Any]] = []
+    if exclusion_store is not None and quota_eligible:
+        exclusion_filter = await exclusion_store.filter_candidates(
+            quota_eligible, operation, stream_mode
+        )
+        for backend_id, info in exclusion_filter.excluded.items():
+            exclusion_markers.append(
+                {
+                    "backend_id": backend_id,
+                    "health_state": snapshots[backend_id].state,
+                    "combination_excluded": True,
+                    "consecutive_failures": info["consecutive_failures"],
+                    "excluded_until_wall": info["excluded_until_wall"],
+                    "stream_mode": "stream" if stream_mode else "nonstream",
+                }
+            )
+        if exclusion_filter.probe_backend_id is not None:
+            exclusion_probe = True
+        probe_candidates = exclusion_filter.probe_candidates
+        quota_eligible = exclusion_filter.eligible
+
     if not quota_eligible:
         _emit_routing_decision(
             logger,
@@ -590,6 +690,7 @@ async def select_candidate_backend(
 
     scored_candidates: list[tuple[float, float, str]] = []
     candidate_details: list[dict[str, Any]] = []
+    candidate_details.extend(exclusion_markers)
     has_credit_capacity = False
     rate_limit_reservation_failed = False
     for backend_id in quota_eligible:
@@ -684,6 +785,8 @@ async def select_candidate_backend(
         return BackendSelectionResult(None, ranked_candidates, snapshots, not has_credit_capacity)
 
     scored_candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    if probe_candidates:
+        scored_candidates.sort(key=lambda item: probe_candidates.index(item[2]))
     for _score, _weight, backend_id in scored_candidates:
         if intake_expired():
             return expired_selection()
@@ -767,21 +870,48 @@ async def select_candidate_backend(
                             charged_cost_usd=None,
                         )
                     continue
-            _emit_routing_decision(
-                logger,
-                model=model,
-                requested_model=effective_requested,
-                resolved_model=effective_resolved,
-                is_alias=effective_is_alias,
-                operation=operation,
-                request_id=request_id,
-                selected_backend=backend_id,
-                reason="selected",
-                estimated_request_cost_usd=estimate.estimated_cost_usd,
-                protected_quota_fallback=protected_quota_fallback,
-                candidates=candidate_details,
+            admission_ticket = None
+            if exclusion_store is not None:
+                admission_ticket = await exclusion_store.admit(
+                    backend_id, operation, stream_mode, probe=exclusion_probe
+                )
+                if admission_ticket is None:
+                    await credit_store.finalize_request(
+                        request_id,
+                        backend_id=backend_id,
+                        charge_reserved=False,
+                        charged_cost_usd=None,
+                    )
+                    if rate_limit_store is not None:
+                        await rate_limit_store.release_request(request_id)
+                    continue
+            try:
+                _emit_routing_decision(
+                    logger,
+                    model=model,
+                    requested_model=effective_requested,
+                    resolved_model=effective_resolved,
+                    is_alias=effective_is_alias,
+                    operation=operation,
+                    request_id=request_id,
+                    selected_backend=backend_id,
+                    reason="combination_excluded_probe" if exclusion_probe else "selected",
+                    estimated_request_cost_usd=estimate.estimated_cost_usd,
+                    protected_quota_fallback=protected_quota_fallback,
+                    combination_excluded_probe=exclusion_probe or None,
+                    candidates=candidate_details,
+                )
+            except BaseException:
+                if exclusion_store is not None:
+                    await exclusion_store.release(admission_ticket)
+                raise
+            return BackendSelectionResult(
+                backend_id,
+                ranked_candidates,
+                snapshots,
+                False,
+                admission_ticket=admission_ticket,
             )
-            return BackendSelectionResult(backend_id, ranked_candidates, snapshots, False)
 
     _emit_routing_decision(
         logger,
@@ -919,8 +1049,10 @@ async def execute_with_single_failover(
     prepared_media: PreparedGoogleMedia | None = None,
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
+    exclusion_store: Any = None,
 ) -> Response:
     started_at = time.monotonic()
+    stream_mode = exclusion_stream_mode(body)
     # Start before admission so storage latency cannot grant a fresh lifetime
     # to a reservation already created inside initial selection. The intake
     # deadline bounds admission/selection only; execution uses the reservation
@@ -964,6 +1096,7 @@ async def execute_with_single_failover(
             prepared_media=prepared_media,
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
+            exclusion_store=exclusion_store,
         )
     except CreditStoreError:
         if rate_limit_store is not None:
@@ -1090,6 +1223,15 @@ async def execute_with_single_failover(
             body=body,
             api_error=api_error,
         )
+        await _record_combination_attempt(
+            exclusion_store,
+            metrics_store,
+            backend_id=first_backend_id,
+            operation=operation,
+            stream_mode=stream_mode,
+            result=first_result,
+            ticket=first_selection.admission_ticket,
+        )
 
         if not first_result.retryable_failure or prepared_continuation is not None:
             if first_result.confirmed_pre_dispatch and rate_limit_store is not None:
@@ -1178,6 +1320,7 @@ async def execute_with_single_failover(
             requested_model=effective_requested,
             is_alias=effective_is_alias,
             intake_deadline_monotonic=intake_deadline_monotonic,
+            exclusion_store=exclusion_store,
         )
         second_backend_id = second_selection.backend_id
         if second_backend_id is None:
@@ -1301,6 +1444,15 @@ async def execute_with_single_failover(
             body=body,
             api_error=api_error,
         )
+        await _record_combination_attempt(
+            exclusion_store,
+            metrics_store,
+            backend_id=second_backend_id,
+            operation=operation,
+            stream_mode=stream_mode,
+            result=second_result,
+            ticket=second_selection.admission_ticket,
+        )
         if second_result.confirmed_pre_dispatch and rate_limit_store is not None:
             await rate_limit_store.release_request(request_id)
         if not isinstance(second_result.response, StreamingResponse):
@@ -1339,6 +1491,10 @@ async def execute_with_single_failover(
             backend_id=first_backend_id,
         )
     finally:
+        if exclusion_store is not None:
+            await exclusion_store.release(first_selection.admission_ticket)
+            if "second_selection" in locals():
+                await exclusion_store.release(second_selection.admission_ticket)
         if not reservation_closed_or_transferred and rate_limit_store is not None:
             await rate_limit_store.release_request(request_id)
         if not reservation_closed_or_transferred and not credit_finalization_attempted:

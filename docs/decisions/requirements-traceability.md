@@ -25,6 +25,16 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 ## Shared Resource Credit Traceability (Implemented runtime)
 
+### Process-local combination exclusion
+
+Repeated-failure routing exclusion is **Implemented with synthetic verification** in
+`routing/exclusion.py`, selection/failover hooks, admin diagnostics and metrics. Tests
+in `tests/unit/test_routing_exclusion.py` establish stream/nonstream independence,
+generation-fenced probe ownership, credit-admissible fallback and recovery. The
+[design and scope](../plans/google-ai-studio-tools-multimodal/live-runner/quota-exclusion-design.md)
+and [operations](../operations/google-features.md) retain memory-only, single-replica
+limitations; no production rollout or cross-restart persistence is claimed.
+
 | Requirement | Implementation | Evidence |
 | --- | --- | --- |
 | Safe canonical credit namespace; optional backend-default groups and canonical Settings keys | `src/foundry_router/credit_groups.py`, `config/` | `tests/unit/test_shared_resource_credit.py` |

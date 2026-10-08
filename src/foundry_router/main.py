@@ -54,9 +54,11 @@ from foundry_router.reconciliation import (
     ReconciliationProvider,
     StaticSettingsReconciliationProvider,
 )
+from foundry_router.routing.exclusion import CombinationExclusionStore
 
 logger = get_logger(__name__)
 _health_store = InMemoryHealthStore()
+_exclusion_store = CombinationExclusionStore()
 _credit_store: CreditStore = InMemoryCreditStore()
 _metrics_store = InMemoryMetricsStore()
 _rate_limit_store: RateLimitStore = InMemoryRateLimitStore()
@@ -322,6 +324,11 @@ async def lifespan(_app: FastAPI) -> Any:
         backends=list(settings.backends.keys()),
         models=list(settings.models.keys()),
     )
+    # Combination-exclusion counters are process-local by design (memory-backed
+    # single replica): every restart re-learns sick combinations, costing at most
+    # three user-visible failures per sick triple before re-exclusion.
+    await _exclusion_store.reset()
+    logger.info("combination_exclusion_reset", reason="process_start")
     get_backend_client()
     # Phase 11: build lifespan-owned stores (memory singletons or Table stores).
     global _health_store, _credit_store, _rate_limit_store, _table_clients
@@ -494,6 +501,7 @@ app.include_router(
         metrics_store=_metrics_store,
         rate_limit_store=_LiveStore("_rate_limit_store"),
         reconciliation_status_snapshot=_reconciliation_status_snapshot,
+        exclusion_store=_exclusion_store,
     )
 )
 app.include_router(
@@ -506,6 +514,7 @@ app.include_router(
         metrics_store=_metrics_store,
         logger=logger,
         rate_limit_store=_LiveStore("_rate_limit_store"),
+        exclusion_store=_exclusion_store,
     )
 )
 

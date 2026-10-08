@@ -96,6 +96,7 @@ def build_router(
     metrics_store: Any,
     logger: Any,
     rate_limit_store: Any | None = None,
+    exclusion_store: Any = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -349,6 +350,7 @@ def build_router(
                     requested_model=resolution.requested_model,
                     is_alias=resolution.is_alias,
                     intake_deadline_monotonic=intake_deadline,
+                    exclusion_store=exclusion_store,
                     **media_options,
                 )
 
@@ -394,6 +396,7 @@ def build_router(
                 requested_model=resolution.requested_model,
                 is_alias=resolution.is_alias,
                 intake_deadline_monotonic=intake_deadline,
+                exclusion_store=exclusion_store,
                 **media_options,
             )
             owner = delivery_owner(request.state)
@@ -473,6 +476,7 @@ def build_router(
             requested_model=resolution.requested_model,
             is_alias=resolution.is_alias,
             intake_deadline_monotonic=intake_deadline,
+            exclusion_store=exclusion_store,
         )
 
     return router

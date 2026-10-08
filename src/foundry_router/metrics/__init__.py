@@ -27,6 +27,31 @@ def _render_alias_info_lines(model_aliases: dict[str, str] | None) -> list[str]:
     return lines
 
 
+def _render_exclusion_lines(
+    entries: dict[tuple[str, str, str], int],
+    resets: dict[tuple[str, str, str], int],
+) -> list[str]:
+    """Render per-combination exclusion counters; label space follows config size."""
+    lines: list[str] = []
+    for name, counts, help_text in (
+        ("entries", entries, "Per-combination exclusion entries"),
+        ("resets", resets, "Per-combination success decays"),
+    ):
+        lines.append(f"# HELP combination_exclusion_{name}_total {help_text}")
+        lines.append(f"# TYPE combination_exclusion_{name}_total counter")
+        for backend, operation, stream in sorted(counts):
+            lines.append(
+                f"combination_exclusion_{name}_total"
+                "{"
+                f'backend="{_escape_label(backend)}",'
+                f'operation="{_escape_label(operation)}",'
+                f'stream="{_escape_label(stream)}"'
+                "} "
+                f"{counts[(backend, operation, stream)]}"
+            )
+    return lines
+
+
 class InMemoryMetricsStore:
     """Thread-safe metric snapshots rendered in Prometheus text format."""
 
@@ -37,6 +62,8 @@ class InMemoryMetricsStore:
         self._latency_count: dict[tuple[str, str], int] = defaultdict(int)
         self._latency_bucket_counts: dict[tuple[str, str, float], int] = defaultdict(int)
         self._estimated_cost_total_usd: dict[tuple[str, str], float] = defaultdict(float)
+        self._exclusion_entries: dict[tuple[str, str, str], int] = defaultdict(int)
+        self._exclusion_resets: dict[tuple[str, str, str], int] = defaultdict(int)
 
     async def observe_request(
         self,
@@ -60,6 +87,21 @@ class InMemoryMetricsStore:
             if estimated_cost_usd is not None and estimated_cost_usd >= 0:
                 self._estimated_cost_total_usd[labels] += estimated_cost_usd
 
+    async def observe_combination_exclusion(
+        self,
+        *,
+        backend: str,
+        operation: str,
+        stream: str,
+        cleared: bool,
+    ) -> None:
+        """Count exclusion entries and success-decay resets per combination."""
+        async with self._lock:
+            if cleared:
+                self._exclusion_resets[(backend, operation, stream)] += 1
+            else:
+                self._exclusion_entries[(backend, operation, stream)] += 1
+
     async def reset(self) -> None:
         async with self._lock:
             self._request_totals.clear()
@@ -67,6 +109,8 @@ class InMemoryMetricsStore:
             self._latency_count.clear()
             self._latency_bucket_counts.clear()
             self._estimated_cost_total_usd.clear()
+            self._exclusion_entries.clear()
+            self._exclusion_resets.clear()
 
     async def render_prometheus(
         self,
@@ -83,6 +127,8 @@ class InMemoryMetricsStore:
             latency_count = dict(self._latency_count)
             latency_buckets = dict(self._latency_bucket_counts)
             estimated_cost_totals = dict(self._estimated_cost_total_usd)
+            exclusion_entries = dict(self._exclusion_entries)
+            exclusion_resets = dict(self._exclusion_resets)
 
         lines: list[str] = []
         lines.append(
@@ -144,6 +190,8 @@ class InMemoryMetricsStore:
                 f'{{model="{_escape_label(model)}",backend="{_escape_label(backend)}"}} '
                 f"{total_cost:.9f}"
             )
+
+        lines.extend(_render_exclusion_lines(exclusion_entries, exclusion_resets))
 
         lines.append(
             "# HELP foundry_router_backend_health_state Backend health state gauge "
