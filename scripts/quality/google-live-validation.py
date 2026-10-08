@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from google_live_budget import REQUEST_LIMIT, TOKEN_LIMIT
+from google_live_execute import execute
 
 from foundry_router.api.adapters.google_schema import load_bounded_json
 
@@ -38,6 +39,7 @@ STATUSES = {
     "pending_case_or_signed_startup_gate",
     "pending_codec_case",
     "code_gate_pending",
+    "docs_supported_pending_live",
 }
 
 
@@ -124,22 +126,54 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--catalog", type=Path, default=CATALOG)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--keyvault-ref", default=None)
+    parser.add_argument("--ledger", type=Path, default=None)
+    parser.add_argument("--case-id", default=None)
+    parser.add_argument("--capability", default="text_nonstream")
+    parser.add_argument("--case-prefix", default="")
+    parser.add_argument("--prompt", default=None)
     args = parser.parse_args()
     try:
         if args.manifest.stat().st_size > MAX_MANIFEST_BYTES:
             raise ValueError("Manifest bound exceeded")  # noqa: TRY301
-        summary = validate_manifest(
-            load_bounded_json(args.manifest.read_text(), max_bytes=MAX_MANIFEST_BYTES),
-            catalog_path=args.catalog,
-        )
+        manifest = load_bounded_json(args.manifest.read_text(), max_bytes=MAX_MANIFEST_BYTES)
+        summary = validate_manifest(manifest, catalog_path=args.catalog)
         if args.execute:
-            print(json.dumps({**summary, "execution": "rejected_missing_protocol_evidence"}))
-            return 2
+            return _execute(manifest, args)
         print(json.dumps(summary, sort_keys=True))
         return 0  # noqa: TRY300
     except (OSError, ValueError, TypeError, KeyError):
         print(json.dumps({"status": "invalid_manifest", "provider_requests": 0}))
         return 2
+
+
+def _execute(manifest: Any, args: Any) -> int:
+    if not args.keyvault_ref or args.ledger is None:
+        print(
+            json.dumps(
+                {
+                    "status": "missing_execution_arguments",
+                    "models": len(manifest.get("models", [])),
+                    "provider_requests": 0,
+                }
+            )
+        )
+        return 2
+    try:
+        summary, code = execute(
+            manifest=manifest,
+            keyvault_ref=args.keyvault_ref,
+            ledger_path=args.ledger,
+            case_id=args.case_id,
+            capability=args.capability,
+            case_prefix=args.case_prefix,
+            prompt=args.prompt,
+        )
+    except (OSError, ValueError, TypeError, KeyError):
+        print(json.dumps({"status": "execution_error", "provider_requests": 0}))
+        return 2
+    print(json.dumps(summary, sort_keys=True))
+    return code
 
 
 if __name__ == "__main__":

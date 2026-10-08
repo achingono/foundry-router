@@ -118,6 +118,21 @@ class BudgetLedger:
                 raise ValueError("Invalid budget ledger")
         return data
 
+    def can_reserve(self, project_label: str, tokens: int) -> bool:
+        """Read-only pre-dispatch budget check; never mutates the ledger."""
+        if type(tokens) is not int or not 1 <= tokens <= TOKEN_LIMIT:
+            return False
+        with locked(self.path):
+            data = self._read()
+            project = data["projects"].get(project_label)
+            if not isinstance(project, dict):
+                return False
+            return not (
+                project["halted"]
+                or project["requests"] >= REQUEST_LIMIT
+                or project["tokens"] + tokens > TOKEN_LIMIT
+            )
+
     def reserve(self, project_label: str, case_id: str, tokens: int) -> None:
         if (
             not isinstance(case_id, str)

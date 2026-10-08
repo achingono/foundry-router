@@ -31,8 +31,39 @@ def test_dormant_cli_no_credential_or_network_access(tmp_path, execute):
     )
     summary = json.loads(result.stdout)
     assert result.returncode == (2 if execute else 0)
-    assert summary["provider_requests"] == 0 and summary["dispatch_eligible_cases"] == 0
+    assert summary["provider_requests"] == 0
+    if execute:
+        assert summary["status"] == "missing_execution_arguments"
+    else:
+        assert summary["dispatch_eligible_cases"] == 0
     assert summary["models"] == 61 and not result.stderr
+
+
+def test_execute_without_eligible_cases_attempts_no_credentials(tmp_path):
+    # Synthetic manifest carries no executable rows: rejection precedes any
+    # credential attempt even when az exists and arguments are complete.
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--manifest",
+            str(MANIFEST),
+            "--execute",
+            "--keyvault-ref",
+            "vault-ref",
+            "--ledger",
+            str(tmp_path / "ledger.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    summary = json.loads(result.stdout)
+    assert result.returncode == 2
+    assert summary["status"] == "no_executable_cases"
+    assert summary["provider_requests"] == 0
+    assert not (tmp_path / "ledger.json").exists()
+    assert not result.stderr
 
 
 @pytest.mark.parametrize("mutation", ["budget", "status", "capability", "duplicate", "pricing"])
