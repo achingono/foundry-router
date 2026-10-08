@@ -171,3 +171,19 @@ nonstreaming 3.8 works on all five projects, and 2.5 models 404 on projects 3–
 exclude persistently failing combinations rather than merely cooling them down (future
 work; cooldown already contains the transient). Cumulative 3.x-ledger spend stays inside
 caps (heaviest project-1: 8/20 requests, 7616/20000 tokens, nothing halted).
+
+Follow-up attempts recorded in the same ledger: `hard2` 3.8-flash `low` on project-1
+still failed HTTP 503 with unknown usage (the reserve stays debited); `hard2`
+3.5-flash-lite `minimal`, proving irrationality of square root of two, passed HTTP 200
+with 783 total observed tokens. `thoughtsTokenCount` was absent, so this does not prove
+live nonzero-thinking settlement. Earlier references to zero thoughts should be read
+as absent thought-token metadata, not an explicit observed zero. These attempts are
+historical; no additional live inference ran during final exclusion verification.
+
+Combination exclusion implementation cleared independent final review. Full local
+verification: **1,584 passed, 3 platform skips, 14 Azurite tests deselected, 89.04%
+coverage**, with **99.32%** coverage for the exclusion module; Ruff check/format and
+mypy passed. Thirty-seven focused exclusion cases cover streaming-mode separation,
+decay/expiry, terminal-outcome classification, exclusive probes, generation/epoch
+fencing, release, credit-admissible alternatives, and metrics. This establishes
+synthetic routing behavior, not production deployment or distributed persistence.
