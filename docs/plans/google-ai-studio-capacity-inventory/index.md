@@ -1,5 +1,7 @@
 # Google AI Studio capacity inventory
 
+For candidate workloads and the evidence behind them, see [Google model task guidance](../../operations/google-model-task-guidance.md).
+
 **Partially implemented**, compiled 2026-10-08 from historical discovery/pricing (2026-10-06), native router observations (2026-10-07), and refreshed catalogs/live quota measurements (2026-10-08). All **310 project/model combinations** (305 historical rows plus five newly discovered rows) are recorded in [inventory.csv](inventory.csv). Provider quota responses establish RPM for **24 model/project buckets**: 10 RPM for 2.5 Flash-Lite on projects 1–2 and 5 RPM for the verified Flash/Robotics buckets below. All 24 buckets have provider-confirmed 250,000 input TPM; 19 have provider-confirmed 20 RPD. Remaining quotas are explicitly unknown.
 
 The labels `project-1` through `project-5` follow credential-array index order in the validation runner. Real project IDs are unknown here. The operator reported five separately keyed free-tier projects; their current tier and identity have not been independently captured. The initial inventory used repository evidence only. The user subsequently authorized live measurements using the existing Key Vault secret; live diagnostics are documented below. Keys remained in memory; production settings were unchanged.
