@@ -31,16 +31,22 @@ inheriting Google's capability profile.
 - `OpenAICompatibleStreamDecoder`: bounded SSE framing, Responses lifecycle events, refusal and
   function-call delta assembly, terminal/failure events and usage absorption.
 - Explicit hook methods for provider request context, feature permission, message building
-  and call translation; a `ChatRequestContext` protocol describing the context the decoder reads.
+  and call translation; a read-only `ChatRequestContext` protocol describing shared context
+  members, with context-parameterized adapter/decoder bases preserving Google's concrete type.
 - A provider label (`"Google"` for Google) so client-visible rejection messages stay identical.
 - `GoogleAiStudioAdapter` and `GoogleStreamDecoder` become thin subclasses; existing
   `google_native`, `google_audio_output` and `google_signed*` subclasses keep working unchanged.
 - Backward-compatible `MAX_GOOGLE_*` constant names re-exported from the Google module.
+- Deterministic pre-extraction characterization fixtures for public rejection objects,
+  upstream request bodies, translated responses and ordered SSE bytes.
 
 ## Out of Scope
 
 - A new configurable `openai_compatible` provider value, endpoint or credential handling.
 - Generalizing `google_tools`, `google_schema` or media helpers (they stay profile-bound).
+- Making package imports transitively Google-free; `api/adapters/__init__.py` retains its
+  existing provider imports. The generic module has no direct runtime Google dependency;
+  the existing `PreparedGoogleMedia` annotation is the sole permitted type-only exception.
 - Any change to forwarding, routing, quota, credit or wire behavior.
 
 ## Entry Criteria
