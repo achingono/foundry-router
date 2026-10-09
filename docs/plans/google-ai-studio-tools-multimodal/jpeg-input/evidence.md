@@ -46,6 +46,6 @@ validator checks bounded syntax/completeness; valid changed pixels cannot be det
 corruption. LossyVP8 remains disabled because native loading tolerated a short tail cut.
 The mixed run's small scheduling margin is a limitation. Its isolated follow-up passed with
 488.05ms max intake,942.88ms max scheduling delay and26083328 incremental RSS bytes.
-[Raw measurement artifacts](measurements/mixed-isolated.json) preserve exact local scope.
+Raw measurement artifacts (local-only `measurements/mixed-isolated.json`) preserve exact local scope.
 Normal128-square JPEG passed126.91ms intake/235.51ms scheduling and1294336 incremental RSS.
 The entropy helper reached95.14% coverage in the full suite.

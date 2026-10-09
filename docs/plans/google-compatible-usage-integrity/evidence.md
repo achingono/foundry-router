@@ -23,7 +23,7 @@ physical attempts under45. Production configuration/image remains unchanged.
 
 ## First corrected all-project assessment
 
-[Remaining ledger](../google-38-responses-diagnostics/remaining-ledger.json) contains14
+Remaining ledger (local-only `../google-38-responses-diagnostics/remaining-ledger.json`) contains14
 physicalattempts, allsingle-attemptcases. Corrected nonstream Responses passedprojects2–5;
 streamspassedprojects1/3/4. Nativepassedprojects2–5 (project 1passedbeforecorrection).
 Project 1nonstreamverificationandprojects 2/5streamsreturned503; noerrorbodyretryoccurred
@@ -36,12 +36,12 @@ priorledgersandnonstreamprerequisites; newfocusedregression503->200SSEpasses.
 
 ## Final bounded retry evidence
 
-[Retry completion](../google-38-responses-diagnostics/stream-retry-ledger.json) used the
+Retry completion (local-only `../google-38-responses-diagnostics/stream-retry-ledger.json`) used the
 remaining two stream attempts on projects 2 and 5. Project 2 returned 503 twice, exhausting
 three total attempts. Project 5 returned 503 then 200, passing completion, aggregate usage,
 synthetic settlement and cleanup on its third total attempt. No successful stream was retried.
 
-[Summary](../google-38-responses-diagnostics/summary.json): native passed 5/5 projects;
+Summary (local-only `../google-38-responses-diagnostics/summary.json`): native passed 5/5 projects;
 corrected nonstream Responses passed 4/5 (project 1 verification returned 503); streaming
 passed 3/5 initially and 4/5 eventually. All successful compatible cases cleared reservations
 and matched synthetic settlement. Historical accounting failures remain unchanged. No new

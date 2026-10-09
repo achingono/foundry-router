@@ -16,7 +16,7 @@ for this read-only script; runtime is unchanged. SonarQube script is absent.
 ## Read-only live attempt
 
 Verifier implementation committed as `56d1fa1`. The authorized single invocation completed
-in 5.27 seconds with [unverified result](results.json), no accepted group ceilings and
+in 5.27 seconds with unverified result (local-only `results.json`), no accepted group ceilings and
 `balance_applied: false`. Its deliberately redacted category combines metadata, identity and
 billing unavailability; the saved result cannot establish the failing boundary or permission
 cause. No repeated billing refresh was dispatched. The live scope/permission/query acceptance
@@ -33,9 +33,9 @@ Full suite: 1,867 passed, 3 skipped, 18 deselected; coverage 89.73%. Runtime/ima
 
 ## Single diagnostic refresh
 
-Implementation committed as `1f135cd`. [Diagnostic result](diagnostic-results.json) records
+Implementation committed as `1f135cd`. Diagnostic result (local-only `diagnostic-results.json`) records
 the provider boundary and fixed `schema` rejection category after 4.101 seconds, with no
-accepted ceilings and no balance application. [Started marker](diagnostic-started.json)
+accepted ceilings and no balance application. Started marker (local-only `diagnostic-started.json`)
 prevents repeat execution. The original result remains unchanged. This narrows the observed
 failure to provider response validation; it does not identify a particular invalid column,
 row, currency or completeness condition. Permission status remains unverified, and validation

@@ -11,7 +11,7 @@ classified 2026-10-07 native router counts and separately records 2026-10-08 dir
 The [inventory narrative](../google-ai-studio-capacity-inventory/index.md) explains the
 unclassified pilot and invalid-key attempts. Ledger usage is transport/accounting evidence,
 not proof of public response success; its reservation totals are not actual provider usage.
-The [fresh survey](../google-ai-studio-capacity-inventory/free-tier-survey-2026-10-08.json)
+The fresh survey (local-only `../google-ai-studio-capacity-inventory/free-tier-survey-2026-10-08.json`)
 contains provider status and thinking profile. Direct provider completions clear neither
 router translation nor streaming gates. All observations are historical samples.
 
@@ -46,9 +46,9 @@ provider evidence where available. Unknown values remain unknown.
 
 ## Newer router observations and unclassified dispatch
 
-The [2026-10-08 router observer](../google-ai-studio-capacity-inventory/live-results-2026-10-08.json)
+The 2026-10-08 router observer (local-only `../google-ai-studio-capacity-inventory/live-results-2026-10-08.json`)
 records four failed/ambiguous 3.5 Flash-Lite nonstreaming outcomes. Its
-[cumulative ledger](../google-ai-studio-capacity-inventory/ledger-2026-10-08.json) has five
+cumulative ledger (local-only `../google-ai-studio-capacity-inventory/ledger-2026-10-08.json`) has five
 new dispatch debits: project-3 was interrupted before result persistence. That dispatch
 has no recorded public/provider outcome and stays unclassified. These observations are
 separate from the earlier pass/fail columns above and from the direct survey.
@@ -115,7 +115,7 @@ budget gate; this stage does not create fresh historical allowance by clearing a
 
 ### Follow-up outcomes
 
-[Persisted results](native-text-results-2026-10-08.json) record fifteen actual dispatches;
+Persisted results (local-only `native-text-results-2026-10-08.json`) record fifteen actual dispatches;
 [the retained ledger](ledger-native-text-2026-10-08.json) includes every prior debit plus
 these requests. 3.5 Flash-Lite minimal passed nonstreaming and streaming on all five keys
 (ten successes), with valid public text and 8–9 observed total tokens. 3.8 Flash low failed

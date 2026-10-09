@@ -11,7 +11,7 @@ Independent deep review on2026-10-05 resolved all Critical/Major findings. The p
 strict envelope/content/candidate allowlists, bounded raw decoding and4MiB aggregate output.
 Native media validation executes one decode pass per adapter check/build.
 
-[Native mixed benchmark](measurements/native-mixed.json):8 concurrent callers×100 requests;
+Native mixed benchmark (local-only `measurements/native-mixed.json`):8 concurrent callers×100 requests;
 941.97ms maximum event-loop delay,488.39ms maximum intake,37,404,672 bytes incremental peak RSS.
 All predeclared gates passed; local macOS/Python3.14 evidence only, with limited loop-delay margin.
 Final native verification:711 passed,15 deselected,87.78% full coverage; Ruff check/format
@@ -64,7 +64,7 @@ reap against repeated cancellation, and readiness shares the same two process-wi
 Current full local suite:789 passed,1 Linux-worker skip,15 deselected,87.87% coverage.
 New parser/preparer/worker modules each exceed80% coverage; Ruff check/format and mypy pass.
 242 relative links resolve and final diff whitespace check passes. Current-code Docker build
-passed, with real Linux readiness/valid/invalid/reap smoke. [Current64KiB4page benchmark](measurements/pdf-maximum-preliminary.json)
+passed, with real Linux readiness/valid/invalid/reap smoke. Current64KiB4page benchmark (local-only `measurements/pdf-maximum-preliminary.json`)
 passed:85,585,920 incremental aggregate RSS,142,155,776 peak aggregate RSS,204.73ms max intake,
 3.27ms max loop delay. This fixture is maximum bytes/pages with padding, not maximum parser work;
 mixed/max-work/current-code invalid resource and actual Linux client/lifecycle gates remain open.
@@ -97,9 +97,9 @@ not eight simultaneously admitted parsers. All configured wall/intake/loop/RSS g
 
 | Workload | Incremental aggregate RSS bytes | Peak aggregate RSS bytes | Maximum intake ms | Maximum loop delay ms |
 | --- | --- | --- | --- | --- |
-| [Mixed](measurements/pdf-fullpath-mixed.json):65534-byte four-page PDF,2048 operators, four384-square PNGs | 120946688 | 189972480 | 248.29 | 18.19 |
-| [Aggregate](measurements/pdf-fullpath-aggregate.json):two blank one-page PDFs,131072 bytes total | 106455040 | 174968832 | 470.60 | 18.06 |
-| [Late-invalid](measurements/pdf-fullpath-work-invalid.json):final unsupported operator after preceding streams | 75091968 | 143593472 | 135.94 | 19.32 |
+| Mixed (local-only `measurements/pdf-fullpath-mixed.json`):65534-byte four-page PDF,2048 operators, four384-square PNGs | 120946688 | 189972480 | 248.29 | 18.19 |
+| Aggregate (local-only `measurements/pdf-fullpath-aggregate.json`):two blank one-page PDFs,131072 bytes total | 106455040 | 174968832 | 470.60 | 18.06 |
+| Late-invalid (local-only `measurements/pdf-fullpath-work-invalid.json`):final unsupported operator after preceding streams | 75091968 | 143593472 | 135.94 | 19.32 |
 
 The invalid run has zero admitted-valid requests and200 inspected-invalid rejections. Cgroup peak
 is recorded separately in each artifact and stays below512MiB. Earlier measurements above are

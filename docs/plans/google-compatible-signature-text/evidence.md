@@ -27,7 +27,7 @@ persisted success and failure envelopes before display or resume.
 
 ## Live acceptance, 2026-10-08
 
-[Persisted results](results.json) contain eight passes: one nonstreaming/streaming pair
+Persisted results (local-only `results.json`) contain eight passes: one nonstreaming/streaming pair
 on each of projects 2–5, exact `gemini-3.5-flash-lite`, compatible surface, provider-default
 thinking. Public and provider HTTP status were 200 throughout. Every result contains
 completed public text, matching terminal usage and synthetic settlement, with zero remaining

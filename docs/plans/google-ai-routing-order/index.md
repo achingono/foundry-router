@@ -32,7 +32,7 @@ path. Media is deferred; tools and signed continuation are conditional on coding
 
 The [text verification matrix](text-verification-matrix.md) reconciles all twenty selected
 project/model combinations, historical router counts, newer direct/router failures and
-remaining operation/accounting gates. Reconciliation and a [fresh native stage](native-text-results-2026-10-08.json) are recorded:
+remaining operation/accounting gates. Reconciliation and a fresh native stage (local-only `native-text-results-2026-10-08.json`) are recorded:
 3.5 Flash-Lite passed nonstreaming/streaming on all five keys; 3.8 Flash failed all five
 nonstreaming cases. Remaining live/accounting/production gates stay partial.
 

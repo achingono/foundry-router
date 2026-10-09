@@ -59,7 +59,7 @@ prebodycancel/finalquality/deepreview/live gates remain open.
 none,512MiB/2CPUs and8×100 calls, exact480044B WAV output passed at10,567,680B sampled aggregate
 RSS increment,30successful/770busy; malformed final data-size header passed at9,900,032B,
 36safe502/764busy. Both retained full expected typed debit and zero in-flight reservations.
-Artifacts: [maximum](measurements-max.json), [invalid](measurements-invalid.json).
+Artifacts: maximum (local-only `measurements-max.json`), invalid (local-only `measurements-invalid.json`).
 The bare route harness includes actual bounded forwarding/parser/admission/settlement and
 clients that release consumed output. It does not claim outer delivery-owner verification;
 actual application blocked-start/body cancellation/deadline tests provide that separate evidence.
@@ -67,7 +67,7 @@ actual application blocked-start/body cancellation/deadline tests provide that s
 Mixed exact PNG/WAV run stayed below128MiB increment (107,053,056B), with1WAV/72PNG successes,
 but failed the new independent per-partition debit check because the synthetic backend copy
 retained the first backend's credit_group. This is a fixture defect, not evidence of passing
-mixed settlement. Preserved [failed artifact](measurements-mixed-partition-failed.json).
+mixed settlement. Preserved failed artifact (local-only `measurements-mixed-partition-failed.json`).
 Harness now gives the second backend its own credit group/allowance and requires positive
 admission and correct outcome/debit/in-flight state for every pool. Independent reviewer approved
 this strengthened measurement design; its corrected Linux repeat remains unexecuted.
@@ -91,7 +91,7 @@ memory-only suite; no production/distributed-state claim is made.
 
 A macOS synthetic bookkeeping-only run validates the corrected two credit partitions, known
 input-quota counts and released quota reservations for admitted WAV requests, plus the
-untouched second credit partition: [fixture check](fixture-bookkeeping-local.json). This disables Linux
+untouched second credit partition: fixture check (local-only `fixture-bookkeeping-local.json`). This disables Linux
 RSS sampling explicitly and provides no resource/operational evidence. The harness now also
 checks shared project requests/input tokens and empty quota reservations. The local check
 admitted no PNG requests on macOS, so it does not establish mixed admission or image settlement;
@@ -101,9 +101,9 @@ additional quota assertions; they establish their recorded scope only.
 
 Approval service recovered on2026-10-06. Corrected mixed Linux run passed with88,915,968B
 aggregate RSS increment,1WAV/58PNGsuccesses and741busy; independent debit, input quota and no
-quota reservations checks pass. [Artifact](measurements-mixed.json). Malformed-WAV/valid-PNG
+quota reservations checks pass. Artifact (local-only `measurements-mixed.json`). Malformed-WAV/valid-PNG
 mixed run passed at103,706,624B,1safeWAV502/67PNGsuccesses/732busy,
-[artifact](measurements-mixed-invalid.json). WAV invalidity is a semantic data-size header
+artifact (local-only `measurements-mixed-invalid.json`). WAV invalidity is a semantic data-size header
 mismatch detected after bounded wire/base64 intake; PCM samples are not scanned. The artifact's
 historical `late-invalid` workload label does not imply an expensive late sample scan.
 Nonqueued admission provides no fairness guarantee; few audio admissions establish this finite
@@ -119,7 +119,7 @@ Exact-model live/free-tier/codec evidence and startup enablement remain unverifi
 
 Final strengthened mixed measurement passed:4WAV/34PNGsuccesses,762busy,78,069,760B aggregate
 RSS increment,38projectrequests/152knowninputtokens; both credit partitions active_reservations0,
-inflight0 and exact full typed debit. [Artifact](measurements-mixed-reservations.json).
+inflight0 and exact full typed debit. Artifact (local-only `measurements-mixed-reservations.json`).
 This closes the scoped mixed-output resource bookkeeping finding. Local runtime code checkpoint
 remains1404tests/89.17%; subsequent verification-only signed-process tests lift the full suite
 to1406passed/89.17%. No audio runtime changes or live inference since the cleared review.

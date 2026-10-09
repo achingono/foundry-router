@@ -18,8 +18,8 @@ existing Table binding/verifier checks passed. No runtime source change in this 
 First read-only what-if exceeded the helper15second metadata deadline and was terminated;
 no scope acceptance claimed from that attempt. The finite60second read-only check returned
 Succeeded: exactly one app, two tables and two table-scoped role grants are Create;14 other
-resources are Ignore and no other changes. See [safe scope](what-if.json), [validation](validation.json)
-and [image digest](image.json). Pending image is
+resources are Ignore and no other changes. See safe scope (local-only `what-if.json`), validation (local-only `validation.json`)
+and image digest (local-only `image.json`). Pending image is
 `registry.example.test/foundry-router@sha256:d8f68e5c638510a38ad30c3cadb80d96bd97ae1936a46c75083ac1b7d59fd438`.
 No push, deployment,
 inference, restart or production changes.
@@ -29,5 +29,5 @@ pre-refresh status sentence was corrected. Updated relative links and diff white
 
 Operator approved the current isolated image push/deployment on2026-10-09. Registry push
 completed and returned the exact approved manifest digest; see
-[push result](../table-real-inference/push-result.json). The original `pushed:false` image
+push result (local-only `../table-real-inference/push-result.json`). The original `pushed:false` image
 artifact records preparation-time state, not the later execution. Deployment is underway.

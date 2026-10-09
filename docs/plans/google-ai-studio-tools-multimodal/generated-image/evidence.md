@@ -14,7 +14,7 @@ cancel, deadlinekill/reap before reuse; submissionfailure and childexitrace fixe
 metadata/truncation/excessdeflate/CRC/secondstream/headerfragment, capacity/cancel/deadline,
 submissionfailure/pipefailure/stdoutoverflow/wrongmetadata/exitrace. Latestfullsuitepending.
 
-[Direct Linux near-maximum worker measurement](measurements/output-png-linux-near-max.json):
+Direct Linux near-maximum worker measurement (local-only `measurements/output-png-linux-near-max.json`):
 8×100,1027053B PNG/4195328Bexpanded,syntheticproviderwait+realchild,networkdisabled512MiB/2CPU:
 98valid702capacitybusy, sampledparent+childRSSgrowth36528128B,maxloop1.94ms,request69.23ms.
 Cgrouppeak51556352B differsfromsampledsum70496256Bdueaccounting/share scope; neitheris asserted
@@ -78,10 +78,10 @@ Latest network-disabled Linux HTTP8×100 results, with consumed-output clients:
 
 | Workload | Provider outcomes | Preadmission503 | Sampled incremental parent+children RSS | Max loop delay |
 | --- | --- | --- | --- | --- |
-| [Near-limit output](measurements/http-linux-valid-consumed.json) |81completed200 |719 |109969408B |36.07ms |
-| [Late-invalid output](measurements/http-linux-late-invalid-consumed.json) |94billable502 |706 |103583744B |18.75ms |
-| [Exact1048576B output](measurements/http-linux-exact-output.json) |91completed200 |709 |108965888B |37.16ms |
-| [Input/output combination](measurements/http-linux-combined-consumed.json) |17completed200 |783 |116994048B |33.71ms |
+| Near-limit output (local-only `measurements/http-linux-valid-consumed.json`) |81completed200 |719 |109969408B |36.07ms |
+| Late-invalid output (local-only `measurements/http-linux-late-invalid-consumed.json`) |94billable502 |706 |103583744B |18.75ms |
+| Exact1048576B output (local-only `measurements/http-linux-exact-output.json`) |91completed200 |709 |108965888B |37.16ms |
+| Input/output combination (local-only `measurements/http-linux-combined-consumed.json`) |17completed200 |783 |116994048B |33.71ms |
 
 Each run returnedzero inflight credit and bounded expected artifacts/errors. Combination input
 used885910decodedB of1048576B allowed and two384×384PNGs; it is not full aggregate-cap evidence.
@@ -99,7 +99,7 @@ request. Output-only pools retain two concurrent one-unit leases. Atomic acquire
 released-flag/multi-release transactions share a threading lock. Weighted cancellation retains
 both units through child cleanup; mixed contention/double-close/thread races tested.
 
-[Exact combined weighted result](measurements/http-linux-exact-combined-weighted.json):8×100,
+Exact combined weighted result (local-only `measurements/http-linux-exact-combined-weighted.json`):8×100,
 19completed200/781preadmission503,119824384B sampled RSS increment,40.12ms max loop delay,
 zero inflight. Both exact wire limits exercised. Additional late-invalid/mixed capacity and
 final review remain required; startup gate stays closed. This amendment reduces admitted
@@ -107,13 +107,13 @@ concurrency, not payload caps or billing reservations.
 
 Weighted exact combined late-invalid also passed:47billable502/753preadmission503,
 104865792B sampledRSS increment,37.15ms loopdelay,zero inflight,
-[artifact](measurements/http-linux-exact-combined-weighted-invalid.json). Weighted implementation
+artifact (local-only `measurements/http-linux-exact-combined-weighted-invalid.json`). Weighted implementation
 independent review cleared Critical/Major;39focusedpassed1Linuxskip. Latest full1300passed,
 3Linuxskips,15Docker/Azuritedeselected,88.99%coverage.
 
 Mixed output-only one-unit/combined two-unit exact-cap pools passed shared capacity:
 22completed200/778preadmission503,97488896B RSS increment,18.37ms loopdelay,zero inflight,
-[artifact](measurements/http-linux-mixed-weighted.json). Synthetic sameproject aliasuses same
+artifact (local-only `measurements/http-linux-mixed-weighted.json`). Synthetic sameproject aliasuses same
 credit/quota group. No claims about fairness or other media/state capacity arise from this run.
 
 Final weighted build/synthetic Docker health test passed. Ruff/format/mypy and diff whitespace

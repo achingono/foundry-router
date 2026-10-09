@@ -11,7 +11,7 @@ persistence, withholding/replay and historical result preservation. Independent 
 review cleared no Critical/Major findings; see [review](implementation-review.md).
 Final full suite:2,019passed,3skipped,18deselected,89.75%coverage. Ruff lint/format and mypy
 (70 runtime source files), links/diff pass. Verifier-only code needs no Docker rebuild;
-Sonar scanner script absent. [New baseline](ledger-baseline.json) captures unchanged
+Sonar scanner script absent. New baseline (local-only `ledger-baseline.json`) captures unchanged
 current cumulative ledger; no new allowance. No live requests dispatched in implementation.
 
 ## Bounded live outcomes

@@ -10,8 +10,8 @@ pass. Dormant CLI performs no work; documentation links and diff whitespace pass
 scanner script is absent. No Docker rebuild needed for verifier-only code.
 Single reviewed live invocation remains pending; prior results are immutable.
 
-The single invocation completed in 3.524 seconds. [Result](diagnostic-results.json) records
-fs-openclaw page 1 HTTP 429 and absent Retry-After; [started marker](diagnostic-started.json)
+The single invocation completed in 3.524 seconds. Result (local-only `diagnostic-results.json`) records
+fs-openclaw page 1 HTTP 429 and absent Retry-After; started marker (local-only `diagnostic-started.json`)
 is consumed. Normal provider stopped without reading the error body or querying fs-swarm.
 No ceilings accepted or balances applied. This proves only that this billing request was
 throttled, not its cause/reset time or permission completeness. No automatic retry or new

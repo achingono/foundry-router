@@ -36,7 +36,7 @@ with finite256atomregex state and linearforwardprogress. Originalstrictjsondecod
 nonfinite/depth/node/byte semantics remain.31focuseddepth tests and160scanner/state/signedHTTP
 regressions pass. Independent99,531differentialprototypecases matched originalguard.
 
-[Current-source Linux microbenchmark](quote-run-linux.json), networknone512MiB/2CPU:
+Current-source Linux microbenchmark (local-only `quote-run-linux.json`), networknone512MiB/2CPU:
 2,000,002Bplain2.44ms,quotes22.13ms,backslashes7.96ms,oddbackslashquote8.17ms;
 1,200,002BUnicodeescapedstructural21.41ms, all lossless,peakRSS57420KiB. This is scanner evidence
 only. Earlier source-mounted HTTP probes inadvertently imported installed prechangepackage;

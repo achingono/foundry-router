@@ -24,8 +24,8 @@ or Major findings; single immutable CAD acceptance entrypoint also cleared. Cano
 configuration, operations, security, traceability and routing roadmap are updated.
 The single immutable read-only CAD acceptance invocation completed in 6.129 seconds with
 `status: unverified`, provider-boundary `http_rejection`, no accepted groups and
-`balance_applied: false`. See [result](diagnostic-results.json) and
-[consumed invocation marker](diagnostic-started.json). Public-rate validation preceded
+`balance_applied: false`. See result (local-only `diagnostic-results.json`) and
+consumed invocation marker (local-only `diagnostic-started.json`). Public-rate validation preceded
 billing requests, but no complete batch/rate metadata was returned, so no numerical live
 conversion claim is made. Billing rejection does not establish authorization, data
 completeness or either group's accepted ceiling. No raw HTTP error was retained; do not

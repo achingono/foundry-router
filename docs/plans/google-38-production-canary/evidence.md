@@ -22,7 +22,7 @@ Status: **Partially implemented**. Production deployment was withheld after live
 | Project4 streaming | Failed | 3 | Google503 on all three; natural cleanup and conservative settlement passed |
 | Project4 cancellation | Withheld | 0 | Streaming prerequisite failed |
 
-Retained artifacts: [initial stage](stage-ledger.json), [project3 retries](stage-recovery-ledger.json), [project4 assessment](stage-project4-ledger.json). Total7physicalattempts/8960reservedtokens, within16physical/20480reservedtoken combined allowance. These are fresh canary attempts, not replayed diagnostic slots. Both failed logical combinations exhausted three attempts; remaining global headroom does not reopen them. No prompts, outputs or credentials retained.
+Retained artifacts: initial stage (local-only `stage-ledger.json`), project3 retries (local-only `stage-recovery-ledger.json`), project4 assessment (local-only `stage-project4-ledger.json`). Total7physicalattempts/8960reservedtokens, within16physical/20480reservedtoken combined allowance. These are fresh canary attempts, not replayed diagnostic slots. Both failed logical combinations exhausted three attempts; remaining global headroom does not reopen them. No prompts, outputs or credentials retained.
 
 The stream verifier fed Google's503 error body through its SSE observer, causing the local public fixture to return500 rather than preserving503. Provider503 was observed and recorded directly; this is a verifier limitation, not evidence that production returned500. It does not establish a successful stream, early delivery or cancellation. Failure bodies were not retained.
 

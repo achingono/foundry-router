@@ -15,7 +15,7 @@ so no Docker rebuild is applicable. SonarQube script is absent.
 
 ## Single live diagnosis, 2026-10-08
 
-Committed observer `193a65d` ran once. [Safe results](diagnostic-results.json) record
+Committed observer `193a65d` ran once. Safe results (local-only `diagnostic-results.json`) record
 provider schema rejection after 3.749 seconds. Group `fs-openclaw`, page 1, returned successful
 HTTP category, valid JSON/properties, three valid required columns, one consistently sized
 row, matching resource membership, no negative/invalid amount, no unknown/duplicate columns,
@@ -24,7 +24,7 @@ contract and explains rejection for this observed page. No billing amount, actua
 identifier, resource ID or raw response is retained. Group fs-swarm was not queried after the
 failure, so its currency and billing acceptance remain unknown.
 
-[Started marker](diagnostic-started.json) consumes this invocation; no replay or extra probes.
+Started marker (local-only `diagnostic-started.json`) consumes this invocation; no replay or extra probes.
 No ceiling was accepted or balance applied. A currency policy requires explicit operator
 inputs and independent review before any conversion; never treat non-USD amounts as USD.
 Production remains memory/one and the prepared isolated Table deployment remains unapproved.

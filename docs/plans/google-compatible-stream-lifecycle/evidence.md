@@ -29,7 +29,7 @@ inclusive thought settlement, rejection/ownership failures and retained partial 
 89.74%. Ruff lint/format and mypy (70 runtime files), relative links and diff whitespace
 pass. Contextual review cleared all Critical/Major findings; see
 [review](implementation-review.md). Verifier-only work needs no Docker rebuild; Sonar
-scanner script absent. [Immutable baseline](ledger-baseline.json) copies the existing full
+scanner script absent. Immutable baseline (local-only `ledger-baseline.json`) copies the existing full
 cumulative ledger with no budget reset. No live requests sent in implementation.
 
 ## Single bounded live stage
@@ -54,5 +54,5 @@ amendment is needed before further calls. Historical results remain immutable.
 Every cancellation case was withheld after its preceding stream failed. No cancellation
 live gate is cleared. Each project 2–5 now has one remaining cumulative request slot;
 project 1 has none. Do not reset allowance or rerun consumed IDs. The stage's project failure
-halts remain effective on replay. [Progress](progress.json) preserves numeric observations
+halts remain effective on replay. Progress (local-only `progress.json`) preserves numeric observations
 before later awaits. Production remains memory/one and deployment approval remains pending.

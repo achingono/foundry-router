@@ -18,6 +18,6 @@
 | `gemma-4-26b-a4b-it` | 4 / 5 | 39 | 0 | 4 | 1.349 |
 | `gemma-4-31b-it` | 0 / 5 | 0 | 0 | 0 | Unknown |
 
-Sources: [survey](free-tier-survey-2026-10-08.json), [model ramps](model-rate-ramps-2026-10-08.json). The earlier 2.5 Flash-Lite ramp is recorded separately in the [inventory](index.md); zeros in its ramp columns above mean that model was intentionally excluded from the later model-ramp stage.
+Sources: survey (local-only `free-tier-survey-2026-10-08.json`), model ramps (local-only `model-rate-ramps-2026-10-08.json`). The earlier 2.5 Flash-Lite ramp is recorded separately in the [inventory](index.md); zeros in its ramp columns above mean that model was intentionally excluded from the later model-ramp stage.
 
 3.5 Flash-Lite failed all fresh probes after historical success. 3.7/3.8 Flash and Gemma encountered intermittent capacity/timeout failures. Small successful probes on 3.1 Flash-Lite were followed by timeouts in every project ramp. 3 Flash Preview and 3.5/3.6 Flash completed bursts up to explicit quota rejection; this does not establish behavior on substantive workloads.

@@ -57,18 +57,18 @@ scale-out or a collector deployment. Image push/deployment execution is now unde
 
 Approved execution completed image push and deployment. Registry digest matched; live
 deployment binding, readiness, authenticated model/admin checks and rejected unauthenticated
-model discovery passed. See [deployment](deployment-result.json), [push](push-result.json)
-and [preflight](preflight-result.json). Initial preflight used an incorrect local snapshot
+model discovery passed. See deployment (local-only `deployment-result.json`), push (local-only `push-result.json`)
+and preflight (local-only `preflight-result.json`). Initial preflight used an incorrect local snapshot
 field name after read-only checks; corrected preflight passed before any inference.
 
-The bounded [ledger](ledger.json) records model-1 nonstream failed HTTP503 after2.389seconds,
+The bounded ledger (local-only `ledger.json`) records model-1 nonstream failed HTTP503 after2.389seconds,
 no verified usage/debit and no verified cleanup. Model-2 nonstream has a started entry with
 no result; its pre-request status check could not establish clean state. Both retain
 $0.03136 reserved estimated budget each ($0.06272 total). Started is not proof of upstream
 dispatch; do not infer model-2 provider traffic or rewrite the ambiguous entry. No replay.
 Neither streaming case ran and the four-pass restart prerequisite failed, so restart withheld.
 
-[Post-failure read-only status](post-failure-status.json) still returned readiness200:
+Post-failure read-only status (local-only `post-failure-status.json`) still returned readiness200:
 model-1 balance100USD estimate, inflight0.03081USD and one active reservation; model-2
 balance100USD estimate and no reservations. These local estimates are not billed costs.
 The active reservation explains failed clean-status verification but does not establish the

@@ -333,8 +333,8 @@ replay, each request separately admits and charges known40input/12output tokens 
 local estimate), with zero credit/quota reservations and both signed capacityslots released.
 Changed-key second child rejects422invalid_provider_state before any provider dispatch.
 
-[Local3.14.7 evidence](process-restart-local.json) and
-[Linux3.12.15 evidence](process-restart-linux.json) retain only status/counts/cleanup/PIDs and
+Local3.14.7 evidence (local-only `process-restart-local.json`) and
+Linux3.12.15 evidence (local-only `process-restart-linux.json`) retain only status/counts/cleanup/PIDs and
 scope. Linux uses networknone512MiB/2CPU with a test-only image layer containing pinnedSDK;
 initial runtime-image attempt failed before fixture execution because devSDK was absent.
 No production image/dependency or runtime changes were required. This proves fresh interpreter
@@ -382,10 +382,10 @@ joint feasible maximumquote/history fixture for those selected state dimensions,
 independentstate/token/turnlimit simultaneously. ActualSDKstreamcompleted+usage+carriers and
 nativeoriginalPart/signature replay asserted; no HTTP200-onlysuccessclaim.
 
-[Full current-source Linux measurement](quote-resource-history-linux.json) 8×100,networknone/
+Full current-source Linux measurement (local-only `quote-resource-history-linux.json`) 8×100,networknone/
 512MiB/2CPU:11nonstream/15stream completions,774preadmissionbusy, noinvalidcompletions orretry;
 knowncredit/inputquota andzerocredit/quotareservations pass. **Resourcegatefails**152846336BRSS
-increment/158.35msloop. [Onecaller current-source probe](quote-resource-current-source-probe.json)
+increment/158.35msloop. Onecaller current-source probe (local-only `quote-resource-current-source-probe.json`)
 passes43.31msloop/43,245,568BRSS but doesnotcloseconcurrentgate. Previousprobe framingfailure,
 oldinstalledpackage probes and original60secloadtimeout remain retained. Harness now checks every
 actualnewcarrier/serializedwire/headroom and returns boundedloadtimeout failurefacts.
@@ -401,12 +401,12 @@ be labeled separately and cannot replace the original failedSDKbudget. No gates 
 Reviewedattribution added synchronousinclusivecount/max/total timings bymain/workerthread;
 sourcepath/SHA/upstreamwire recorded. InitialpreencodedstrictSDKmodel_validate incorrectly
 requiredmissingusage details (17invalidcompletions); retained
-[failedartifact](quote-resource-preencoded-profile.json) isnotresourcepass. FaithfulpinnedSDK
+failedartifact (local-only `quote-resource-preencoded-profile.json`) isnotresourcepass. FaithfulpinnedSDK
 AsyncAPIResponse.parse/AsyncStream replacesstrictfixture, inventingnousagefields.
-[Faithfulpreencoded8×100](quote-resource-preencoded-sdkparse.json):27nonstream29streamvalid,
+Faithfulpreencoded8×100 (local-only `quote-resource-preencoded-sdkparse.json`):27nonstream29streamvalid,
 744busy,correctbilling/cleanup,**fails**138715136BRSS/53.38msloop. It omitsSDKrequestserialization
 andoffloadsMockProviderdecode/harnessprospectivechecks; originalSDKgate remainsseparate.
-[SDKprofile](quote-resource-sdk-profile.json):34valid/766busy,correctsettlement,
+SDKprofile (local-only `quote-resource-sdk-profile.json`):34valid/766busy,correctsettlement,
 134549504BRSS/259.79msloopfails. Profilesareinclusive/overlapping; nosummingtotalsasCPU.
 
 Attributioncanonical_bytes129738calls/59dispatches,workerbuildmax284.88ms/check149.52ms/digest
@@ -438,7 +438,7 @@ noCritical/Major implementationfindings. No cache,digestskip,externalrawparser o
 Newprofileswithcanonicalfastpath reduceworkercheck/buildcost, but concurrentresourcegatesstill
 fail. Firsttwo benchmarkcontainersranconcurrently:preencoded178180096B/63.59ms,
 SDK144699392B/155.47ms; retaintheseasrecordedhostcontentionruns, notfinalisolatedgate.
-[Isolatedpreencodedrepeat](quote-canonical-preencoded-isolated.json):40valid/760busy,correct
+Isolatedpreencodedrepeat (local-only `quote-canonical-preencoded-isolated.json`):40valid/760busy,correct
 billing/cleanup,133156864BRSS (below134217728Bcap) but51.71msloopfails50ms. FullSDKisolatedrepeat
 pending. Privatewire/context/history/carrierbounds unchanged. SourceSHA/pathincluded artifacts.
 
@@ -448,7 +448,7 @@ withoutreleasingactiveworkers early. This isnotproofthatretentionexplainsallreso
 No helperruntimeedityet; startupgate remainsclosed.
 
 IsolatedfullSDKcanonicalrepeat41valid/759busy,correctbilling/cleanup,butfails135450624BRSS/
-127.16msloop [artifact](quote-canonical-sdk-isolated.json). CurrentcanonicalruntimeDockerbuild/
+127.16msloop artifact (local-only `quote-canonical-sdk-isolated.json`). CurrentcanonicalruntimeDockerbuild/
 synthetichealth22.77sec passed; optimizationcodegateonly, resourcegateunresolved.
 
 Narrowapprovedworkerretentionfixadded defaultownedwork anddetachescompletedTask/work/runrefs;
@@ -480,8 +480,8 @@ The conditional Sonar scan script is absent. Maximum signed resource repeats rem
 signed startup, exact-model live validation, and production gates remain closed.
 
 Current isolated resource repeats, sequential network-disabled Linux 512 MiB / two CPUs,
-8 callers × 100 attempts: [preencoded artifact](quote-worker-preencoded-isolated.json) records
-131,366,912 B incremental RSS and 76.93 ms maximum loop delay; [full SDK artifact](quote-worker-sdk-isolated.json)
+8 callers × 100 attempts: preencoded artifact (local-only `quote-worker-preencoded-isolated.json`) records
+131,366,912 B incremental RSS and 76.93 ms maximum loop delay; full SDK artifact (local-only `quote-worker-sdk-isolated.json`)
 records 133,566,464 B and 117.50 ms. Both RSS values satisfy 134,217,728 B, but both loop delays
 exceed 50 ms. There are respectively 59 and 33 valid completions, all other load requests return
 pre-admission 503, and known billing/quota, worker drain and zero active reservations pass.
@@ -510,30 +510,30 @@ projection differential cases matched the original strict snapshot decoder.
 Projection verification: full 1,474 passed, three platform skips, 15 Docker/Azurite deselected,
 89.27% coverage; Ruff check/format (534 files), mypy (61 files), and whitespace pass. Linux
 Python 3.12 runs 99 canonical/projection/actual SDK signed integration tests successfully.
-Profiled sequential repeats still fail: [preencoded](quote-projection-preencoded-isolated.json)
-153,235,456 B RSS / 63.75 ms loop; [SDK](quote-projection-sdk-isolated.json) 143,355,904 B /
+Profiled sequential repeats still fail: preencoded (local-only `quote-projection-preencoded-isolated.json`)
+153,235,456 B RSS / 63.75 ms loop; SDK (local-only `quote-projection-sdk-isolated.json`) 143,355,904 B /
 117.17 ms. Both preserve known billing/quota and successful completion/drain. These are resource
 failures, not enablement evidence. Unprofiled repeats will distinguish timing-wrapper overhead;
 no claim that profiling explains all failure. A first unprofiled run overlaps the required Docker
 build and is treated as host-contention evidence only; it needs an isolated repeat.
 
 The final projection runtime Docker build and synthetic health test pass (26.54 seconds).
-An [unprofiled preencoded run](quote-projection-preencoded-unprofiled.json) overlapped that build
+An unprofiled preencoded run (local-only `quote-projection-preencoded-unprofiled.json`) overlapped that build
 and failed 189,669,376 B / 74.95 ms; retain as contention evidence, not an isolated result.
 
-The [isolated unprofiled preencoded repeat](quote-projection-preencoded-unprofiled-isolated.json)
+The isolated unprofiled preencoded repeat (local-only `quote-projection-preencoded-unprofiled-isolated.json`)
 still fails: 198,008,832 B incremental RSS / 98.52 ms loop, 30 valid completions and 770 busy
 responses, correct known billing/quota and drain. Removing profiling does not establish the
 resource gate. A [standard decoder string-scan proposal](../json-depth-scan/decoder-string-design.md)
 is submitted for independent review; no scanner changes yet.
 
-The [unprofiled full SDK projection repeat](quote-projection-sdk-unprofiled-isolated.json)
+The unprofiled full SDK projection repeat (local-only `quote-projection-sdk-unprofiled-isolated.json`)
 fails 135,954,432 B / 117.02 ms, with 91 successful completions and 709 busy responses;
 billing/quota/drain remain valid. The independently approved strict string scanner is now
 implemented with focused tests; aggregate signed resource repeats are pending for that change.
 
-Current strict-scanner unprofiled sequential artifacts: [preencoded](quote-decoder-preencoded-isolated.json)
-190,414,848 B / 52.72 ms, 45 completions; [SDK](quote-decoder-sdk-isolated.json) 171,003,904 B /
+Current strict-scanner unprofiled sequential artifacts: preencoded (local-only `quote-decoder-preencoded-isolated.json`)
+190,414,848 B / 52.72 ms, 45 completions; SDK (local-only `quote-decoder-sdk-isolated.json`) 171,003,904 B /
 113.20 ms, 23 completions. Both fail original resource caps; all other load requests return 503,
 known usage billing/quota and drain remain valid. Existing body buffering precedes shared parsing
 admission; an [early body admission proposal](early-body-admission-design.md) is awaiting review.
@@ -560,9 +560,9 @@ runtime cap or cleanup semantics changed. Remaining resource, codec and live gat
 
 Reconciled-head resource rerun, 2026-10-06 (`fce71aa`, sequential isolated network-disabled
 Linux 512 MiB / 2 CPUs, 8 callers x 100, quote-heavy feasible-completion fixture): full suite
-1,510 passed, 3 skipped, 14 deselected on the same head. [Preencoded](quote-reconciled-preencoded-isolated.json)
+1,510 passed, 3 skipped, 14 deselected on the same head. Preencoded (local-only `quote-reconciled-preencoded-isolated.json`)
 records 175,767,552 B incremental RSS (cap 134,217,728 B, fail) and 39.17 ms maximum loop delay
-(cap 50 ms, pass), 27 nonstream + 23 stream completions. [Full SDK](quote-reconciled-sdk-isolated.json)
+(cap 50 ms, pass), 27 nonstream + 23 stream completions. Full SDK (local-only `quote-reconciled-sdk-isolated.json`)
 records 112,230,400 B incremental RSS (pass) and 101.20 ms maximum loop delay (fail), 33 nonstream +
 35 stream completions. Both runs show correct known billing/quota settlement, drained signed
 capacity and zero post-dispatch failures; all other load requests return pre-admission 503.
@@ -578,8 +578,8 @@ derived through the unsigned-media-first sequence (no `model_copy` bypass); two 
 absorbs the real media bytes (quote text shrank accordingly); joint dimensions 131072B context,
 125 items, 475488B prospective carriers, 1702704B replay + 393984B headroom within 2 MiB; mock
 provider asserts both PDFs arrive as native `application/pdf` parts. Sequential isolated runs:
-[preencoded](quote-pdf-preencoded-isolated.json) 200/200 completions, 600 pre-admission 503,
-266,797,056 B incremental RSS (fail) / 43.27 ms loop (pass); [full SDK](quote-pdf-sdk-isolated.json)
+preencoded (local-only `quote-pdf-preencoded-isolated.json`) 200/200 completions, 600 pre-admission 503,
+266,797,056 B incremental RSS (fail) / 43.27 ms loop (pass); full SDK (local-only `quote-pdf-sdk-isolated.json`)
 36 nonstream + 40 stream completions, 724 pre-admission 503, 193,884,160 B RSS (fail) /
 128.90 ms loop (fail). Settlement, quota, worker drain and capacity reuse valid in both; zero
 post-dispatch failures. First joint state/media evidence therefore fails both resource caps and

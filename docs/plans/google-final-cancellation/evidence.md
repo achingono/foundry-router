@@ -22,8 +22,8 @@ same-chunk DONE/cancellation race test passed separately after suite collection.
 remains scoped to its recorded runtime. Sonar scanner script is absent. Independent contextual
 review cleared the verifier changes with no remaining Critical or Major findings; reviewer
 socket rerun was interrupted, so local execution results are the verification evidence.
-The single live invocation is now retained in [results](results.json) and durable
-[progress](progress.json). Both provider/public HTTP 200; exactly one dispatch, first
+The single live invocation is now retained in results (local-only `results.json`) and durable
+progress (local-only `progress.json`). Both provider/public HTTP 200; exactly one dispatch, first
 provider chunk 0.706178 seconds and meaningful public text 0.711838 seconds. Disconnect
 preceded DONE, mirror completion and EOF; natural provider/reservation cleanup passed.
 Independently observed input13/output1/total14 were complete numeric fields but not verified

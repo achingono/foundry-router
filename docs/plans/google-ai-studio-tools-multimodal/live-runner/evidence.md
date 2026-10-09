@@ -42,7 +42,7 @@ regressions pass from a clean checkout.
 
 Remote reconciliation, 2026-10-06: `45cbb70` supplies the synthetic dormant catalog/manifest
 used by offline tests. The earlier actual model-list GET artifacts are preserved separately as
-[actual discovery](../live-discovery-actual.json) and [discovered manifest](manifest-discovered.json).
+actual discovery (local-only `../live-discovery-actual.json`) and discovered manifest (local-only `manifest-discovered.json`).
 They record discovery only, not inference or approved protocol cases. The CLI's default remains
 the committed synthetic catalog; its explicit `--catalog` option permits offline validation of
 the preserved discovered manifest. No live inference ran during reconciliation.

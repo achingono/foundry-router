@@ -18,7 +18,7 @@ alter deployed runtime and does not require another runtime Docker build. Sonar 
 
 ## Initial live stage stopped
 
-[Retained ledger](ledger.json): two physical attempts, no retries. Project-1 native low
+Retained ledger (local-only `ledger.json`): two physical attempts, no retries. Project-1 native low
 passed HTTP 200 (7 input/1 output); compatible provider/public HTTP 200 completed text
 and cleanup, but observer retained 104 versus guard/public/settlement 8 tokens. The stage
 halted and every remaining case was withheld. This discrepancy does not establish a
@@ -27,7 +27,7 @@ Keep this ledger immutable; a same-wire numeric diagnostic is needed before corr
 
 ## Same-wire numeric follow-up
 
-[Usage diagnostic](usage-diagnostic-ledger.json) consumed one additional physical attempt
+Usage diagnostic (local-only `usage-diagnostic-ledger.json`) consumed one additional physical attempt
 from project-1 nonstream's remaining slot allowance. Both observer and guard saw identical
 bytes and numeric prompt7/completion2/total71, reasoning detail absent. Both callbacks
 retained71. Public completion/cleanup passed but split settlement used9; stage remains
@@ -41,8 +41,8 @@ to conservatively account the unattributed total excess without inventing reason
 
 The [usage correction](../google-compatible-usage-integrity/evidence.md) was implemented,
 reviewed and verified through the actual local Responses route against Google.
-[Remaining cases](remaining-ledger.json) and [stream retry completion](stream-retry-ledger.json)
-preserve every attempt. See [summary](summary.json): native passed all five; corrected
+Remaining cases (local-only `remaining-ledger.json`) and stream retry completion (local-only `stream-retry-ledger.json`)
+preserve every attempt. See summary (local-only `summary.json`): native passed all five; corrected
 nonstream passed projects 2–5; streaming passed projects 1/3/4 immediately and project 5
 on its third allowed attempt. Project2 streaming exhausted three provider 503 attempts.
 Project1 corrected nonstream verification returned 503 with no remaining slot attempts.

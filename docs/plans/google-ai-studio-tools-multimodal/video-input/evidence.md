@@ -15,7 +15,7 @@ establish real TCP disconnect or distributed exactly-once behavior.
 Final video checkpoint:1179passed,2Linux-onlyskips,15Docker/Azurite deselections,
 89.00%coverage; whole-tree Ruff/format/mypy pass. Minimum-size correction and extra integration/lifecycle tests are included. Docker build passes.
 
-[Linux video workload](measurements/video-http-linux.json):8callers×100, two4frame64×64clips,
+Linux video workload (local-only `measurements/video-http-linux.json`):8callers×100, two4frame64×64clips,
 networkdisabled512MiB/2CPU, alternatingstream/nonstream,800successful responses; observed sampled
 RSS growth10620928B,maxloop19.98ms,request33.33ms. Clips reach frame/dimension maxima, not
 65536bytes/file. Benchmark image preceded minimum-size correction; maximum fixture unaffected.

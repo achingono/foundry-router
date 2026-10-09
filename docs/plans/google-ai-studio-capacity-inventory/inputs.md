@@ -2,8 +2,8 @@
 
 | Input | Source | Owner |
 | --- | --- | --- |
-| Five project catalogs | [Discovery](../google-ai-studio-tools-multimodal/live-discovery-actual.json) | Recorded validation |
-| Free-tier text classification | [Discovered manifest](../google-ai-studio-tools-multimodal/live-runner/manifest-discovered.json) | Recorded validation |
+| Five project catalogs | Discovery (local-only `../google-ai-studio-tools-multimodal/live-discovery-actual.json`) | Recorded validation |
+| Free-tier text classification | Discovered manifest (local-only `../google-ai-studio-tools-multimodal/live-runner/manifest-discovered.json`) | Recorded validation |
 | Dated outcomes and limitations | [Live evidence](../google-ai-studio-tools-multimodal/live-runner/evidence.md) | Recorded validation |
 | Attempt identity and usage | Three dated ledgers in the live-runner folder | Recorded validation |
 | Operator quota screenshots/project IDs | Captured inputs (local-only `quotas.md`) | Operator |
