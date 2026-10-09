@@ -175,7 +175,8 @@ integration.
 
 ### 5b. Multi-worker and multi-replica metrics aggregation
 
-**Planned**. Design and verify aggregation independently of 5a. Distinguish processes within
+**Planned** under a [concrete OTLP plan](../metrics-aggregation/index.md), cleared by
+independent review before runtime changes. Design and verify aggregation independently of 5a. Distinguish processes within
 a replica from separate replicas: Prometheus multiprocess file storage alone does not
 aggregate separate Container App replicas. Specify per-replica collection and central
 aggregation, or an appropriate OpenTelemetry pipeline, and verify totals and restart behavior.
@@ -240,4 +241,4 @@ the text-first priority and all production/startup gates while that work proceed
 
 | Compatible provider implementation | Committed `566e404`; complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
 
-| Distributed quota implementation | Complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |
+| Distributed quota implementation | Committed `c028a9f`; complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |
