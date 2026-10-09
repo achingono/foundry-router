@@ -1,6 +1,6 @@
 # Unused capture history cleanup
 
-## Status: Partially implemented
+## Status: Implemented
 
 ## Objective
 User authorized removal from commit history of all captures not used by tests. Audit current and
