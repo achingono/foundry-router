@@ -165,7 +165,8 @@ building on the [existing reconciliation boundary](../../operations/shared-resou
 Cost Management supplies delayed reported costs, not remaining promotional credit. Apply
 cycle-bound billing ceilings atomically without replenishing local debits; preserve estimates
 on unavailable/incomplete data and keep reservation cleanup independent of provider outages.
-Live scope/permission/query acceptance remains unverified. This work can proceed before
+The [bounded read-only acceptance attempt](../azure-cost-live-verification/evidence.md)
+returned no accepted ceilings; live scope/permission/query acceptance remains unverified. This work can proceed before
 cut-over and does not block quota or metrics implementation. Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
 

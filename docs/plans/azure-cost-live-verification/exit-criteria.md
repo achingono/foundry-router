@@ -2,4 +2,5 @@
 
 - [x] Independent plan review.
 - [x] Read-only verifier rejects mismatched resource metadata and redacts output.
-- [ ] One finite refresh recorded; no deployments/roles/balances changed.
+- [x] One finite invocation recorded; no deployments/roles/balances changed.
+- [ ] Accepted live billing query and complete ceilings for both groups.
