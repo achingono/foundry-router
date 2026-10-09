@@ -153,10 +153,11 @@ state. Successful verification completes cut-over; scale-out remains gated.
 
 ### 4e. Live cost reconciliation adapter — independent implementation
 
-**Planned**. Add live Azure Cost Management integration under a separate reviewed plan,
+**Planned** under the concrete [cost reconciliation plan](../azure-cost-reconciliation/index.md),
 building on the [existing reconciliation boundary](../../operations/shared-resource-credit.md).
-Define stale-data behavior and preserve labeled estimates when authoritative data is
-unavailable. This work can proceed before cut-over and does not block quota or metrics
+Cost Management supplies delayed reported costs, not remaining promotional credit. Apply
+cycle-bound billing ceilings atomically without replenishing local debits; preserve estimates
+on unavailable/incomplete data and keep reservation cleanup independent of provider outages. This work can proceed before cut-over and does not block quota or metrics
 implementation. Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
 
@@ -226,8 +227,8 @@ graph TD
 
 Adapter extraction and text evidence reconciliation are locally complete. The fresh native
 stage is recorded; next close scoped compatibility/accounting gates and implement independently
-reviewed workstreams. Capacity investigation, Table test planning, distributed quota,
-metrics and cost-integration planning can proceed independently. Each implementation still
+reviewed workstreams. Quota and metrics implementations are locally complete. Remaining independent work includes
+capacity investigation, Table real-traffic test planning and the reviewed cost provider phase. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
 
@@ -240,9 +241,6 @@ the text-first priority and all production/startup gates while that work proceed
 | Adapter extraction | Committed `3001929` | [Evidence](../openai-compatible-adapter/evidence.md): full suite, coverage, typing, local Azurite, Python 3.12 Docker smoke and implementation review |
 | Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |
 | Native text follow-up | Committed `66175af`; live verification **Partially implemented** | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
-
 | Compatible provider implementation | Committed `566e404`; complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
-
 | Distributed quota implementation | Committed `c028a9f`; complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |
-
-| Metrics aggregation implementation | Complete locally; deployed collector unverified | [Evidence](../metrics-aggregation/evidence.md); bounded OTLP, process lifetime identities, actual periodic two-worker/restart collection; production unchanged |
+| Metrics aggregation implementation | Committed `0d7b4c5`; complete locally; deployed collector unverified | [Evidence](../metrics-aggregation/evidence.md); bounded OTLP, process lifetime identities, actual periodic two-worker/restart collection; production unchanged |

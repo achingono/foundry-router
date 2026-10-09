@@ -81,7 +81,8 @@ credit failures propagate at completion and cannot trigger failover or replace d
 compatibility live view and add `credit_group`; never sum those duplicated backend balances.
 Use `foundry_router_credit_group_available_usd{credit_group}` for account-level metrics. The
 existing `foundry_router_credit_available_usd{backend}` is nonadditive. Request/cost metrics remain
-backend-labelled, and multi-worker aggregation remains Planned.
+backend-labelled. Opt-in multi-worker OTLP aggregation is implemented locally; deployed
+collector acceptance remains unverified. See [observability](observability.md).
 
 Reconciliation providers should supply canonical group updates once. Direct store calls also accept
 backend aliases, normalize the complete input before writes, coalesce equal amounts and reject
