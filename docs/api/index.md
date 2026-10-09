@@ -66,6 +66,21 @@ operation filtering apply across mixed provider pools. The upstream must accept 
 `max_completion_tokens`/`stream_options.include_usage` dialect; live compatibility remains
 an exact upstream/model gate. See [configuration](../configuration/index.md).
 
+Configured `openrouter` pools provide the same **Implemented, mocked-verified**
+translation contract against OpenRouter's Chat Completions and float embeddings
+endpoints. OpenRouter-only caller fields and attribution headers fail before
+reservation/egress and are never forwarded.
+
+Configured `opencode_zen` pools provide **Implemented, mocked-verified** Responses
+wire pass-through for Zen's Responses-model rows. Accepted bodies keep their Responses
+shape with only the provider deployment substituted; SSE bytes stream unchanged with
+bounded terminal-usage inspection. The bounded stateless-text gate rejects unsupported
+and foreign fields before reservation/egress with a sanitized 422 for Zen-only pools,
+while other capable backends in mixed pools remain eligible. Single-shot dispatch
+applies regardless of `retry_attempts`; only pre-output 429 is failover-eligible.
+Ambiguous dispatched failures and cancellation retain known usage or the full estimate.
+Live Zen compatibility remains an exact upstream/model gate.
+
 | Method and path | Requirement |
 | --- | --- |
 | `POST /openai/v1/responses` | Implemented; normal and streaming forwarding |

@@ -88,7 +88,11 @@ request context; they perform no routing, HTTP, credential handling or state-sto
 A configurable `openai_compatible` provider is **Implemented with mocked verification** under
 the [provider contract](../plans/openai-compatible-provider/index.md), with independent bounded
 text hooks in `compatible_text.py`, exact-root Bearer transport and shared translated lifecycle.
-Exact upstream/model live compatibility remains **Planned**.
+`openrouter` reuses those translated text hooks and lifecycle under the
+[Zen/OpenRouter contract](../plans/opencode-zen-openrouter/index.md). `opencode_zen` adds a
+dedicated bounded stateless-text validator with Responses wire pass-through in `zen.py`,
+single-shot dispatch independent of Azure retries, and conservative dispatched-failure
+settlement. Exact upstream/model live compatibility remains **Planned**.
 
 `state/quota.py` owns durable quota counters, bounded state, conditional admission and
 settlement. `ratelimit.py` retains the store protocol, memory implementation and immutable

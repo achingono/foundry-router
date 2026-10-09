@@ -52,11 +52,13 @@ the example host is not an operational endpoint. Original captures stay in ignor
 
 ## Identity and Deployment
 
-Configured `openai_compatible` backends use server-owned Bearer credentials, with caller
-auth/cookies/forwarding headers stripped. Raw endpoint validation precedes URL normalization;
-outbound requests remain confined to the configured HTTPS origin, port and API root.
-Physical model IDs are JSON body values, never URL path segments. The text adapter imports
-no Google capability/media/schema helpers, executes no tools and fetches no content URLs.
+Configured `openai_compatible`, `openrouter` and `opencode_zen` backends use server-owned
+Bearer credentials, with caller auth/cookies/forwarding headers stripped. Raw endpoint
+validation precedes URL normalization; outbound requests remain confined to the
+configured HTTPS origin, port and API root. Physical model IDs are JSON body values,
+never URL path segments. The text adapters import no Google capability/media/schema
+helpers, execute no tools and fetch no content URLs. Zen passes accepted Responses
+bodies through with model-only substitution and never sends the Chat dialect.
 Only pre-output 429 permits failover; ambiguous dispatched failures retain known usage or
 the reservation estimate. Local mocked verification is **Implemented**; actual upstream
 compatibility requires separate live evidence.

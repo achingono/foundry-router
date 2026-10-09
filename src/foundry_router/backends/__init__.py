@@ -141,7 +141,8 @@ class AllowedBackendClient:
             config.deployment
             and config.api_surface != "native"
             and (
-                config.provider in {"google_ai_studio", "openai_compatible"}
+                config.provider
+                in {"google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"}
                 or (config.provider == "azure_foundry" and operation == "responses")
             )
         ):
@@ -155,11 +156,15 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         base = httpx.URL(str(config.endpoint))
-        if config.provider == "openai_compatible":
+        if config.provider in {"openai_compatible", "openrouter"}:
             operations = {"responses": "chat/completions", "embeddings": "embeddings"}
             if operation not in operations:
                 raise ValueError("Unsupported compatible backend operation")
             return base.copy_with(path=f"{base.path.rstrip('/')}/{operations[operation]}")
+        if config.provider == "opencode_zen":
+            if operation != "responses":
+                raise ValueError("Zen backends support only the Responses operation")
+            return base.copy_with(path=f"{base.path.rstrip('/')}/responses")
         if config.provider == "google_ai_studio":
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
@@ -196,7 +201,12 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         safe_headers = self._sanitize_headers(headers) or {}
-        if config.provider in {"google_ai_studio", "openai_compatible"}:
+        if config.provider in {
+            "google_ai_studio",
+            "openai_compatible",
+            "opencode_zen",
+            "openrouter",
+        }:
             # Documented OpenAI-compat auth is `Authorization: Bearer <key>`
             # (verified 2026-10-05). Strip inbound auth above; never forward it.
             if config.api_surface == "native":
