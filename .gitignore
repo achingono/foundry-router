@@ -92,3 +92,4 @@ docs/plans/table-real-inference/ledger.json.lock
 docs/plans/azure-cost-live-verification/diagnostic-started.json.lock
 docs/plans/azure-cost-schema-diagnosis/diagnostic-started.json.lock
 docs/plans/azure-cost-currency/diagnostic-started.json.lock
+docs/plans/azure-cost-http-diagnosis/diagnostic-started.json.lock
