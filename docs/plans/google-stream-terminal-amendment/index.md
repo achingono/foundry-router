@@ -1,6 +1,6 @@
 # Compatible stream terminal usage amendment
 
-**Implemented locally**, 2026-10-09 UTC; bounded live stage pending. The incremental stage retained four public-completed streams
+**Implemented locally**, 2026-10-09 UTC; three live streams recorded; strict terminal/cancellation gates remain partial. The incremental stage retained four public-completed streams
 with matching usage/debits but false verifier terminal flags. Cancellation was withheld.
 No raw frames were retained, so their exact failure cause is unknown. A local synthetic
 reproduction proves the verifier currently fails complete usage attached to a stop choice,

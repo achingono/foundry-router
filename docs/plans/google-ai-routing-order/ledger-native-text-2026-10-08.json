@@ -164,8 +164,8 @@
       }
     },
     "project-3": {
-      "requests": 19,
-      "tokens": 17280,
+      "requests": 20,
+      "tokens": 18368,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-3": {
@@ -239,12 +239,16 @@
         "l09-ordinary-project-3": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "t09-stream-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 98
         }
       }
     },
     "project-4": {
-      "requests": 19,
-      "tokens": 17280,
+      "requests": 20,
+      "tokens": 18368,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-4": {
@@ -318,12 +322,16 @@
         "l09-reasoning-project-4": {
           "reserved_tokens": 1088,
           "actual_tokens": 80
+        },
+        "t09-stream-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 75
         }
       }
     },
     "project-5": {
-      "requests": 19,
-      "tokens": 17280,
+      "requests": 20,
+      "tokens": 18368,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-5": {
@@ -397,6 +405,10 @@
         "l09-reasoning-project-5": {
           "reserved_tokens": 1088,
           "actual_tokens": 86
+        },
+        "t09-stream-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 90
         }
       }
     }

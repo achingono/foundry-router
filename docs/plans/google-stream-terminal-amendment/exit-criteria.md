@@ -2,5 +2,5 @@
 
 - [x] Independent plan review.
 - [x] Terminal shape/protocol/metadata/budget/replay tests and full quality/review.
-- [ ] Four-or-fewer bounded stream outcomes retained with no budget reset.
-- [ ] Cancellation and other incomplete roadmap gates remain explicit.
+- [x] Three bounded streams retained with no budget reset; conditional cancellation withheld.
+- [x] Cancellation and other incomplete roadmap gates remain explicit.
