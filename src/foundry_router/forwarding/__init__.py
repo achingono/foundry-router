@@ -1526,7 +1526,7 @@ async def _read_google_non_streaming_body(
     return {"read_failed": False, "body": raw_body, "breached": breached}
 
 
-async def _handle_zen_error_status(
+async def _handle_google_error_status(
     upstream: Any,
     *,
     settings: Any,
