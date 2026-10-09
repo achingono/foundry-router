@@ -36,3 +36,19 @@ provider inference requires fresh reviewed remaining-budget cases. No production
 - [Exit criteria](exit-criteria.md)
 - [Risks](risk-register.md)
 - [Evidence](evidence.md)
+
+## Isolated image correction and supplemental acceptance
+
+Operator authorized troubleshooting the isolated Table failure. Publish the verified corrected
+image and update only the existing isolated app image; retain identity, tables, single replica,
+zero retries and all pinned model/pricing configuration. Bind deployed metadata before traffic.
+Do not alter production or registry/table access scope.
+
+The original ledger remains immutable, including the failed and ambiguous started nonstream
+cases. A separate supplemental ledger may execute only the previously unattempted model-1
+and model-2 streaming cases, after independent review and zero-active status checks. Retain
+both original reservations as consumed budget: four total maximum router calls, 1,024 output
+tokens each, zero retries and 0.12544 USD total maximum local estimate under the approved
+0.15 USD limit. Persist each fresh case before dispatch; stop all supplemental traffic on
+failure, ambiguity, overrun or incomplete settlement. Supplemental passes cannot reclassify
+original failures or prove the full four-case acceptance/restart gate.

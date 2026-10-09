@@ -23,3 +23,13 @@ command. No result marker was returned. Private durable synthetic ownership is r
 no unowned rows or real model balances are modified. No provider calls were made.
 This is an exec transport failure, not evidence of cloud write acceptance.
 The code defect is corrected locally; exact cloud root cause and live inference remain open.
+
+## Supplemental execution amendment
+
+Independent review cleared the concrete image-only update and two previously unattempted
+streaming cases under the original four-call/0.15 USD limits, after zero-active confirmation.
+The supplemental runner holds both ledger locks and preserves the original bytes/budget.
+Review caught the original stage validator requiring passing nonstream predecessors; an
+explicit strict supplemental result validator corrected this before traffic. Synthetic two-pass,
+first/second-failure stop, observation persistence and replay refusal checks passed.
+See [runner checks](supplemental-runner-result.json).
