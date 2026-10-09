@@ -157,3 +157,61 @@ async def test_saved_result_schema_and_ledger_binding(mutation, tmp_path):
         debit = {**debit, "actual_tokens": 13}
     with pytest.raises(ValueError):
         diagnostic.validate_result(result, debit)
+
+
+def test_wrapper_signature_allowlist_and_private_bytes():
+    data = chat()
+    data["choices"][0]["message"]["extra_content"] = {
+        "google": {"thought_signature": "private-signature", "secret-name": "private-state"},
+        "unknown-private-key": "private",
+    }
+    result = diagnostic.observe_schema(json.dumps(data).encode())
+    wrapper = result["extra_wrapper"]
+    assert wrapper["unknown_count"] == 1
+    assert wrapper["wrappers"]["google"]["unknown_count"] == 1
+    assert (
+        wrapper["wrappers"]["google"]["signatures"]["thought_signature"]["length_class"] == "small"
+    )
+    for secret in ["private-signature", "secret-name", "private-state", "unknown-private-key"]:
+        assert secret not in json.dumps(result)
+    diagnostic.validate_wrapper(wrapper)
+    wrapper["wrappers"]["google"]["signatures"]["thought_signature"]["length_class"] = (
+        "private-signature"
+    )
+    with pytest.raises(ValueError):
+        diagnostic.validate_wrapper(wrapper)
+
+
+def test_wrapper_followup_dispatch_uses_only_project3(tmp_path):
+    baseline = json.loads((diagnostic.DIAGNOSTIC_DIR / "ledger-baseline-followup.json").read_text())
+    (tmp_path / "ledger-baseline-followup.json").write_text(json.dumps(baseline))
+    path = tmp_path / "ledger.json"
+    path.write_text(json.dumps(baseline))
+    calls = []
+
+    def handle(request):
+        calls.append(request)
+        data = chat()
+        data["choices"][0]["message"]["extra_content"] = {
+            "google": {"thought_signature": "private-signature"}
+        }
+        return httpx.Response(200, json=data)
+
+    result = diagnostic.execute_diagnostic(
+        "unused",
+        directory=tmp_path,
+        ledger_path=path,
+        keys=["synthetic"] * 5,
+        transport_factory=lambda: httpx.MockTransport(handle),
+        case_id="d08n-wrapper-gemini-3.5-flash-lite-project-3",
+        project="project-3",
+        baseline_name="ledger-baseline-followup.json",
+        result_name="wrapper-result.json",
+    )
+    assert len(calls) == 1 and result["project"] == "project-3"
+    assert (
+        result["safe_schema"]["extra_wrapper"]["wrappers"]["google"]["signatures"][
+            "thought_signature"
+        ]["type"]
+        == "string"
+    )

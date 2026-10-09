@@ -31,6 +31,12 @@ FIELDS = {
     "extra_content",
 }
 MAX_SCHEMA_COUNT = 128
+WRAPPERS = {"google", "gemini"}
+SIGNATURES = {"thought_signature", "thoughtSignature", "signature"}
+SMALL_SIGNATURE = 256
+MEDIUM_SIGNATURE = 4096
+MAX_SIGNATURE = 65536
+LENGTH_CLASSES = {"empty", "small", "medium", "large", "over_bound"}
 
 
 def shape(value):
@@ -58,6 +64,44 @@ def shape(value):
     }
 
 
+def signature_shape(value):
+    result = shape(value)
+    if isinstance(value, str):
+        size = len(value.encode())
+        result["length_class"] = (
+            "empty"
+            if size == 0
+            else "small"
+            if size <= SMALL_SIGNATURE
+            else "medium"
+            if size <= MEDIUM_SIGNATURE
+            else "large"
+            if size <= MAX_SIGNATURE
+            else "over_bound"
+        )
+    return result
+
+
+def wrapper_schema(extra):
+    if not isinstance(extra, dict):
+        return {"object": False}
+    result = {
+        "object": True,
+        "unknown_count": min(len(extra.keys() - WRAPPERS), MAX_SCHEMA_COUNT),
+        "wrappers": {},
+    }
+    for name in sorted(extra.keys() & WRAPPERS):
+        value = extra[name]
+        entry = {"shape": shape(value)}
+        if isinstance(value, dict):
+            entry["unknown_count"] = min(len(value.keys() - SIGNATURES), MAX_SCHEMA_COUNT)
+            entry["signatures"] = {
+                key: signature_shape(value[key]) for key in sorted(value.keys() & SIGNATURES)
+            }
+        result["wrappers"][name] = entry
+    return result
+
+
 def observe_schema(wire):
     try:
         data = load_bounded_json(wire.decode(), max_bytes=4 * 1024 * 1024)
@@ -83,6 +127,8 @@ def observe_schema(wire):
         result["message_fields"] = {
             name: shape(message[name]) for name in sorted(FIELDS & message.keys())
         }
+        if "extra_content" in message:
+            result["extra_wrapper"] = wrapper_schema(message["extra_content"])
         result["other_message_field_count"] = min(len(message.keys() - FIELDS), MAX_SCHEMA_COUNT)
     return result
 
@@ -106,7 +152,7 @@ async def run_diagnostic_case(**kwargs):
     return result
 
 
-def validate_result(result, ledger_case):
+def validate_result(result, ledger_case, *, case_id=CASE_ID, project="project-2"):
     allowed = {
         "case_id",
         "project",
@@ -135,8 +181,8 @@ def validate_result(result, ledger_case):
     if (
         not isinstance(result, dict)
         or set(result) != allowed
-        or result["case_id"] != CASE_ID
-        or result["project"] != "project-2"
+        or result["case_id"] != case_id
+        or result["project"] != project
         or result["model"] != "gemini-3.5-flash-lite"
         or result["surface"] != "openai_compat"
         or result["stream"] is not False
@@ -191,6 +237,7 @@ def validate_schema(schema):
         "finish_stop",
         "message_fields",
         "other_message_field_count",
+        "extra_wrapper",
     }:
         raise ValueError("Invalid diagnostic schema")
     for name, value in schema.items():
@@ -200,6 +247,8 @@ def validate_schema(schema):
         elif name in {"choice_count", "other_message_field_count"}:
             if type(value) is not int or not 0 <= value <= MAX_SCHEMA_COUNT:
                 raise ValueError("Invalid schema count")
+        elif name == "extra_wrapper":
+            validate_wrapper(value)
         elif name == "message_fields":
             if not isinstance(value, dict) or set(value) - FIELDS:
                 raise ValueError("Invalid schema field")
@@ -207,6 +256,46 @@ def validate_schema(schema):
                 validate_shape(item)
         else:
             validate_shape(value)
+
+
+def validate_wrapper(value):
+    if value == {"object": False}:
+        return
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"object", "unknown_count", "wrappers"}
+        or value["object"] is not True
+        or type(value["unknown_count"]) is not int
+        or not 0 <= value["unknown_count"] <= MAX_SCHEMA_COUNT
+        or not isinstance(value["wrappers"], dict)
+        or set(value["wrappers"]) - WRAPPERS
+    ):
+        raise ValueError("Invalid extra wrapper")
+    for entry in value["wrappers"].values():
+        if not isinstance(entry, dict) or set(entry) not in (
+            {"shape"},
+            {"shape", "unknown_count", "signatures"},
+        ):
+            raise ValueError("Invalid wrapper fields")
+        validate_shape(entry["shape"])
+        if "signatures" not in entry:
+            continue
+        if (
+            type(entry["unknown_count"]) is not int
+            or not 0 <= entry["unknown_count"] <= MAX_SCHEMA_COUNT
+            or not isinstance(entry["signatures"], dict)
+            or set(entry["signatures"]) - SIGNATURES
+        ):
+            raise ValueError("Invalid signature fields")
+        for signature in entry["signatures"].values():
+            if not isinstance(signature, dict):
+                raise TypeError("Invalid signature shape")
+            base = {key: val for key, val in signature.items() if key != "length_class"}
+            validate_shape(base)
+            if set(signature) - {"type", "null", "empty", "length_class"} or (
+                "length_class" in signature and signature["length_class"] not in LENGTH_CLASSES
+            ):
+                raise ValueError("Invalid signature length class")
 
 
 def validate_shape(value):
@@ -221,39 +310,45 @@ def validate_shape(value):
         raise ValueError("Invalid schema type flags")
 
 
-def execute_diagnostic(
+def execute_diagnostic(  # noqa: PLR0913 -- fixed phase inputs and isolated test injection
     secret_ref,
     *,
     directory=DIAGNOSTIC_DIR,
     ledger_path=LEDGER_PATH,
     keys=None,
     transport_factory=None,
+    case_id=CASE_ID,
+    project="project-2",
+    baseline_name="ledger-baseline.json",
+    result_name="diagnostic-result.json",
 ):
     with locked(STAGE_DIR / "stage"):
         if not ledger_path.exists():
             raise ValueError("Existing ledger required")
         baseline = load_bounded_json(
-            (directory / "ledger-baseline.json").read_text(), max_bytes=MAX_RESULTS_BYTES
+            (directory / baseline_name).read_text(), max_bytes=MAX_RESULTS_BYTES
         )
         ledger = BudgetLedger(ledger_path)
         current = ledger._read()
-        for project, old in baseline["projects"].items():
-            now = current["projects"][project]
-            allowed = {CASE_ID} if project == "project-2" else set()
+        for owner, old in baseline["projects"].items():
+            now = current["projects"][owner]
+            allowed = {case_id} if owner == project else set()
             if (
                 any(now["cases"].get(case) != value for case, value in old["cases"].items())
                 or set(now["cases"]) - set(old["cases"]) - allowed
             ):
                 raise ValueError("Historical ledger mismatch")
-        path = directory / "diagnostic-result.json"
+        path = directory / result_name
         if path.exists():
             return validate_result(
                 load_bounded_json(path.read_text(), max_bytes=MAX_RESULTS_BYTES),
-                current["projects"]["project-2"]["cases"].get(CASE_ID),
+                current["projects"][project]["cases"].get(case_id),
+                case_id=case_id,
+                project=project,
             )
-        if CASE_ID in current["projects"]["project-2"]["cases"]:
-            return {"case_id": CASE_ID, "status": "ambiguous_consumed", "dispatched": True}
-        if not ledger.can_reserve("project-2", 1088):
+        if case_id in current["projects"][project]["cases"]:
+            return {"case_id": case_id, "status": "ambiguous_consumed", "dispatched": True}
+        if not ledger.can_reserve(project, 1088):
             raise ValueError("Diagnostic budget unavailable")
         credentials = keys if keys is not None else fetch_project_credentials(secret_ref)
         if len(credentials) != PROJECT_COUNT:
@@ -263,15 +358,20 @@ def execute_diagnostic(
         )
         result = asyncio.run(
             run_diagnostic_case(
-                credential=credentials[1],
+                credential=credentials[int(project[-1]) - 1],
                 ledger=ledger,
-                project="project-2",
-                case_id=CASE_ID,
+                project=project,
+                case_id=case_id,
                 transport=factory(),
                 stream=False,
             )
         )
-        validate_result(result, ledger._read()["projects"]["project-2"]["cases"].get(CASE_ID))
+        validate_result(
+            result,
+            ledger._read()["projects"][project]["cases"].get(case_id),
+            case_id=case_id,
+            project=project,
+        )
         write_atomic(path, result)
         return result
 
@@ -279,13 +379,24 @@ def execute_diagnostic(
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--wrapper-followup", action="store_true")
     parser.add_argument("--keyvault-ref")
     args = parser.parse_args()
     if not args.execute or not args.keyvault_ref:
         return 2
     logging.disable(logging.CRITICAL)
     try:
-        result = execute_diagnostic(args.keyvault_ref)
+        result = (
+            execute_diagnostic(
+                args.keyvault_ref,
+                case_id="d08n-wrapper-gemini-3.5-flash-lite-project-3",
+                project="project-3",
+                baseline_name="ledger-baseline-followup.json",
+                result_name="wrapper-result.json",
+            )
+            if args.wrapper_followup
+            else execute_diagnostic(args.keyvault_ref)
+        )
     except (ValueError, OSError, RuntimeError):
         print(json.dumps({"status": "refused_or_interrupted"}))
         return 2

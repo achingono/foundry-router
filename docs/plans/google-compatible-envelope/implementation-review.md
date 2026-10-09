@@ -6,3 +6,6 @@ flags, counts, debit bounds and ledger usage binding are validated before write 
 Malicious keys/values, wrong case and wrong usage regressions refuse without display/dispatch.
 No arbitrary provider values or names are retained. Whole-stage lock and immutable prior-case
 prefix prevent overlapping/repeated diagnostic traffic. Final clearance is recorded in evidence.
+
+Wrapper follow-up extension independently cleared: 39 combined tests passed; finite wrapper/
+signature enums, capped counts/length classes and strict persisted validation reviewed.
