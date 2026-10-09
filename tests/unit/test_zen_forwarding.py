@@ -215,6 +215,29 @@ class TestZenNonStreaming:
         assert result.confirmed_pre_dispatch is True
         request.assert_not_awaited()
 
+    async def test_streaming_expired_deadline_does_not_create_upstream_stream(self) -> None:
+        stream_backend = AsyncMock()
+        client = SimpleNamespace(stream_backend=stream_backend)
+        env = _harness(client)
+        result = await forwarding._forward_zen_streaming(
+            settings=env.settings,
+            backend_id="zen_a",
+            request_id="req-expired",
+            headers={},
+            body={"model": "gpt-5.4", "input": "hi", "stream": True},
+            upstream_body={"model": "gpt-5.4", "input": "hi"},
+            backend_client=client,
+            set_backend_active=env.active,
+            set_backend_cooldown=env.cooldown,
+            api_error=env.api_error,
+            credit_store=SimpleNamespace(finalize_request=AsyncMock()),
+            metrics_store=SimpleNamespace(observe_request=AsyncMock()),
+            rate_limit_store=None,
+            reservation_deadline_monotonic=time.monotonic() - 1,
+        )
+        assert result.confirmed_pre_dispatch is True
+        stream_backend.assert_not_called()
+
 
 class _FakeStreamContext:
     def __init__(
