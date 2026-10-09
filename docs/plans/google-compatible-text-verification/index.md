@@ -1,6 +1,6 @@
 # Google compatible text verification
 
-**Planned**, independently reviewed 2026-10-08; see [review](plan-review.md). Close the compatibility-surface text operation gap in
+**Partially implemented**, independently reviewed 2026-10-08; see [review](plan-review.md). Close the compatibility-surface text operation gap in
 [roadmap 2a](../google-ai-routing-order/index.md). Production remains memory/one.
 
 ## Authorized bounded stage

@@ -129,3 +129,15 @@ projects 2–5 each have 14 requests/11,840 tokens. Thought metadata is absent f
 so nonzero thinking settlement remains unverified. These results establish the recorded
 3.5 native text/client/usage cases only; quota ceilings, provider failure/admission traffic,
 compatibility Responses/embeddings, Table-backed real inference and production gates remain.
+
+
+## Compatible text stage, 2026-10-08
+
+[Reviewed stage](../google-compatible-text-verification/index.md) dispatched five 3.5 Flash-Lite
+nonstream requests, one per key. Provider returned 200 with 7 input/2 completion tokens each,
+but public translation returned 502 in every case. All synthetic $0.009 debits matched observed
+usage and reservations cleared. No stream ran after these failures; absent thought metadata
+stays unknown. This proves neither successful compatible Responses nor embeddings.
+Ledger debits are retained, project-1 exhausted the stricter 20-request stage allowance and
+projects 2–5 retain five request slots each; no historical allowance is reset. Provider schema
+rejection needs separate bounded diagnosis before any retry stage.

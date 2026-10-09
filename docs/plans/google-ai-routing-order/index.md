@@ -41,7 +41,10 @@ on all five project labels; 3.8 Flash streaming had substantial failures. Native
 nonstreaming passed on projects 1–2 and returned 404 on projects 3–5. These dated observations
 establish neither general availability nor production readiness.
 
-Compatibility-surface Responses and embeddings remain unverified. Track provider
+The [compatible text stage](../google-compatible-text-verification/evidence.md) recorded five
+3.5 provider HTTP 200 responses with valid usage but public 502 on every nonstream case.
+Streaming was withheld after those failures. Successful compatibility Responses and embeddings
+remain unverified. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token
 settlement remains unproven. Record model, project, surface, operation, streaming mode, usage
@@ -246,3 +249,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Distributed quota implementation | Committed `c028a9f`; complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |
 | Metrics aggregation implementation | Committed `0d7b4c5`; complete locally; deployed collector unverified | [Evidence](../metrics-aggregation/evidence.md); bounded OTLP, process lifetime identities, actual periodic two-worker/restart collection; production unchanged |
 | Cost reconciliation implementation | Complete locally; Azure billing acceptance unverified | [Evidence](../azure-cost-reconciliation/evidence.md); atomic downward-only estimates, confined identity transport, cycle/mapping binding and real Azurite concurrency/restart |
+| Compatible text live stage | Five failed public cases; provider 200 and conservative settlement verified | [Evidence](../google-compatible-text-verification/evidence.md); no streaming after failure, no overrun or production change |
