@@ -65,3 +65,16 @@ They may proceed to the next independently planned surface/project so all five p
 can be assessed. An observed provider timeout is classified transient; unrecorded process
 interruption remains ambiguous and cannot resume. Parameter/auth/quota failures, protocol
 rejection and overruns still stop the run; streaming is withheld after nonstream failure.
+
+## Same-wire usage follow-up
+
+Initial stage halted after two attempts on an observer/guard usage mismatch. Preserve
+its bytes and debit. One distinct supplemental project-1 compatible nonstream diagnostic
+(maximum three physical attempts under remaining original budget) records only allowlisted
+usage numeric values/type flags at observer and guard plus fixed-source accounting callbacks.
+Pin loaded source SHA-256 values, and same-wire SHA-256 equality only (do not persist body).
+No signatures, content, arbitrary keys or errors retained. Use original stage lock plus separate
+whole-run lock/ledger; refuse resume, count original two attempts against maximum45.
+After diagnosed correction and independent review, execute ONLY previously unattempted
+project-1 stream and projects2–5 native/nonstream/conditional-stream cases. Do not retry
+original IDs or fabricate original passes. Record supplemental results separately.

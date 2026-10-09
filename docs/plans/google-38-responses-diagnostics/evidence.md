@@ -13,5 +13,14 @@ Independent review corrected accounting maxima, dimension overruns, terminal aut
 retry overrides and timeout classification before execution.
 
 21 new focused cases pass; 29 existing compatible-verifier cases passed. Ruff/format and
-strict mypy pass. Full suite verification in progress. This verifier-only change does not
+strict mypy pass. Full suite: 2,073 passed, 3 skipped, 19 deselected; runtime coverage 89.86%. This verifier-only change does not
 alter deployed runtime and does not require another runtime Docker build. Sonar script absent.
+
+## Initial live stage stopped
+
+[Retained ledger](ledger.json): two physical attempts, no retries. Project-1 native low
+passed HTTP 200 (7 input/1 output); compatible provider/public HTTP 200 completed text
+and cleanup, but observer retained 104 versus guard/public/settlement 8 tokens. The stage
+halted and every remaining case was withheld. This discrepancy does not establish a
+Google billing or runtime defect: identical usage objects should yield matching counts.
+Keep this ledger immutable; a same-wire numeric diagnostic is needed before correction.
