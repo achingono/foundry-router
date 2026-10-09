@@ -85,8 +85,8 @@
       }
     },
     "project-2": {
-      "requests": 18,
-      "tokens": 16192,
+      "requests": 19,
+      "tokens": 17280,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-2": {
@@ -156,12 +156,16 @@
         "s08-stream-gemini-3.5-flash-lite-project-2": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "l09-ordinary-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
         }
       }
     },
     "project-3": {
-      "requests": 18,
-      "tokens": 16192,
+      "requests": 19,
+      "tokens": 17280,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-3": {
@@ -231,12 +235,16 @@
         "s08-stream-gemini-3.5-flash-lite-project-3": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "l09-ordinary-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
         }
       }
     },
     "project-4": {
-      "requests": 17,
-      "tokens": 15104,
+      "requests": 19,
+      "tokens": 17280,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-4": {
@@ -302,12 +310,20 @@
         "s08-stream-gemini-3.5-flash-lite-project-4": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "l09-nonstream-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 85
+        },
+        "l09-reasoning-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 80
         }
       }
     },
     "project-5": {
-      "requests": 17,
-      "tokens": 15104,
+      "requests": 19,
+      "tokens": 17280,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-5": {
@@ -373,6 +389,14 @@
         "s08-stream-gemini-3.5-flash-lite-project-5": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "l09-nonstream-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 85
+        },
+        "l09-reasoning-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 86
         }
       }
     }

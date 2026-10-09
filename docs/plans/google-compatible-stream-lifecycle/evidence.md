@@ -31,3 +31,28 @@ pass. Contextual review cleared all Critical/Major findings; see
 [review](implementation-review.md). Verifier-only work needs no Docker rebuild; Sonar
 scanner script absent. [Immutable baseline](ledger-baseline.json) copies the existing full
 cumulative ledger with no budget reset. No live requests sent in implementation.
+
+## Single bounded live stage
+
+[Results](results.json) retain six dispatches: project 2/3 ordinary streams, project 4/5
+reasoning nonstream/stream pairs. Both nonstream cases passed (18 input +67 output=85 tokens
+and .085 synthetic USD debit each). Four streams returned provider/public HTTP 200,
+public completed events and matching input/output usage; local debits were .009, .009,
+.080 and .086 USD. Natural upstream close and zero reservations passed all six cases.
+No overrun occurred. Provider reasoning metadata was absent; nonzero thought settlement
+remains unknown. Total observed usage 434 tokens; all six 1,088-token reservations remain
+nonrefundable in the cumulative ledger.
+
+All four streams remain failed under this verifier's terminal-usage acceptance: their
+`terminal_usage` flags are false and the resulting conservative-fallback settlement check
+is false despite retained actual numeric debits. Early public text before observed upstream
+EOF passed projects 3/4/5 and failed project 2. The saved evidence cannot distinguish
+missing final usage shape, early route closure or missing protocol termination; do not
+infer a provider billing failure from these flags. A separate reviewed observer/acceptance
+amendment is needed before further calls. Historical results remain immutable.
+
+Every cancellation case was withheld after its preceding stream failed. No cancellation
+live gate is cleared. Each project 2–5 now has one remaining cumulative request slot;
+project 1 has none. Do not reset allowance or rerun consumed IDs. The stage's project failure
+halts remain effective on replay. [Progress](progress.json) preserves numeric observations
+before later awaits. Production remains memory/one and deployment approval remains pending.
