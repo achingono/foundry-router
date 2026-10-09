@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from contextlib import suppress
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -486,10 +487,8 @@ class TestZenStatusAndStreamingLifecycle:
         result, _, credit, metrics, quota = await self._forward_stream(context, "req-cleanup")
         credit.finalize_request.side_effect = RuntimeError("synthetic credit failure")
         metrics.observe_request.side_effect = RuntimeError("synthetic metrics failure")
-        try:
+        with suppress(RuntimeError):
             _ = [part async for part in result.response.body_iterator]
-        except RuntimeError:
-            pass
         credit.finalize_request.assert_awaited_once()
         metrics.observe_request.assert_awaited_once()
         quota.finalize_request.assert_awaited_once()
