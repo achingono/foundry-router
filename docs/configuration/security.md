@@ -106,3 +106,9 @@ row, page, depth and total refresh deadlines. Raw billing bodies, resource IDs, 
 tokens never enter application logs/admin diagnostics. Client/identity closes are bounded,
 independent and cancellation-protected. Local implementation is verified; actual Azure
 permission/data acceptance remains a separate gate.
+
+
+Google stateless compatible text may omit only the exact bounded opaque thought-signature
+wrapper after validating its shape/encoding. Signature bytes never enter public output or
+logs, are never persisted/replayed, and grant no tools/history/continuation capability. Other
+provider state, unknown wrapper fields and malformed/oversize signatures still fail closed.

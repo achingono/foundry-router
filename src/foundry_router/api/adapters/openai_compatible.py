@@ -148,6 +148,10 @@ class OpenAICompatibleStreamDecoder[ContextT: ChatRequestContext]:
         """Require provider validation for assembled calls, including empty calls."""
         raise NotImplementedError
 
+    def normalize_delta(self, delta: dict[str, Any]) -> dict[str, Any]:
+        """Provider-owned output policy; default preserves strict unknown-field validation."""
+        return delta
+
     @property
     def validated(self) -> bool:
         return self._validated
@@ -312,6 +316,7 @@ class OpenAICompatibleStreamDecoder[ContextT: ChatRequestContext]:
         delta = choice.get("delta", {})
         if not isinstance(delta, dict):
             raise ValueError(f"Malformed {self.provider_label} stream event")
+        delta = self.normalize_delta(delta)
         if set(delta) - {"role", "content", "tool_calls", "refusal"}:
             raise ValueError(f"Unsupported {self.provider_label} delta or provider state")
         raw_calls = delta.get("tool_calls")
@@ -828,6 +833,11 @@ class OpenAICompatibleAdapter[ContextT: ChatRequestContext]:
         """Validate and translate provider calls; no permissive default."""
         raise NotImplementedError
 
+    def normalize_message(self, message: dict[str, Any], context: ContextT) -> dict[str, Any]:
+        """Provider-owned output policy; default retains every upstream field."""
+        _ = context
+        return message
+
     def supports_operation(self, operation: str) -> bool:
         # Operation allow-list is enforced by BackendConfig.supported_operations;
         # the adapter additionally gates per-operation validation.
@@ -1125,6 +1135,7 @@ class OpenAICompatibleAdapter[ContextT: ChatRequestContext]:
         message = choice.get("message")
         if not isinstance(message, dict):
             raise ValueError(f"{self.provider_label} choice must carry an assistant message")
+        message = self.normalize_message(message, context)
         if message.get("role", "assistant") != "assistant":
             raise ValueError(f"{self.provider_label} message role must be assistant")
         if set(message) - {"role", "content", "tool_calls", "refusal"}:

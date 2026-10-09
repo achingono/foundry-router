@@ -48,6 +48,7 @@ class GoogleRequestContext:
     max_calls: int
     max_argument_bytes: int
     historical_ids: frozenset[str] = frozenset()
+    stateless_signature_text: bool = False
 
     def validate_arguments(self, name: Any, arguments: Any) -> None:
         if not isinstance(name, str) or not isinstance(arguments, str):

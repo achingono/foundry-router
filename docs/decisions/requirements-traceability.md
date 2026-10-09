@@ -291,3 +291,5 @@ Signed enablement remains **Partially implemented** pending resource and live ga
 | Central multi-worker/replica cumulative identities and histograms | Implemented locally | `metrics/otlp.py` | `test_otlp_metrics.py`, actual `test_otlp_processes.py` |
 | Endpoint/auth bounds, partial acknowledgements, failure isolation and teardown | Implemented locally | Config/metrics/main | [Metrics evidence](../plans/metrics-aggregation/evidence.md) |
 | Actual deployed collector and restart/rollout acceptance | Planned | Operations deployment | Production remains memory/one |
+
+| Stateless Google compatible text signature output normalization | Implemented locally; exact live acceptance pending | `api/adapters/google_ai_studio.py`, generic identity output hooks | `tests/unit/test_google_stateless_signature.py`; immutable wire fixtures unchanged |

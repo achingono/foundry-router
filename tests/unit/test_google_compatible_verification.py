@@ -205,6 +205,21 @@ def test_crash_after_reservation_halts_project_on_resume(tmp_path, monkeypatch):
             "status": "failed",
             "dispatched": False,
             "actual_tokens": None,
+            "surface": "openai_compat",
+            "thinking_policy": "provider_default",
+            "http_status": None,
+            "provider_http_status": None,
+            "input_tokens": None,
+            "output_tokens": None,
+            "thought_tokens": None,
+            "budget_overrun": False,
+            "public_completed": False,
+            "public_text_present": False,
+            "usage_matches": False,
+            "synthetic_debit_usd": 0,
+            "settlement_matches": False,
+            "reservations_cleared": True,
+            "error_category": "provider_or_protocol_failure",
         }
 
     monkeypatch.setattr(stage, "run_compatible_case", fail)
@@ -427,3 +442,20 @@ async def test_explicit_usage_retained_despite_malformed_trailing_sse(tmp_path):
     )
     assert result["status"] == "failed" and result["actual_tokens"] == 2010
     assert ledger._read()["projects"]["project-1"]["halted"]
+
+
+@pytest.mark.parametrize("scope", ["top", "failed"])
+def test_persisted_stage_extra_fields_rejected_before_return(tmp_path, scope):
+    ledger = fixtures(tmp_path)
+    current = BudgetLedger(ledger)._read()
+    data = {"stage": "compatible-text-2026-10-08", "attempts": []}
+    if scope == "top":
+        data["secret-like-name"] = "private-value"
+    else:
+        data["attempts"] = [
+            {"case_id": stage.stage_cases()[0][2], "status": "failed", "private": "secret"}
+        ]
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        stage.load_results(path, current)

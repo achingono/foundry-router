@@ -713,3 +713,13 @@ No transcript or standard audio output item is fabricated. WAV is PCM mono24kHz1
 max10seconds/480044bytes; it cannot replay unchanged through the16kHz input profile.
 Refusal/truncation never returns a complete artifact. Exact Google transport/codec compatibility
 remains unverified; see [audio output evidence](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md).
+
+
+Google compatibility Responses supports a locally verified stateless text policy for the exact
+`extra_content.google.thought_signature` output wrapper. The adapter validates a nonempty
+opaque signature within 64 KiB UTF-8/control bounds and omits it from public output. This
+does not retain reasoning continuity: ordinary text replay is supported, while signed tool
+continuation remains separately gated. Requests with tools, structured/media features or
+continuation state keep strict provider-state rejection; generic compatible providers do not
+inherit this Google policy. Usage and SSE text boundaries remain unchanged. Exact live
+acceptance is recorded in the [phase evidence](../plans/google-compatible-signature-text/evidence.md).

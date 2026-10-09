@@ -325,7 +325,7 @@ async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification i
             "stream": stream,
             "thinking_policy": "provider_default",
             "status": "passed" if passed else "failed",
-            "http_status": status,
+            "http_status": int(status) if status is not None else None,
             "provider_http_status": guard.provider_http_status,
             "dispatched": guard.dispatched,
             "actual_tokens": guard.actual_tokens,

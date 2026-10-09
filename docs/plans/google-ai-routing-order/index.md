@@ -44,8 +44,10 @@ establish neither general availability nor production readiness.
 The [compatible text stage](../google-compatible-text-verification/evidence.md) recorded five
 3.5 provider HTTP 200 responses with valid usage but public 502 on every nonstream case.
 Streaming was withheld after those failures. A [safe envelope diagnostic](../google-compatible-envelope/evidence.md)
-identified nonempty provider state (`extra_content`), which the text-only adapter rejects;
-client requirements and an exact state contract must precede compatible enablement. Successful compatibility Responses and embeddings
+identified an opaque Google thought-signature wrapper. OpenAI-compatible Responses is required;
+the [reviewed stateless text repair](../google-compatible-signature-text/index.md) is implemented
+locally and omits only that exact bounded wrapper for eligible requests. Its bounded live acceptance
+stage is pending. Successful compatibility Responses and embeddings
 remain unverified. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token
@@ -252,3 +254,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Metrics aggregation implementation | Committed `0d7b4c5`; complete locally; deployed collector unverified | [Evidence](../metrics-aggregation/evidence.md); bounded OTLP, process lifetime identities, actual periodic two-worker/restart collection; production unchanged |
 | Cost reconciliation implementation | Complete locally; Azure billing acceptance unverified | [Evidence](../azure-cost-reconciliation/evidence.md); atomic downward-only estimates, confined identity transport, cycle/mapping binding and real Azurite concurrency/restart |
 | Compatible text live stage | Five failed public cases; provider 200 and conservative settlement verified | [Evidence](../google-compatible-text-verification/evidence.md); no streaming after failure, no overrun or production change |
+| Stateless compatible text repair | Implemented locally; live acceptance pending | [Evidence](../google-compatible-signature-text/evidence.md); required Responses surface, exact bounded signature omission, full quality and independent review |

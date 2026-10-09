@@ -21,6 +21,7 @@ Vendor basis (verified 2026-10-05 against public docs):
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from foundry_router.api.adapters.google_tools import (
@@ -45,6 +46,35 @@ from foundry_router.api.adapters.openai_compatible import (
 )
 from foundry_router.config.google_features import GoogleFeatureProfile
 
+MAX_STATELESS_SIGNATURE_BYTES = 65536
+CONTROL_LIMIT = 32
+DELETE_CODEPOINT = 127
+
+
+def _stateless_signature_message(message: dict[str, Any], enabled: bool) -> dict[str, Any]:
+    """Drop one bounded opaque signature only for the explicit stateless text policy."""
+    if "extra_content" not in message or not enabled:
+        return message
+    extra = message["extra_content"]
+    if extra is not None and extra != {}:
+        if not isinstance(extra, dict) or set(extra) != {"google"}:
+            raise ValueError("Unsupported Google signature wrapper")
+        google = extra["google"]
+        if not isinstance(google, dict) or set(google) != {"thought_signature"}:
+            raise ValueError("Unsupported Google signature wrapper")
+        signature = google["thought_signature"]
+        if not isinstance(signature, str) or not signature:
+            raise ValueError("Invalid Google signature")
+        try:
+            size = len(signature.encode())
+        except UnicodeError as exc:
+            raise ValueError("Invalid Google signature encoding") from exc
+        if size > MAX_STATELESS_SIGNATURE_BYTES or any(
+            ord(char) < CONTROL_LIMIT or ord(char) == DELETE_CODEPOINT for char in signature
+        ):
+            raise ValueError("Invalid bounded Google signature")
+    return {key: value for key, value in message.items() if key != "extra_content"}
+
 
 class GoogleStreamDecoder(OpenAICompatibleStreamDecoder[GoogleRequestContext]):
     """Google call validation with the historical optional empty-profile context."""
@@ -64,6 +94,9 @@ class GoogleStreamDecoder(OpenAICompatibleStreamDecoder[GoogleRequestContext]):
             context=context or request_context({}, GoogleFeatureProfile()),
         )
 
+    def normalize_delta(self, delta: dict[str, Any]) -> dict[str, Any]:
+        return _stateless_signature_message(delta, self._context.stateless_signature_text)
+
     def _translate_calls(self, raw: Any, *, completed: bool, refusal: bool) -> list[dict[str, Any]]:
         return translate_calls(raw, self._context, completed=completed, refusal=refusal)
 
@@ -81,7 +114,19 @@ class GoogleAiStudioAdapter(OpenAICompatibleAdapter[GoogleRequestContext]):
         )
 
     def request_context(self, body: dict[str, Any]) -> GoogleRequestContext:
-        return request_context(body, self.profile)
+        context = request_context(body, self.profile)
+        eligible = (
+            self.profile.continuation_policy == "disabled"
+            and not requested_features(body, context)
+            and not any(key in body for key in ("previous_response_id", "google_state", "text"))
+            and body.get("store") is not True
+        )
+        return replace(context, stateless_signature_text=eligible)
+
+    def normalize_message(
+        self, message: dict[str, Any], context: GoogleRequestContext
+    ) -> dict[str, Any]:
+        return _stateless_signature_message(message, context.stateless_signature_text)
 
     def permits(self, body: dict[str, Any], context: GoogleRequestContext) -> bool:
         return self.profile.permits(requested_features(body, context))
