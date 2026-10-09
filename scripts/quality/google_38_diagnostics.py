@@ -50,6 +50,8 @@ ERROR_STATUSES = {
 }
 
 
+VERIFIED_CASE = "g38-verified-nonstream-project-1"
+
 OBSERVATION_KEYS = {
     "provider_http_status",
     "provider_error_status",
@@ -176,7 +178,7 @@ def validate_result(result, observation):
             ):
                 raise ValueError("Invalid bounded number")
     if "case_id" in result:
-        if result["case_id"] not in {
+        if result["case_id"] not in {VERIFIED_CASE} | {
             f"g38-{surface}-project-{i}" for surface in ("nonstream", "stream") for i in range(1, 6)
         } or result["project"] not in {f"project-{i}" for i in range(1, 6)}:
             raise ValueError("Invalid case identity")
@@ -223,7 +225,7 @@ class DiagnosticLedger:
             for surface in ("native", "nonstream", "stream")
         }
         if (
-            case not in allowed
+            case not in allowed | {VERIFIED_CASE}
             or not case.endswith(project)
             or project not in {f"project-{i}" for i in range(1, 6)}
             or tokens != RESERVED

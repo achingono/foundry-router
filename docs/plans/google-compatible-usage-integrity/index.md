@@ -26,10 +26,11 @@ explicit splits and generic unchanged. Full>=80%, lint/format/types, Docker, ind
 contextual review/docs before furtherlive. Verifier Google-only effective usage must match
 same correction while preserving raw aggregate evidence; legacy3.5 defaults unchanged.
 
-After implementation, supplemental live runner only previously unattempted project1stream
+After implementation, supplemental live runner uses one distinct corrected project-1 nonstream verification
+within its one remaining physical allowance (no retries for that slot), then project1stream
 and projects2–5 native/nonstream/conditionalstream. Original p1nonstreamslot remains consumed
 and failed; distinct successful local corrections do not reclassify it. Combined old3physical
-plus new<=39 and lastp1nonstreamallowance1 unused <=45. All ledgers pinned, slot<=3,
+plus new<=40 and lastp1nonstreamallowance1 consumed only by distinct verification <=45. All ledgers pinned, slot<=3,
 no replay, retriesbounded2/4+RetryAftermax30,all429withheld,no retryafterstreambytes.
 Independent runnerreview first. Runtimefix does not promiseprovideravailability.
 
@@ -39,3 +40,9 @@ Independent runnerreview first. Runtimefix does not promiseprovideravailability.
 - [Exit criteria](exit-criteria.md)
 - [Risks](risk-register.md)
 - [Evidence](evidence.md)
+
+Project-1 corrected nonstream verification has unique ID
+`g38-verified-nonstream-project-1` and counts toward its existing nonstream surface slot.
+Original attempt plus numeric diagnostic used two; this call is its third and final attempt.
+The new runner must bind this mapping, allow just one physical attempt, and preserve both
+failed original results. Other previously unused slots retain up to three attempts each.

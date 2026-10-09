@@ -210,3 +210,13 @@ Timeout or cancellation closes the request's lease but does not release capacity
 thread still runs. Late abandoned parser failures are consumed locally without logging raw
 exceptions; active callers still receive normal failures. Resource failures and verified limits
 are recorded in [signed continuation evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).
+
+## Compatible aggregate usage
+
+Google compatible text may report an aggregate token total greater than prompt plus
+completion, without separate reasoning detail. The router conservatively attributes that
+unsplit excess to output accounting, preserving the aggregate total in Responses and local
+settlement. This does not establish reasoning-token semantics or authoritative billing.
+Incomplete final stream usage keeps conservative reservation settlement; frames never mix
+known output from an earlier snapshot with later partial usage. See the
+[usage correction](../plans/google-compatible-usage-integrity/index.md).

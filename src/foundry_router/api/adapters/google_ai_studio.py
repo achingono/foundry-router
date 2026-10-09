@@ -22,7 +22,7 @@ Vendor basis (verified 2026-10-05 against public docs):
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from foundry_router.api.adapters.google_tools import (
     GoogleRequestContext,
@@ -45,6 +45,9 @@ from foundry_router.api.adapters.openai_compatible import (
     OpenAICompatibleStreamDecoder,
 )
 from foundry_router.config.google_features import GoogleFeatureProfile
+
+if TYPE_CHECKING:
+    from foundry_router.api.adapters import TranslatedSuccess
 
 MAX_STATELESS_SIGNATURE_BYTES = 65536
 CONTROL_LIMIT = 32
@@ -76,6 +79,24 @@ def _stateless_signature_message(message: dict[str, Any], enabled: bool) -> dict
     return {key: value for key, value in message.items() if key != "extra_content"}
 
 
+def normalize_google_usage(usage: dict[str, Any]) -> dict[str, Any]:
+    """Account aggregate excess conservatively without asserting reasoning semantics."""
+    prompt, completion, total = (
+        usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    )
+    for value in (prompt, completion, total):
+        if value is not None and (type(value) is not int or value < 0):
+            raise ValueError("Google usage must contain non-negative integers")
+    if prompt is not None and total is not None and total < prompt:
+        raise ValueError("Google aggregate usage is below its prompt count")
+    result = dict(usage)
+    if prompt is not None and completion is not None and total is not None:
+        if total < prompt + completion:
+            raise ValueError("Google aggregate usage is below its explicit split")
+        result["completion_tokens"] = total - prompt
+    return result
+
+
 class GoogleStreamDecoder(OpenAICompatibleStreamDecoder[GoogleRequestContext]):
     """Google call validation with the historical optional empty-profile context."""
 
@@ -96,6 +117,19 @@ class GoogleStreamDecoder(OpenAICompatibleStreamDecoder[GoogleRequestContext]):
 
     def normalize_delta(self, delta: dict[str, Any]) -> dict[str, Any]:
         return _stateless_signature_message(delta, self._context.stateless_signature_text)
+
+    def _absorb_usage(self, usage: dict[str, Any]) -> None:
+        normalized = normalize_google_usage(usage)
+        prompt = normalized.get("prompt_tokens")
+        completion = normalized.get("completion_tokens")
+        previous = getattr(self, "_complete_usage_snapshot", None)
+        if prompt is not None and completion is not None:
+            if previous is not None and (prompt < previous[0] or completion < previous[1]):
+                self._input_tokens = self._output_tokens = None
+                raise ValueError("Google complete usage decreased")
+            self._complete_usage_snapshot = (prompt, completion)
+        self._input_tokens = prompt
+        self._output_tokens = completion if prompt is not None else None
 
     def _translate_calls(self, raw: Any, *, completed: bool, refusal: bool) -> list[dict[str, Any]]:
         return translate_calls(raw, self._context, completed=completed, refusal=refusal)
@@ -127,6 +161,27 @@ class GoogleAiStudioAdapter(OpenAICompatibleAdapter[GoogleRequestContext]):
         self, message: dict[str, Any], context: GoogleRequestContext
     ) -> dict[str, Any]:
         return _stateless_signature_message(message, context.stateless_signature_text)
+
+    def _translate_responses_success(
+        self, upstream: Any, *, logical_model: str, context: GoogleRequestContext
+    ) -> TranslatedSuccess:
+        if isinstance(upstream, dict) and isinstance(upstream.get("usage"), dict):
+            upstream = {**upstream, "usage": normalize_google_usage(upstream["usage"])}
+        return super()._translate_responses_success(
+            upstream, logical_model=logical_model, context=context
+        )
+
+    def extract_usage(self, operation: str, upstream: Any) -> tuple[int | None, int | None]:
+        if (
+            operation != "embeddings"
+            and isinstance(upstream, dict)
+            and isinstance(upstream.get("usage"), dict)
+        ):
+            try:
+                upstream = {**upstream, "usage": normalize_google_usage(upstream["usage"])}
+            except ValueError:
+                return None, None
+        return super().extract_usage(operation, upstream)
 
     def permits(self, body: dict[str, Any], context: GoogleRequestContext) -> bool:
         return self.profile.permits(requested_features(body, context))

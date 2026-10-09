@@ -11,6 +11,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from google_live_runtime import IsolatedSettings, QuietLogger, _read_public_stream
 
+from foundry_router.api.adapters.google_ai_studio import normalize_google_usage
 from foundry_router.api.adapters.google_schema import load_bounded_json
 from foundry_router.api.routes.openai import build_router
 from foundry_router.auth import verify_client_auth
@@ -134,7 +135,13 @@ class CompatibleGuard(httpx.AsyncBaseTransport):
             self.overrun = self.actual_tokens > RESERVED_TOKENS
         if not usages:
             return
-        usage = usages[-1]
+        raw_usage = usages[-1]
+        try:
+            usage = (
+                normalize_google_usage(raw_usage) if self.model == "gemini-3.8-flash" else raw_usage
+            )
+        except ValueError:
+            return
         counts = tuple(
             usage.get(name) for name in ("prompt_tokens", "completion_tokens", "total_tokens")
         )
