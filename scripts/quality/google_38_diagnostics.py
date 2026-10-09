@@ -51,6 +51,7 @@ ERROR_STATUSES = {
 
 
 VERIFIED_CASE = "g38-verified-nonstream-project-1"
+RETRY_CASES = {"g38-retry-stream-project-2", "g38-retry-stream-project-5"}
 
 OBSERVATION_KEYS = {
     "provider_http_status",
@@ -178,7 +179,7 @@ def validate_result(result, observation):
             ):
                 raise ValueError("Invalid bounded number")
     if "case_id" in result:
-        if result["case_id"] not in {VERIFIED_CASE} | {
+        if result["case_id"] not in {VERIFIED_CASE} | RETRY_CASES | {
             f"g38-{surface}-project-{i}" for surface in ("nonstream", "stream") for i in range(1, 6)
         } or result["project"] not in {f"project-{i}" for i in range(1, 6)}:
             raise ValueError("Invalid case identity")
@@ -225,7 +226,7 @@ class DiagnosticLedger:
             for surface in ("native", "nonstream", "stream")
         }
         if (
-            case not in allowed | {VERIFIED_CASE}
+            case not in allowed | {VERIFIED_CASE} | RETRY_CASES
             or not case.endswith(project)
             or project not in {f"project-{i}" for i in range(1, 6)}
             or tokens != RESERVED
@@ -410,7 +411,11 @@ class ObservingTransport(httpx.AsyncBaseTransport):
                 if len(body) + len(chunk) > MAX_BODY:
                     raise ValueError("Response bound exceeded")  # noqa: TRY301 -- bounded transport intake
                 body.extend(chunk)
-                if chunk and json.loads(request.content).get("stream"):
+                if (
+                    chunk
+                    and HTTPStatus.OK <= response.status_code < HTTPStatus.MULTIPLE_CHOICES
+                    and json.loads(request.content).get("stream")
+                ):
                     self.stream_bytes_seen = True
             wire = bytes(body)
             if response.status_code != HTTPStatus.OK:

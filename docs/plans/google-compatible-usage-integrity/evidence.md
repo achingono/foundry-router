@@ -20,3 +20,16 @@ Remaining runner amendment independently reviewed: unique project-1 corrected no
 verification consumes its last physical slot allowance, with no retry; original failed results
 remain immutable. Other unused cases retain bounded retries; combined upper bound43
 physical attempts under45. Production configuration/image remains unchanged.
+
+## First corrected all-project assessment
+
+[Remaining ledger](../google-38-responses-diagnostics/remaining-ledger.json) contains14
+physicalattempts, allsingle-attemptcases. Corrected nonstream Responses passedprojects2–5;
+streamspassedprojects1/3/4. Nativepassedprojects2–5 (project1passedbeforecorrection).
+Project1nonstreamverificationandprojects2/5streamsreturned503; noerrorbodyretryoccurred
+because the originalanybytesbarrierwasoverlyconservative. All successfulcompatiblecalls
+completedusage/settlement/cleanup withaggregateexcessincluded; originalfailuresunchanged.
+
+Refineddiagnostic-onlystreambarrierpermitsretryafterHTTP503errorbodybutneverafterHTTP2xx
+streambytes. Reviewclearedtwo remainingattemptsforonlyprojects2/5streamslots,pinningall
+priorledgersandnonstreamprerequisites; newfocusedregression503->200SSEpasses.

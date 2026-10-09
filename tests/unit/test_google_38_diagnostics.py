@@ -304,3 +304,34 @@ async def test_authentication_headers_prevent_retry_even_when_body_fails(tmp_pat
     with pytest.raises(httpx.ReadTimeout):
         await observer.handle_async_request(httpx.Request("POST", "https://example.test", json={}))
     assert len(calls) == 1
+
+
+async def test_stream_retry_allowed_after_error_body_but_not_success_output(tmp_path):
+    ledger = diagnostic.DiagnosticLedger(tmp_path / "ledger.json", b"old")
+    case = "g38-retry-stream-project-2"
+    calls = []
+    waits = []
+
+    def handle(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(503, json={"error": {"status": "UNAVAILABLE"}})
+        return httpx.Response(200, content=stream_wire(chat()))
+
+    observer = diagnostic.ObservingTransport(httpx.MockTransport(handle), ledger, "project-2", case)
+    observer.max_attempts = 2
+
+    async def sleep(delay):
+        waits.append(delay)
+
+    observer.sleep = sleep
+    result = await runtime.run_compatible_case(
+        credential="synthetic",
+        ledger=ledger,
+        project="project-2",
+        case_id=case,
+        transport=observer,
+        stream=True,
+        model=diagnostic.MODEL,
+    )
+    assert result["status"] == "passed" and len(calls) == 2 and waits == [2]

@@ -46,3 +46,15 @@ Project-1 corrected nonstream verification has unique ID
 Original attempt plus numeric diagnostic used two; this call is its third and final attempt.
 The new runner must bind this mapping, allow just one physical attempt, and preserve both
 failed original results. Other previously unused slots retain up to three attempts each.
+
+## Failed stream retry completion
+
+Completed allfive assessment used17physicalattempts across immutableledgers; corrected
+nonstream2–5passed,streams1/3/4passed,streams2/5returnedprovider503bodies. The overly
+conservativeanybytesrulewithheldretryonerrorbodies. Refineobserver outputbarrier to any
+bytes from HTTP2xx only: HTTP503errorbodies are not streamingoutput. Actual successful
+stream bytes stillpreventretry;all429withheld. For onlyprojects2/5streams, distinct
+`g38-retry-stream-project-N` cases use their remainingtwo physicalattempts, totalperslot<=3
+combined old/new, no otherreplays. Pinallthreepriorledgers andacquire originalstagelock;
+newledger refusesresume. Max4newattempts,21combined<=45, wait2/RetryAfter<=30, no paidspend.
+Report retrycompletionseparately, preserving alloriginalfailures. Independentreview beforecalls.
