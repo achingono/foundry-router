@@ -131,7 +131,8 @@ not establish Table-backed real inference. Follow the existing
 Verify Table-backed real nonstreaming/streaming inference, usage settlement, reservation
 cleanup and provider failure/admission behavior for the intended deployment. The independently
 reviewed [isolated Table inference plan](../table-real-inference/index.md) prepares four
-bounded Azure cases; concrete deployment approval remains pending preparation. Record exact
+bounded Azure cases. Preparation, independent review and ARM validation passed; concrete
+deployment approval remains pending. Record exact
 scope and failures. Close fs-openclaw inference/provider gaps with bounded verification
 before admitting that backend to the cut-over scope. For Google inclusion, require selected
 operation evidence and quota configuration from 2a/2b. Google catalog completion and deferred

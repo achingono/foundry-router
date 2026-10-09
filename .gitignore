@@ -88,3 +88,4 @@ __queuestorage__/
 
 # Mutable lock for the serialized compatible verification stage.
 docs/plans/google-compatible-text-verification/stage.lock
+docs/plans/table-real-inference/ledger.json.lock

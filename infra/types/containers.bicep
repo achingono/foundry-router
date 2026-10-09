@@ -77,6 +77,12 @@ type RouterConfig = {
   state: RouterStateConfig
   modelAliases: object
   ingressIpSecurityRestrictions: IngressIpSecurityRestriction[]
+  @minValue(0)
+  @maxValue(10)
+  retryAttempts: int?
+  @minValue(5)
+  @maxValue(900)
+  reservationMaxAgeSeconds: int?
 }
 
 @export()

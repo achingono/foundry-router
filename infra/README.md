@@ -6,6 +6,12 @@ This directory contains typed Azure Bicep IaC for Foundry Router on Azure Contai
 
 Minimum verified Bicep v0.47.16 / Azure CLI 2.60.0. `infra/bicepconfig.json` enables assertions. Build/lint compile the assertions; Azure validation evaluates parameter-dependent assertions.
 
+The internal `RouterConfig` accepts optional `retryAttempts` (default 2) and
+`reservationMaxAgeSeconds` (default 900). Existing public adapters preserve those defaults.
+The [isolated Table inference test](../docs/plans/table-real-inference/index.md) uses
+`tests/table-real-inference.bicep` with retry0/reservation30s, one replica, fresh tables and
+an immutable image. Preparation and ARM validation passed; deployment/live acceptance are pending.
+
 ## Structure
 
 - `main.bicep`: Main orchestration template (mode-parameterised)
