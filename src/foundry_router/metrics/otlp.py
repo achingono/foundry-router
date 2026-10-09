@@ -74,24 +74,22 @@ class ConfinedMetricExporter(MetricExporter):
         return MetricExportResult.FAILURE
 
     async def _dispatch(self, payload: bytes, duration: float) -> tuple[str | None, int]:
-        async with asyncio.timeout(duration):
-            async with httpx.AsyncClient(
-                transport=self._transport,
-                trust_env=False,
-                follow_redirects=False,
-                verify=True,
-                timeout=duration,
-            ) as client:
-                async with client.stream(
-                    "POST", self._endpoint, headers=self._headers, content=payload
-                ) as response:
-                    if response.status_code != HTTP_OK:
-                        return "http_status", 0
-                    acknowledgement = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        if len(acknowledgement) + len(chunk) > MAX_ACK_BYTES:
-                            return "ack_capacity", 0
-                        acknowledgement.extend(chunk)
+        async with asyncio.timeout(duration), httpx.AsyncClient(
+            transport=self._transport,
+            trust_env=False,
+            follow_redirects=False,
+            verify=True,
+            timeout=duration,
+        ) as client, client.stream(
+            "POST", self._endpoint, headers=self._headers, content=payload
+        ) as response:
+            if response.status_code != HTTP_OK:
+                return "http_status", 0
+            acknowledgement = bytearray()
+            async for chunk in response.aiter_bytes():
+                if len(acknowledgement) + len(chunk) > MAX_ACK_BYTES:
+                    return "ack_capacity", 0
+                acknowledgement.extend(chunk)
         result = ExportMetricsServiceResponse()
         result.ParseFromString(bytes(acknowledgement))
         rejected = result.partial_success.rejected_data_points
