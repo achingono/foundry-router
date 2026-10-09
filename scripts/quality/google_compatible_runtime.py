@@ -32,13 +32,14 @@ CASE_TIMEOUT_SECONDS = 25
 
 
 class CompatibleGuard(httpx.AsyncBaseTransport):
-    def __init__(self, transport, *, credential, ledger, project, case_id, stream):  # noqa: PLR0913 -- owned verification inputs
+    def __init__(self, transport, *, credential, ledger, project, case_id, stream, model=MODEL):  # noqa: PLR0913 -- owned verification inputs
         self.transport = transport
         self.credential = credential
         self.ledger = ledger
         self.project = project
         self.case_id = case_id
         self.stream = stream
+        self.model = model
         self.dispatched = False
         self.provider_http_status = None
         self.usage = None
@@ -49,7 +50,7 @@ class CompatibleGuard(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request):
         expected = {
-            "model": MODEL,
+            "model": self.model,
             "messages": [{"role": "user", "content": PROMPT}],
             "max_completion_tokens": OUTPUT_TOKENS,
         }
@@ -161,7 +162,9 @@ class CompatibleGuard(httpx.AsyncBaseTransport):
         await self.transport.aclose()
 
 
-def compatible_settings(credential, caller_key):
+def compatible_settings(
+    credential, caller_key, model=MODEL, case_timeout_seconds=CASE_TIMEOUT_SECONDS
+):
     return IsolatedSettings(
         _env_file=None,
         backends_json=json.dumps(
@@ -171,7 +174,7 @@ def compatible_settings(credential, caller_key):
                     "api_surface": "openai_compat",
                     "endpoint": "https://generativelanguage.googleapis.com",
                     "credential": credential,
-                    "deployment": MODEL,
+                    "deployment": model,
                     "credit_group": "g",
                     "quota_group": "isolated-project",
                 }
@@ -183,7 +186,7 @@ def compatible_settings(credential, caller_key):
         state_backend="memory",
         rate_limit_backend="memory",
         retry_attempts=0,
-        reservation_max_age_seconds=30,
+        reservation_max_age_seconds=max(30, case_timeout_seconds + 5),
         http_max_connections=1,
         backend_cycle_start_day_json='{"g":1}',
         backend_cycle_allowance_usd_json='{"g":100}',
@@ -197,11 +200,21 @@ def compatible_settings(credential, caller_key):
     )
 
 
-async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification inputs
-    *, credential, ledger, project, case_id, transport, stream, guard_factory=CompatibleGuard
+async def run_compatible_case(  # noqa: PLR0913, PLR0915 -- explicit owned verification inputs
+    *,
+    credential,
+    ledger,
+    project,
+    case_id,
+    transport,
+    stream,
+    guard_factory=CompatibleGuard,
+    model=MODEL,
+    case_timeout_seconds=CASE_TIMEOUT_SECONDS,
 ):
     caller_key = secrets.token_urlsafe(32)
-    settings = compatible_settings(credential, caller_key)
+    settings = compatible_settings(credential, caller_key, model, case_timeout_seconds)
+    guard_options = {} if model == MODEL else {"model": model}
     guard = guard_factory(
         transport,
         credential=credential,
@@ -209,6 +222,7 @@ async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification i
         project=project,
         case_id=case_id,
         stream=stream,
+        **guard_options,
     )
     backend = AllowedBackendClient(settings=settings)
     await backend._client.aclose()
@@ -250,7 +264,7 @@ async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification i
     error_category = None
     try:
         try:
-            async with asyncio.timeout(CASE_TIMEOUT_SECONDS):
+            async with asyncio.timeout(case_timeout_seconds):
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://isolated.test"
                 ) as client:
@@ -320,7 +334,7 @@ async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification i
         return {
             "case_id": case_id,
             "project": project,
-            "model": MODEL,
+            "model": model,
             "surface": "openai_compat",
             "stream": stream,
             "thinking_policy": "provider_default",
