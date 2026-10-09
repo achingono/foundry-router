@@ -21,3 +21,12 @@ in 5.27 seconds with [unverified result](results.json), no accepted group ceilin
 billing unavailability; the saved result cannot establish the failing boundary or permission
 cause. No repeated billing refresh was dispatched. The live scope/permission/query acceptance
 gate remains open. No deployment, role or router estimate was changed.
+
+## Diagnostic preparation
+
+Independent amendment review cleared one additional bounded refresh, with fixed redacted
+failure categories and an immutable started/result pair. The runner refuses replay after
+interruption. Original results remain untouched. Twenty diagnostic/acceptance tests passed;
+Ruff lint/format and strict mypy passed. Independent contextual implementation review found
+no Critical/Major issues. Fresh metadata preflight passed for both groups without billing calls.
+Full suite: 1,867 passed, 3 skipped, 18 deselected; coverage 89.73%. Runtime/image are unchanged.
