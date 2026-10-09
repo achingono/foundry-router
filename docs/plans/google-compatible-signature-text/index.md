@@ -1,6 +1,6 @@
 # Stateless Google compatible text signatures
 
-**Implemented** locally, independently reviewed 2026-10-08; live acceptance remains pending. See [review](plan-review.md) and [evidence](evidence.md). The operator requires OpenAI-compatible Responses. Safe exact-model
+**Implemented** locally, independently reviewed 2026-10-08; all eight scoped live text cases passed. See [review](plan-review.md) and [evidence](evidence.md). The operator requires OpenAI-compatible Responses. Safe exact-model
 [diagnosis](../google-compatible-envelope/wrapper-result.json) identified one nonempty
 `extra_content.google.thought_signature` string, with no unknown wrapper fields. Current
 strict message-state rejection returned public502 despite provider200 and valid usage.

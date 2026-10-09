@@ -65,7 +65,7 @@ but that evidence cannot complete the live accounting gate.
 | Native 2.5 text on projects 3–5 | Repeated provider 404 observations | Confirm operator entitlement before inclusion; keep unavailable combinations outside rollout scope |
 | Native 3.5 Flash-Lite minimal | Historical router nonstream/stream successes; newer router failures and direct 503/timeouts | Fresh bounded exact-combination verification and authoritative quotas; historical success alone cannot establish current availability |
 | Native 3.8 Flash low | Historical nonstream success/failures; streaming only project-1 recovered; all direct ramps ended 503 | Fresh streaming/client/usage evidence for selected projects and authoritative quotas; retain failed combinations explicitly |
-| Compatibility Responses nonstream/stream | Local adapter tests and exact synthetic wire fixtures | Exact-model compatibility requests through the router with client-visible results and terminal usage |
+| Compatibility Responses nonstream/stream | Local adapter tests; repaired 3.5 Flash-Lite passed eight simple-text cases on projects 2–5 | Required additional model/project combinations, quota evidence and unbuffered latency/cancellation if in rollout scope |
 | Compatibility embeddings | Local validation/mapping/accounting tests | Exact embedding model, supported-operation configuration, pricing/quota dimensions and bounded live usage evidence; no text-model inference of embedding support |
 | Nonzero thinking usage | Synthetic inclusive accounting tests | Provider-reported thought metadata plus public usage and exact local settlement |
 | Provider failure/admission through router | Synthetic cooldown, exclusion, retry and settlement tests; direct quota diagnostics | Bounded router traffic proving pre-output 429 handling, no failover after downstream output, and retained dispatched usage/reservations |
@@ -141,3 +141,19 @@ stays unknown. This proves neither successful compatible Responses nor embedding
 Ledger debits are retained, project-1 exhausted the stricter 20-request stage allowance and
 projects 2–5 retain five request slots each; no historical allowance is reset. Provider schema
 rejection needs separate bounded diagnosis before any retry stage.
+
+## Repaired compatible text acceptance, 2026-10-08
+
+The operator requires OpenAI-compatible Responses. Following safe diagnosis and independent
+review, the [stateless signature repair](../google-compatible-signature-text/evidence.md)
+passed eight actual cases on projects 2–5: nonstreaming and streaming `gemini-3.5-flash-lite`
+with provider-default thinking. Every public/provider status was 200, terminal public usage
+matched 8–9 observed total tokens, synthetic debits matched and reservations cleared.
+Project 1 was never dispatched because its cumulative request allowance is exhausted.
+The ledger retains all previous failures, diagnostics and full conservative reserves; projects
+2–3 now have 18 requests/16,192 tokens and projects 4–5 have 17/15,104.
+
+These exact samples establish simple-text compatible Responses and SSE translation only.
+The bounded guard buffers upstream SSE, so latency and upstream cancellation remain unverified.
+Thought metadata was absent; nonzero thinking, embeddings, tools/continuation, other models,
+authoritative quotas, provider admission and Table/production gates remain open.
