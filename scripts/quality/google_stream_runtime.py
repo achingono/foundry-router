@@ -70,9 +70,19 @@ class ObservedBytes(httpx.AsyncByteStream):
 
 class IncrementalGuard(httpx.AsyncBaseTransport):
     def __init__(  # noqa: PLR0913 -- owned verifier inputs
-        self, transport, *, credential, case, reserve, progress, terminal_facts=False, observer=None
+        self,
+        transport,
+        *,
+        credential,
+        case,
+        reserve,
+        progress,
+        terminal_facts=False,
+        observer=None,
+        model=MODEL,
     ):
         self.transport, self.credential, self.case = transport, credential, case
+        self.model = model
         self.reserve, self.progress = reserve, progress
         self.observer = observer if observer is not None else IncrementalUsage()
         self.dispatches = 0
@@ -103,7 +113,7 @@ class IncrementalGuard(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request):
         prompt = PROMPTS[self.case["prompt"]]
         expected = {
-            "model": MODEL,
+            "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "max_completion_tokens": 1024,
         }
@@ -287,10 +297,18 @@ def terminal_metadata(observer):
 
 
 async def run_case(  # noqa: PLR0913 -- owned verifier inputs
-    *, credential, case, transport, reserve, progress, terminal_facts=False, observer=None
+    *,
+    credential,
+    case,
+    transport,
+    reserve,
+    progress,
+    terminal_facts=False,
+    observer=None,
+    model=MODEL,
 ):
     caller_key = secrets.token_urlsafe(32)
-    settings = compatible_settings(credential, caller_key)
+    settings = compatible_settings(credential, caller_key, model=model)
     guard = IncrementalGuard(
         transport,
         credential=credential,
@@ -299,6 +317,7 @@ async def run_case(  # noqa: PLR0913 -- owned verifier inputs
         progress=progress,
         terminal_facts=terminal_facts,
         observer=observer,
+        model=model,
     )
     backend = AllowedBackendClient(settings=settings)
     try:
@@ -463,7 +482,7 @@ async def _run_owned_case(*, settings, guard, backend, caller_key, case):  # noq
     )
     return {
         **case,
-        "model": MODEL,
+        "model": guard.model,
         "status": "passed" if passed else "failed",
         "http_status": status,
         "provider_http_status": guard.provider_status,

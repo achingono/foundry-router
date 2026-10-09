@@ -88,6 +88,16 @@ def _uses_translated_forwarding(settings: Any, backend_id: str) -> bool:
     return _provider_of(settings, backend_id) in {"google_ai_studio", "openai_compatible"}
 
 
+def _google_pre_output_failover(settings: Any, backend_id: str, status: int) -> bool:
+    config = settings.backends[backend_id]
+    return (
+        _provider_of(settings, backend_id) == "google_ai_studio"
+        and not getattr(config, "credit_metered", True)
+        and getattr(config, "google_pre_output_failover", False)
+        and status in {500, 502, 503, 504}
+    )
+
+
 def _default_output_tokens(body: dict[str, Any]) -> int:
     value = body.get("max_output_tokens")
     if isinstance(value, int) and not isinstance(value, bool) and value > 0:
@@ -1320,7 +1330,8 @@ async def _handle_google_error_status(
 
     Every retry/failover decision is owned by routing with fresh quota
     admission: this layer never sleeps or re-dispatches internally, so each
-    upstream attempt is accounted exactly once. Only 429 is failover-eligible;
+    upstream attempt is accounted exactly once. Unmetered Google backends may
+    opt into pre-output 5xx failover; otherwise only 429 is failover-eligible;
     ambiguous 5xx failures settle the estimate (non-generation cannot be
     inferred from status alone), while auth and validation rejections refund.
     """
@@ -1365,7 +1376,9 @@ async def _handle_google_error_status(
                 upstream.status_code,
                 provider=_provider_of(settings, backend_id),
             ),
-            retryable_failure=False,
+            retryable_failure=_google_pre_output_failover(
+                settings, backend_id, upstream.status_code
+            ),
             settlement_cost_usd=fallback_cost,
             settlement_input_tokens=fallback_input,
             force_charge=True,
@@ -1939,7 +1952,9 @@ async def _google_streaming_attempt(
                     upstream.status_code,
                     provider=_provider_of(settings, backend_id),
                 ),
-                retryable_failure=False,
+                retryable_failure=_google_pre_output_failover(
+                    settings, backend_id, upstream.status_code
+                ),
                 settlement_cost_usd=fallback_cost,
                 settlement_input_tokens=fallback_input,
                 force_charge=True,

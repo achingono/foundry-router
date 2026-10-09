@@ -47,6 +47,7 @@ class BackendConfig(BaseModel):
     api_version: str = "2025-04-01-preview"
     quota_group: str | None = None
     credit_metered: bool = True
+    google_pre_output_failover: bool = False
     credit_group: str | None = None
     supported_operations: list[str] | None = None
     google_features: GoogleFeatureProfile = Field(default_factory=GoogleFeatureProfile)
@@ -138,6 +139,10 @@ class BackendConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
+        if self.google_pre_output_failover and (
+            self.provider != "google_ai_studio" or self.credit_metered
+        ):
+            raise ValueError("Google pre-output failover requires an unmetered Google backend")
         if (
             self.provider != "openai_compatible"
             and self.deployment is not None

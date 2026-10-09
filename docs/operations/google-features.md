@@ -225,3 +225,9 @@ The bounded 3.8 live diagnostic verified corrected local Responses nonstream on 
 and streaming on projects 1/3/4/5; native all five. Project2 streaming exhausted503retries;
 project 1 corrected nonstream returned 503. Retain these operation-specific eligibility limits
 and preserve original failures. Production3.8 enablement has not been deployed.
+
+## Google canary pre-deployment verification
+
+Default-off `google_pre_output_failover: true` is **Implemented locally** for unmetered Google backends only. It permits existing routing to fail over once to a different eligible backend on pre-output HTTP500/502/503/504, with fresh quota admission and retained first-attempt consumption. It adds no same-key retries and never fails over after any public SSE event. Auth, protocol and ambiguous transport/deadline failures remain terminal; metered behavior is unchanged.
+
+The [one-replica canary](../plans/google-38-production-canary/evidence.md) was not deployed: project3nonstream and project4stream each exhausted three live Google503 attempts. Project4nonstream passed; streaming/cancellation gates remain open. A future separate Google-only canary requires durable quota bootstrap to preserve daily consumption across restart. Existing Azure production, Table cut-over and scale-out remain unchanged; no collector was deployed.

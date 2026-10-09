@@ -327,3 +327,7 @@ nonstream on projects 2–5 and streaming on projects 1/3/4/5. Project5 recovere
 stream attempt; project 2 streaming exhausted three 503s. Native probes passed all five.
 Project1 corrected nonstream verification returned 503; no required-parameter 400s observed.
 21 physical attempts/22,848 reserved tokens retained. Production image/config unchanged.
+
+## Production canary acceptance checkpoint
+
+The operator authorized a one-replicaGoogle3.8canary, keeping3.7deferred; no collector exists. The [canary evidence](../google-38-production-canary/evidence.md) retains7freshattempts: project3nonstream exhausted3Google503s; project4nonstreampassed, stream exhausted3Google503s. Cancellationwithheld. Default-offunmeteredpre-outputfailoverimplemented/tested; deployment/imagepublicationunapplied. Existingproductionremainsunchanged.
