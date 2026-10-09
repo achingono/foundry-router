@@ -71,9 +71,22 @@ class TestZenValidation:
         assert rejection.status_code == 422
 
     @pytest.mark.parametrize("flag", ["store", "background"])
-    def test_true_state_flags_rejected(self, adapter: ZenAdapter, flag: str) -> None:
-        assert adapter.check_request("responses", _body(**{flag: True})) is not None
-        assert adapter.check_request("responses", _body(**{flag: False})) is None
+    @pytest.mark.parametrize(
+        "value,accepted",
+        [
+            (False, True),
+            (True, False),
+            (None, False),
+            ("yes", False),
+            (1, False),
+            (0, False),
+        ],
+    )
+    def test_state_flags_are_false_only(
+        self, adapter: ZenAdapter, flag: str, value: object, accepted: bool
+    ) -> None:
+        rejection = adapter.check_request("responses", _body(**{flag: value}))
+        assert (rejection is None) is accepted
 
     @pytest.mark.parametrize(
         "kwargs",
