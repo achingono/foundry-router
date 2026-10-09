@@ -12,6 +12,7 @@ plan only. Live upstream compatibility remains a separate gate in all cases.
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
 - [Independent plan review](review.md)
+- [Implementation review](implementation-review.md)
 
 ## Objective and contract
 
