@@ -112,7 +112,7 @@ still runs. See the [reconciliation plan](../plans/azure-cost-reconciliation/ind
 
 ## Production Gate
 
-Production deploys twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; see [inference evidence](../plans/production-inference/evidence.md). Production stays memory/one. fs-openclaw inference, provider failure/admission traffic, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
+Production deploys twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; a follow-up bounded run verified admission rejections and single-pool settlement with both dispatches served by the pool's fs-openclaw backend. Production stays memory/one. Live upstream 429/5xx failover, remaining-pool coverage, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
 
 See [implementation evidence](../plans/shared-resource-credit/evidence.md).
 

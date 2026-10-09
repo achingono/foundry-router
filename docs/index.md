@@ -4,9 +4,9 @@ Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry an
 
 ## Repository Status
 
-All six production model pools passed bounded non-streaming/streaming Responses through fs-swarm, including usage-matched shared-credit settlement. fs-openclaw inference, provider failure traffic and Table-backed production cut-over remain unverified. See [production inference evidence](plans/production-inference/evidence.md).
+All six production model pools passed bounded non-streaming/streaming Responses through fs-swarm, including usage-matched shared-credit settlement. Admission, settlement and observable failure-state are **Partially implemented**: verified for one pinned pool with both dispatches served by its fs-openclaw backend, including no-egress admission rejections and zero-reservation cleanup. Live upstream 429/5xx failover, remaining-pool coverage and Table-backed production cut-over remain unverified. See [production inference evidence](plans/production-inference/evidence.md) and [failure/admission evidence](plans/production-failure-admission/evidence.md).
 
-Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-replica and cross-RG verification passed. Real non-streaming/streaming Responses and usage settlement passed for both configured models in the dedicated memory/one test app. Table-backed real inference, provider failure/admission traffic, embeddings, authoritative cost reconciliation and production cut-over remain unverified. Production stays memory-backed with one replica. See [inference](plans/foundry-inference/evidence.md), [Table runtime](plans/table-runtime-validation/evidence.md), [two-replica](plans/table-two-replica/evidence.md) and [cross-RG](plans/table-existing-cross-rg/evidence.md) evidence for exact scope.
+Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-replica and cross-RG verification passed. Real non-streaming/streaming Responses and usage settlement passed for both configured models in the dedicated memory/one test app. Table-backed real inference, live upstream 429/5xx failover, embeddings, authoritative cost reconciliation and production cut-over remain unverified. Production stays memory-backed with one replica. See [inference](plans/foundry-inference/evidence.md), [Table runtime](plans/table-runtime-validation/evidence.md), [two-replica](plans/table-two-replica/evidence.md) and [cross-RG](plans/table-existing-cross-rg/evidence.md) evidence for exact scope.
 
 ## Start Here
 
@@ -64,6 +64,7 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Real Foundry inference verification](plans/foundry-inference/index.md)
 - [Production Foundry configuration](plans/production-foundry/index.md)
 - [Production inference verification](plans/production-inference/index.md)
+- [Production failure/admission verification (Partially implemented; one pool, live failover unverified)](plans/production-failure-admission/index.md)
 - [Shared resource credit accounting](plans/shared-resource-credit/index.md)
 
 ## Reading Convention
