@@ -26,3 +26,8 @@ inference, restart or production changes.
 
 Independent final review found no Critical or Major issues in the safe artifacts. The stale
 pre-refresh status sentence was corrected. Updated relative links and diff whitespace pass.
+
+Operator approved the current isolated image push/deployment on2026-10-09. Registry push
+completed and returned the exact approved manifest digest; see
+[push result](../table-real-inference/push-result.json). The original `pushed:false` image
+artifact records preparation-time state, not the later execution. Deployment is underway.
