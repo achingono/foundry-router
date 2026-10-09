@@ -24,3 +24,15 @@ and cleanup, but observer retained 104 versus guard/public/settlement 8 tokens. 
 halted and every remaining case was withheld. This discrepancy does not establish a
 Google billing or runtime defect: identical usage objects should yield matching counts.
 Keep this ledger immutable; a same-wire numeric diagnostic is needed before correction.
+
+## Same-wire numeric follow-up
+
+[Usage diagnostic](usage-diagnostic-ledger.json) consumed one additional physical attempt
+from project-1 nonstream's remaining slot allowance. Both observer and guard saw identical
+bytes and numeric prompt7/completion2/total71, reasoning detail absent. Both callbacks
+retained71. Public completion/cleanup passed but split settlement used9; stage remains
+failed. Raw bodies, signatures and output were not stored. Three physical attempts consumed
+across immutable ledgers; no retries needed to obtain these200responses.
+
+[Aggregate usage correction](../google-compatible-usage-integrity/index.md) is now planned
+to conservatively account the unattributed total excess without inventing reasoning metadata.
