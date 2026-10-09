@@ -31,3 +31,24 @@ subscription-currency and public daily-rate policy; the bounded live billing rej
 acceptance open. Deployment approval is not implied by elapsed time or by the active goal.
 Remaining provider/capacity/collector stages need their own
 finite reviewed execution plans and evidence before production or scale-out claims.
+
+## Continuation checkpoint, 2026-10-09 03:47 UTC
+
+The committed worktree is clean after `5a49ef4`. Read-only Azure metadata inspection of
+the four existing apps in the test resource group found no `FOUNDRY_TELEMETRY_*` settings:
+telemetry defaults disabled and no collector endpoint is configured. This does not prove
+that no collector exists elsewhere; its endpoint, authentication reference and query surface
+remain operator inputs for deployed aggregation verification. No configuration was changed.
+
+CSV inspection of the ten selected rows for `models/gemini-3.5-flash-lite` and
+`models/gemini-3.8-flash` found all ten missing each of project ID, RPM, input TPM, RPD and
+quota-bucket ID. All ten retain `operator_reported_free_tier`; no numeric capacity can be
+inferred from that classification. Authenticated quota export and shared mappings were
+requested. The current execution ledger independently confirms 20 requests consumed on
+every project; unused token headroom cannot authorize another request.
+
+Next dependent action remains approval of the current Table image push and isolated
+deployment. The already authorized four Azure inference cases can run only after the
+approved app passes binding/readiness. Production cut-over needs resulting acceptance,
+reconciled starting estimates and a separate go decision. Collector and quota inputs open
+their independent verification workstreams; no endpoint, project ID or fresh budget is inferred.
