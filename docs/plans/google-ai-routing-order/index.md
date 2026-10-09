@@ -218,8 +218,9 @@ graph TD
 
 ## Next actions
 
-Adapter extraction is locally complete. Next reconcile the text verification matrix
-against existing evidence. Capacity investigation, Table test planning, distributed quota,
+Adapter extraction and text evidence reconciliation are locally complete. The fresh native
+stage is recorded; next close scoped compatibility/accounting gates and implement independently
+reviewed workstreams. Capacity investigation, Table test planning, distributed quota,
 metrics and cost-integration planning can proceed independently. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
@@ -233,4 +234,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Adapter extraction | Committed `3001929` | [Evidence](../openai-compatible-adapter/evidence.md): full suite, coverage, typing, local Azurite, Python 3.12 Docker smoke and implementation review |
 | Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |
 
-| Native text follow-up | **Partially implemented** live verification | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
+| Native text follow-up | Committed `66175af`; live verification **Partially implemented** | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
