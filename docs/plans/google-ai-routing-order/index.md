@@ -43,7 +43,9 @@ establish neither general availability nor production readiness.
 
 The [compatible text stage](../google-compatible-text-verification/evidence.md) recorded five
 3.5 provider HTTP 200 responses with valid usage but public 502 on every nonstream case.
-Streaming was withheld after those failures. Successful compatibility Responses and embeddings
+Streaming was withheld after those failures. A [safe envelope diagnostic](../google-compatible-envelope/evidence.md)
+identified nonempty provider state (`extra_content`), which the text-only adapter rejects;
+client requirements and an exact state contract must precede compatible enablement. Successful compatibility Responses and embeddings
 remain unverified. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token

@@ -1,8 +1,9 @@
 # Google compatible envelope diagnosis
 
-**Planned**, independently reviewed 2026-10-08; see [review](plan-review.md). Five [compatible attempts](../google-compatible-text-verification/evidence.md)
+**Partially implemented**, independently reviewed 2026-10-08; see [review](plan-review.md). Five [compatible attempts](../google-compatible-text-verification/evidence.md)
 returned provider 200 with valid usage but public 502. Their response schema was not retained;
-do not infer the exact cause. Project-1 reached the retained 20-request limit.
+do not infer the exact cause. Project-1 reached the retained 20-request limit. The completed diagnostic recorded a nonempty
+`extra_content` object; inert-field normalization is not justified. See [evidence](evidence.md).
 
 ## Bounded diagnosis
 
