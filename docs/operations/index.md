@@ -52,13 +52,19 @@ One-replica synthetic Table runtime verification is **Implemented**: token-only 
 
 The Bicep typing foundation, identity/observability and environment/router modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects and preserve access-grant dependencies. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and the infrastructure guide.
 
-The opt-in Azure Cost Management provider queries reported USD costs in the background at
+The opt-in Azure Cost Management provider queries reported subscription-currency costs in the background at
 the configured reconciliation interval (default ten minutes). Atomic cycle-bound ceilings
 can lower local remaining estimates without replenishing concurrent spend. Authenticated
 reconciliation diagnostics expose provider kind, last attempt/success and failure/stale state;
 fetch time does not establish billing completeness. Unavailable/incomplete evidence preserves
 local estimates while reservation maintenance continues. Live Azure query acceptance remains
 unverified; see the [contract](../plans/azure-cost-reconciliation/index.md).
+Configure each subscription's billing currency as USD or CAD. CAD uses one published Bank
+of Canada daily average for the complete refresh; safe acceptance evidence retains its date,
+CAD-per-USD rate and source. Missing, malformed or older-than-four-day rate evidence rejects
+the refresh while local estimates and reservation maintenance continue. Daily conversion of
+cycle-to-date totals remains an estimate; it does not reconstruct transaction-day FX.
+See [currency configuration and verification](../plans/azure-cost-currency/index.md).
 
 ## Failure Handling
 

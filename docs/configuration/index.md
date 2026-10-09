@@ -308,7 +308,7 @@ fail enabled startup explicitly. Install the `telemetry` extra; the Docker image
 
 ## Azure Cost Management ceilings (Implemented locally)
 
-`FOUNDRY_RECONCILIATION_PROVIDER=azure_cost_management` opts into public Azure USD cost
+`FOUNDRY_RECONCILIATION_PROVIDER=azure_cost_management` opts into public Azure cost
 queries; default `static` retains existing explicit replacement overrides. Configure
 `FOUNDRY_COST_MANAGEMENT_GROUPS_JSON` as an object whose canonical metered credit-group
 keys map to `{"scope": "<subscription-or-resource-group-ARM-path>",
@@ -316,6 +316,20 @@ keys map to `{"scope": "<subscription-or-resource-group-ARM-path>",
 externally, explicit cycle allowances/start days, and no static reconciliation overrides.
 Every resource belongs to one account and must lie within its query scope. Resource-group
 names support documented Unicode letters/numbers and `_-.()` with bounded segments.
+
+Set `FOUNDRY_COST_MANAGEMENT_SUBSCRIPTION_CURRENCIES_JSON` to a subscription UUID mapping,
+for example `{"00000000-0000-0000-0000-000000000000":"CAD"}`. Supported currencies are
+`USD` and `CAD`; unmapped subscriptions default to USD. Keys must belong to configured cost
+scopes. Duplicate normalized keys, unused subscriptions and other currencies fail validation.
+Every billing row must match its subscription's configured currency. Allowances, prices,
+reservations and remaining estimates remain USD.
+
+CAD refreshes fetch one Bank of Canada FXUSDCAD daily average (CAD per USD) and divide the
+cycle-to-date CAD cost by that rate. The latest published Toronto-date observation must be
+at most four calendar days old. This is a local operational estimate, not Azure's billed
+exchange rate. Converted costs round upward and ceilings downward; currency changes invalidate
+previously fetched ceilings. USD-only refreshes make no public exchange-rate request.
+See the [currency contract](../plans/azure-cost-currency/index.md).
 
 The background provider uses managed identity in Container Apps and the developer identity
 chain locally, with public ARM read access supplied by the operator. Refreshes are bounded

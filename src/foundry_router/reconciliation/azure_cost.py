@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import UTC, datetime
-from decimal import ROUND_FLOOR, Decimal, InvalidOperation, localcontext
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation, localcontext
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, quote, urlsplit
 
 import httpx
 
+from foundry_router.config.cost_management import billing_currency
 from foundry_router.credit import calculate_cycle_window
 from foundry_router.reconciliation.cost_types import (
     CostCeiling,
@@ -19,6 +20,7 @@ from foundry_router.reconciliation.cost_types import (
     cost_policy_fingerprint,
     downward_float,
 )
+from foundry_router.reconciliation.exchange_rate import DailyExchangeRateClient
 from foundry_router.state.azure import select_credential
 
 if TYPE_CHECKING:
@@ -47,7 +49,11 @@ class AzureCostManagementProvider:
     kind = "azure_cost_management"
 
     def __init__(
-        self, *, credential: Any = None, transport: httpx.AsyncBaseTransport | None = None
+        self,
+        *,
+        credential: Any = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        rate_transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         if credential is None:
             credential = select_credential()
@@ -61,12 +67,15 @@ class AzureCostManagementProvider:
         self._closed = False
         self._client_closed = False
         self._credential_closed = False
+        self._rate_transport = rate_transport
+        self._rate_client: DailyExchangeRateClient | None = None
+        self._rate_closed = True
         self._close_task: asyncio.Task[None] | None = None
 
     async def close(self) -> None:
         """Finish bounded independent cleanup despite repeated caller cancellation."""
         self._closed = True
-        if self._client_closed and self._credential_closed:
+        if self._client_closed and self._credential_closed and self._rate_closed:
             return
         if self._close_task is None or self._close_task.done():
             self._close_task = asyncio.create_task(self._close_resources())
@@ -87,6 +96,7 @@ class AzureCostManagementProvider:
         for resource, flag, method in (
             (self._client, "_client_closed", "aclose"),
             (self._credential, "_credential_closed", "close"),
+            (self._rate_client, "_rate_closed", "aclose"),
         ):
             if getattr(self, flag):
                 continue
@@ -111,16 +121,45 @@ class AzureCostManagementProvider:
         try:
             async with asyncio.timeout(REFRESH_SECONDS):
                 now = datetime.now(UTC)
+                # Bind every policy field before the first await. A configuration change
+                # during FX/token/billing I/O must invalidate the fetched batch.
+                policies = tuple(
+                    (
+                        group,
+                        config,
+                        billing_currency(settings, config),
+                        settings.backend_cycle_start_day[group],
+                        settings.backend_cycle_allowance_usd[group],
+                        cost_policy_fingerprint(settings, group),
+                    )
+                    for group, config in settings.cost_management_groups.items()
+                )
+                rate = None
+                if any(policy[2] == "CAD" for policy in policies):
+                    # Acquire only after the provider has an owner that can close its
+                    # existing ARM client/credential if public transport setup fails.
+                    if self._rate_client is None:
+                        self._rate_client = DailyExchangeRateClient(transport=self._rate_transport)
+                        self._rate_closed = False
+                    rate = await self._rate_client.fetch(now)
                 token = await self._credential.get_token("https://management.azure.com/.default")
                 ceilings = []
-                for group, config in settings.cost_management_groups.items():
-                    day = settings.backend_cycle_start_day[group]
+                for group, config, currency, day, allowance, fingerprint in policies:
                     cycle = calculate_cycle_window(now, day)
-                    fingerprint = cost_policy_fingerprint(settings, group)
-                    allowance = settings.backend_cycle_allowance_usd[group]
                     cost = await self._query_group(
-                        config, cycle.current_cycle_start_utc, now, token.token
+                        config,
+                        cycle.current_cycle_start_utc,
+                        now,
+                        token.token,
+                        currency=currency,
                     )
+                    if currency == "CAD":
+                        if rate is None:
+                            raise CostEvidenceError("cost_exchange_rate_unavailable")
+                        with localcontext() as context:
+                            context.prec = DECIMAL_PRECISION
+                            context.rounding = ROUND_CEILING
+                            cost = cost / rate.cad_per_usd
                     # All validated values are bounded decimal numbers; do not round a ceiling up.
                     with localcontext() as context:
                         context.prec = DECIMAL_PRECISION
@@ -138,12 +177,18 @@ class AzureCostManagementProvider:
                             fingerprint,
                         )
                     )
-                return CostCeilingBatch(tuple(ceilings), now)
+                return CostCeilingBatch(tuple(ceilings), now, rate)
         except (TimeoutError, httpx.HTTPError) as exc:
             raise CostEvidenceError("cost_transport_unavailable") from exc
 
     async def _query_group(
-        self, config: CostGroupConfig, start: datetime, end: datetime, token: str
+        self,
+        config: CostGroupConfig,
+        start: datetime,
+        end: datetime,
+        token: str,
+        *,
+        currency: str = "USD",
     ) -> Decimal:
         path = quote(config.scope, safe="/()-._") + "/providers/Microsoft.CostManagement/query"
         url = ARM_ORIGIN + path + "?api-version=" + API_VERSION
@@ -185,7 +230,7 @@ class AzureCostManagementProvider:
             if not isinstance(data, dict) or not isinstance(data.get("properties"), dict):
                 raise CostEvidenceError("cost_response_invalid")
             properties = data["properties"]
-            subtotal, rows = self._parse_rows(properties, config)
+            subtotal, rows = self._parse_rows(properties, config, currency=currency)
             row_count += rows
             if row_count > MAX_ROWS:
                 raise CostEvidenceError("cost_row_bound")
@@ -260,7 +305,9 @@ class AzureCostManagementProvider:
         return link
 
     @staticmethod
-    def _parse_rows(properties: dict[str, Any], config: CostGroupConfig) -> tuple[Decimal, int]:
+    def _parse_rows(
+        properties: dict[str, Any], config: CostGroupConfig, *, currency: str = "USD"
+    ) -> tuple[Decimal, int]:
         columns, rows = properties.get("columns"), properties.get("rows")
         if (
             not isinstance(columns, list)
@@ -289,7 +336,7 @@ class AzureCostManagementProvider:
         for row in rows:
             if not isinstance(row, list) or len(row) != len(columns):
                 raise CostEvidenceError("cost_rows_invalid")
-            amount, currency, resource = (row[indices[name]] for name in required)
+            amount, row_currency, resource = (row[indices[name]] for name in required)
             if (
                 not isinstance(amount, Decimal)
                 or not amount.is_finite()
@@ -297,7 +344,7 @@ class AzureCostManagementProvider:
                 or len(amount.as_tuple().digits) > MAX_AMOUNT_DIGITS
                 or amount.adjusted() > MAX_AMOUNT_EXPONENT
                 or amount.adjusted() < MIN_AMOUNT_EXPONENT
-                or currency != "USD"
+                or row_currency != currency
                 or not isinstance(resource, str)
                 or resource.casefold() not in allowed
             ):

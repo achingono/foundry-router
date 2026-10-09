@@ -19,6 +19,7 @@ from azure.identity.aio import AzureCliCredential
 from foundry_router.config.cost_management import CostGroupConfig
 from foundry_router.reconciliation.azure_cost import AzureCostManagementProvider
 from foundry_router.reconciliation.cost_types import CostEvidenceError
+from foundry_router.reconciliation.exchange_rate import rate_metadata
 
 ROOT = Path(__file__).resolve().parents[2]
 INPUTS = ROOT / "infra/production-inputs.local.json"
@@ -156,6 +157,7 @@ async def verify_cost(settings, provider=None):
                 }
                 for ceiling in batch.ceilings
             ],
+            "exchange_rate": rate_metadata(getattr(batch, "exchange_rate", None)),
         }
     finally:
         await provider.close()

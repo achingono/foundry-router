@@ -34,6 +34,8 @@ CATEGORIES = {
     "cost_pagination_repeated": "pagination",
     "cost_page_bound": "pagination",
     "cost_cleanup_unavailable": "cleanup",
+    "cost_exchange_rate_invalid": "exchange_rate",
+    "cost_exchange_rate_unavailable": "exchange_rate",
 }
 
 

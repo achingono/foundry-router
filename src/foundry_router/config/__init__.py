@@ -12,7 +12,11 @@ from urllib.parse import unquote, urlsplit
 from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from foundry_router.config.cost_management import CostGroupConfig, parse_cost_groups
+from foundry_router.config.cost_management import (
+    CostGroupConfig,
+    parse_cost_groups,
+    parse_subscription_currencies,
+)
 from foundry_router.config.google_audio_output import validate_audio_output_pools
 from foundry_router.config.google_features import GoogleFeatureProfile
 from foundry_router.config.google_output import validate_image_output_pools
@@ -307,6 +311,15 @@ class Settings(BaseSettings):
         repr=False,
     )
     cost_management_groups: dict[str, CostGroupConfig] = Field(
+        default_factory=dict, exclude=True, repr=False
+    )
+    cost_management_subscription_currencies_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_COST_MANAGEMENT_SUBSCRIPTION_CURRENCIES_JSON",
+        exclude=True,
+        repr=False,
+    )
+    cost_management_subscription_currencies: dict[str, str] = Field(
         default_factory=dict, exclude=True, repr=False
     )
     reconciliation_interval_minutes: Annotated[int, Field(ge=1, le=60)] = Field(
@@ -997,6 +1010,9 @@ class Settings(BaseSettings):
 
         if self.reconciliation_provider == "azure_cost_management":
             self.cost_management_groups = parse_cost_groups(self)
+        self.cost_management_subscription_currencies = parse_subscription_currencies(
+            self.cost_management_subscription_currencies_json, self.cost_management_groups
+        )
 
         return self
 

@@ -107,6 +107,12 @@ tokens never enter application logs/admin diagnostics. Client/identity closes ar
 independent and cancellation-protected. Local implementation is verified; actual Azure
 permission/data acceptance remains a separate gate.
 
+CAD cost conversion additionally allows only the fixed Bank of Canada Valet FXUSDCAD HTTPS
+request, without authentication, redirects, ambient proxies or retries. Public rate bodies
+are bounded to 64 KiB, ten observations and a five-second deadline within the overall
+30-second refresh. Dates, series metadata and decimal values are validated; stale or
+unexpected evidence fails closed. The provider owns and closes the public rate client.
+
 
 Google stateless compatible text may omit only the exact bounded opaque thought-signature
 wrapper after validating its shape/encoding. Signature bytes never enter public output or

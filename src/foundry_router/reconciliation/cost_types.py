@@ -8,7 +8,12 @@ import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from foundry_router.config.cost_management import billing_currency
+
+if TYPE_CHECKING:
+    from foundry_router.reconciliation.exchange_rate import DailyExchangeRate
 
 MAX_CYCLE_START_DAY = 28
 
@@ -31,6 +36,7 @@ def cost_policy_fingerprint(settings: Any, group: str) -> str | None:
         sorted(value.casefold() for value in config.resource_ids),
         settings.backend_cycle_start_day.get(group),
         settings.backend_cycle_allowance_usd.get(group),
+        billing_currency(settings, config),
     ]
     return hashlib.sha256(json.dumps(payload, separators=(",", ":")).encode()).hexdigest()
 
@@ -83,6 +89,7 @@ class CostCeilingBatch:
 
     ceilings: tuple[CostCeiling, ...]
     fetched_at_utc: datetime
+    exchange_rate: DailyExchangeRate | None = None
 
     def __post_init__(self) -> None:
         if len({ceiling.credit_group for ceiling in self.ceilings}) != len(self.ceilings):

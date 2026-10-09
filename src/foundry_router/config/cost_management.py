@@ -6,6 +6,7 @@ import json
 import re
 import unicodedata
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -16,6 +17,8 @@ MAX_COST_RESOURCES = 32
 MAX_RESOURCE_ID_CHARS = 2048
 SUBSCRIPTION_SEGMENTS = 3
 MAX_RESOURCE_GROUP_CHARS = 90
+PAIR_FIELDS = 2
+MAX_CURRENCY_JSON_BYTES = 65536
 _SEGMENT = r"[^/]+"
 _SUBSCRIPTION = r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 _SCOPE = re.compile(
@@ -100,3 +103,45 @@ def parse_cost_groups(settings: Any) -> dict[str, CostGroupConfig]:
             resources.add(identifier)
         result[group] = config
     return result
+
+
+def parse_subscription_currencies(raw: str, groups: dict[str, CostGroupConfig]) -> dict[str, str]:
+    """Currency belongs to billing subscription; unmapped scopes retain USD behavior."""
+    if not isinstance(raw, str) or len(raw.encode()) > MAX_CURRENCY_JSON_BYTES:
+        raise ValueError("Subscription currencies must be a bounded object")
+    try:
+        pairs = json.loads(raw, object_pairs_hook=list)
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise ValueError("Subscription currencies must be an object") from exc
+    if not isinstance(pairs, list) or len(pairs) > MAX_COST_GROUPS:
+        raise ValueError("Subscription currencies must be a bounded object")
+    used = {config.scope.split("/")[2].casefold() for config in groups.values()}
+    result = {}
+    for pair in pairs:
+        if not isinstance(pair, tuple) or len(pair) != PAIR_FIELDS:
+            raise ValueError("Subscription currencies must be an object")
+        subscription, currency = pair
+        if not isinstance(subscription, str) or not re.fullmatch(_SUBSCRIPTION, subscription):
+            raise ValueError("Subscription currency needs an exact UUID")
+        key = str(UUID(subscription))
+        if (
+            key in result
+            or key not in used
+            or not isinstance(currency, str)
+            or currency not in {"USD", "CAD"}
+        ):
+            raise ValueError("Subscription currency must be unique, used and USD or CAD")
+        result[key] = currency
+    # JSON [] is distinct from {}; the pairs decoder maps both to [], so check the root.
+    if not raw.lstrip().startswith("{"):
+        raise ValueError("Subscription currencies must be an object")
+    return result
+
+
+def billing_currency(settings: Any, config: CostGroupConfig) -> str:
+    value = getattr(settings, "cost_management_subscription_currencies", {}).get(
+        config.scope.split("/")[2].casefold(), "USD"
+    )
+    if not isinstance(value, str) or value not in {"USD", "CAD"}:
+        raise ValueError("Unsupported subscription billing currency")
+    return value

@@ -175,8 +175,11 @@ returned no accepted ceilings; live scope/permission/query acceptance remains un
 The one immutable diagnostic follow-up reached provider validation and returned a schema
 rejection, without applying balances. Preserve strict completeness/currency/membership rules.
 The [schema diagnosis](../azure-cost-schema-diagnosis/evidence.md) confirmed non-USD currency
-on the first group's otherwise structurally valid response. A reviewed currency policy is
-required before accepting it against USD allowances; the second group remains unverified.
+on the first group's otherwise structurally valid response. The independently reviewed
+[subscription currency policy](../azure-cost-currency/index.md) supports configured USD/CAD
+billing and a dated Bank of Canada daily average for conservative USD estimates. Local
+implementation is verified; the new bounded CAD acceptance remains pending and the second
+group remains unverified.
 This work can proceed before cut-over and does not block quota or metrics implementation.
 Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
