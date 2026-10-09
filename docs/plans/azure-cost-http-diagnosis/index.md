@@ -1,6 +1,6 @@
 # Bounded Azure billing HTTP diagnosis
 
-**Implemented locally**, live diagnosis pending, 2026-10-09 UTC (2026-10-08 Toronto). The reviewed subscription CAD
+**Implemented locally**, single live diagnosis recorded (billing 429), 2026-10-09 UTC (2026-10-08 Toronto). The reviewed subscription CAD
 acceptance returned a provider-boundary HTTP rejection in 6.129 seconds, without a status
 code or accepted ceilings. This phase diagnoses the existing read-only query contract; it
 does not retry the consumed invocation or weaken currency/completeness checks.
