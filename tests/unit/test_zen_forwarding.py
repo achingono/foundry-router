@@ -405,7 +405,9 @@ class TestZenStatusAndStreamingLifecycle:
             assert streamed.retryable_failure is False
             assert streamed.force_charge is False
             stream_env.cooldown.assert_awaited_once()
-            assert stream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+            assert (
+                stream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+            )
             assert context.exit_calls == 1
 
     async def test_429_is_the_only_failover_eligible_status(self) -> None:
@@ -436,7 +438,9 @@ class TestZenStatusAndStreamingLifecycle:
         assert nonstream.force_charge is True
         assert nonstream.settlement_cost_usd is not None
         nonstream_env.cooldown.assert_awaited_once()
-        assert nonstream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+        assert (
+            nonstream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+        )
 
     async def test_missing_and_malformed_terminal_usage_settle_conservatively(self) -> None:
         cases = [
@@ -444,7 +448,7 @@ class TestZenStatusAndStreamingLifecycle:
             [
                 b'data: {"type":"response.completed","response":{"usage":{"input_tokens":"bad","output_tokens":-1}}}\n\n'
             ],
-            [b'data: {"type":"response.created"}\n\n', b'data: [DONE]\n\n'],
+            [b'data: {"type":"response.created"}\n\n', b"data: [DONE]\n\n"],
         ]
         for index, chunks in enumerate(cases):
             context = _FakeStreamContext(chunks=chunks)
