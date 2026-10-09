@@ -85,3 +85,6 @@ AzuriteConfig
 __azurite_db_*.json
 __blobstorage__/
 __queuestorage__/
+
+# Mutable lock for the serialized compatible verification stage.
+docs/plans/google-compatible-text-verification/stage.lock
