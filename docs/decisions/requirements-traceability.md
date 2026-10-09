@@ -296,4 +296,4 @@ Signed enablement remains **Partially implemented** pending resource and live ga
 
 | Stateless Google compatible text signature output normalization | Implemented locally; exact live acceptance pending | `api/adapters/google_ai_studio.py`, generic identity output hooks | `tests/unit/test_google_stateless_signature.py`; immutable wire fixtures unchanged |
 
-| Google compatible aggregate usage conservation | Implemented locally; live verification pending | Google usage normalization | [Correction plan](../plans/google-compatible-usage-integrity/index.md); actual Responses nonstream/stream settlement and coherent snapshot tests |
+| Google compatible aggregate usage conservation | Implemented; corrected scoped local Responses against Google passed | Google usage normalization | [Correction plan](../plans/google-compatible-usage-integrity/index.md); actual Responses nonstream/stream settlement and coherent snapshot tests |

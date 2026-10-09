@@ -62,7 +62,7 @@ a synthetic verifier gap for complete usage on an inert stop choice, preserves a
 evidence and reserves the last four cumulative slots for three normal streams and one
 conditional natural-cancellation check; implementation is reviewed and locally verified,
 three new streams completed publicly with early delivery/cleanup, but failed strict stop-choice
-qualification; conditional cancellation was withheld. The final project2 slot was subsequently
+qualification; conditional cancellation was withheld. The final project 2 slot was subsequently
 consumed by the [reviewed cancellation stage](../google-final-cancellation/evidence.md): early
 preterminal disconnect and natural cleanup passed, conservative settlement validation failed.
 The [local forwarding correction](../google-stream-settlement-integrity/evidence.md) preserves
@@ -153,7 +153,7 @@ cleanup and provider failure/admission behavior for the intended deployment. The
 reviewed [isolated Table inference plan](../table-real-inference/index.md) prepares four
 bounded Azure cases. Preparation, independent review and ARM validation passed; concrete
 deployment was explicitly approved and completed. Binding/readiness passed, but the first
-nonstream case returned503 with an active reservation and the second has an ambiguous
+nonstream case returned 503 with an active reservation and the second has an ambiguous
 started entry; streaming/restart withheld, no replay. Record exact
 scope and failures. Close fs-openclaw inference/provider gaps with bounded verification
 before admitting that backend to the cut-over scope. For Google inclusion, require selected
@@ -318,3 +318,12 @@ The operator confirms all five Google projects belong to separate accounts. Each
 is an independent quota pool; no cross-account shared quota gate applies. Same-model
 counters must still aggregate across router replicas within a project. Alias equivalence
 only needs confirmation if aliases/variants are selected for rollout.
+
+## Google 3.8 all-project diagnostic checkpoint
+
+[Aggregate usage correction](../google-compatible-usage-integrity/evidence.md) implemented
+after same-wire numeric evidence. Current local router Responses calls against Google pass
+nonstream on projects 2–5 and streaming on projects 1/3/4/5. Project5 recovered on its third
+stream attempt; project 2 streaming exhausted three 503s. Native probes passed all five.
+Project1 corrected nonstream verification returned 503; no required-parameter 400s observed.
+21 physical attempts/22,848 reserved tokens retained. Production image/config unchanged.

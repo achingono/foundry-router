@@ -1,6 +1,6 @@
 # Google compatible aggregate usage integrity
 
-**Planned**. Same-wire 3.8 diagnostic records Google prompt7/completion2/total71 with
+**Implemented**, with bounded all-project live evidence; production rollout pending. Same-wire 3.8 diagnostic records Google prompt7/completion2/total71 with
 no reasoning detail. Router returns completed text but settles9. Aggregate total may include
 unattributed provider tokens; do not invent reasoning counts or present estimates as billing.
 Historical diagnostic outcomes stay immutable. No replay or production change.
@@ -27,8 +27,8 @@ contextual review/docs before furtherlive. Verifier Google-only effective usage 
 same correction while preserving raw aggregate evidence; legacy3.5 defaults unchanged.
 
 After implementation, supplemental live runner uses one distinct corrected project-1 nonstream verification
-within its one remaining physical allowance (no retries for that slot), then project1stream
-and projects2–5 native/nonstream/conditionalstream. Original p1nonstreamslot remains consumed
+within its one remaining physical allowance (no retries for that slot), then project 1stream
+and projects 2–5 native/nonstream/conditionalstream. Original p1nonstreamslot remains consumed
 and failed; distinct successful local corrections do not reclassify it. Combined old3physical
 plus new<=40 and lastp1nonstreamallowance1 consumed only by distinct verification <=45. All ledgers pinned, slot<=3,
 no replay, retriesbounded2/4+RetryAftermax30,all429withheld,no retryafterstreambytes.
@@ -49,12 +49,16 @@ failed original results. Other previously unused slots retain up to three attemp
 
 ## Failed stream retry completion
 
-Completed allfive assessment used17physicalattempts across immutableledgers; corrected
-nonstream2–5passed,streams1/3/4passed,streams2/5returnedprovider503bodies. The overly
+Completed all five assessment used17physicalattempts across immutableledgers; corrected
+nonstream2–5passed,streams1/3/4passed,streams2/5returnedprovider 503bodies. The overly
 conservativeanybytesrulewithheldretryonerrorbodies. Refineobserver outputbarrier to any
 bytes from HTTP2xx only: HTTP503errorbodies are not streamingoutput. Actual successful
-stream bytes stillpreventretry;all429withheld. For onlyprojects2/5streams, distinct
+stream bytes stillpreventretry;all429withheld. For onlyprojects 2/5streams, distinct
 `g38-retry-stream-project-N` cases use their remainingtwo physicalattempts, totalperslot<=3
 combined old/new, no otherreplays. Pinallthreepriorledgers andacquire originalstagelock;
 newledger refusesresume. Max4newattempts,21combined<=45, wait2/RetryAfter<=30, no paidspend.
 Report retrycompletionseparately, preserving alloriginalfailures. Independentreview beforecalls.
+
+Final results: native 5/5, corrected nonstream4/5, eventual stream4/5. See [evidence](evidence.md).
+Unverified project 1nonstream/project 2stream retain exclusions; no more attempts in those
+slots. Production deployment remains pending, despite corrected local router compatibility.

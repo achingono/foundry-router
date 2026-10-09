@@ -220,3 +220,8 @@ settlement. This does not establish reasoning-token semantics or authoritative b
 Incomplete final stream usage keeps conservative reservation settlement; frames never mix
 known output from an earlier snapshot with later partial usage. See the
 [usage correction](../plans/google-compatible-usage-integrity/index.md).
+
+The bounded 3.8 live diagnostic verified corrected local Responses nonstream on projects 2–5
+and streaming on projects 1/3/4/5; native all five. Project2 streaming exhausted503retries;
+project 1 corrected nonstream returned 503. Retain these operation-specific eligibility limits
+and preserve original failures. Production3.8 enablement has not been deployed.

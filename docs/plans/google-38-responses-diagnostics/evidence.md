@@ -36,3 +36,18 @@ across immutable ledgers; no retries needed to obtain these200responses.
 
 [Aggregate usage correction](../google-compatible-usage-integrity/index.md) is now planned
 to conservatively account the unattributed total excess without inventing reasoning metadata.
+
+## Corrected all-project completion
+
+The [usage correction](../google-compatible-usage-integrity/evidence.md) was implemented,
+reviewed and verified through the actual local Responses route against Google.
+[Remaining cases](remaining-ledger.json) and [stream retry completion](stream-retry-ledger.json)
+preserve every attempt. See [summary](summary.json): native passed all five; corrected
+nonstream passed projects 2–5; streaming passed projects 1/3/4 immediately and project 5
+on its third allowed attempt. Project2 streaming exhausted three provider 503 attempts.
+Project1 corrected nonstream verification returned 503 with no remaining slot attempts.
+All successful compatible results validated aggregate usage, synthetic settlement and cleanup.
+
+No new invalid-parameter errors were observed. The compatible accounting defect and Google
+503 availability failures are distinct. 21 physical attempts/22,848 reserved tokens, zero paid
+spend; remaining global headroom does not permit replay of exhausted logical slots. Production unchanged.

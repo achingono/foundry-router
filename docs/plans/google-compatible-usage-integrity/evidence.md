@@ -25,11 +25,34 @@ physical attempts under45. Production configuration/image remains unchanged.
 
 [Remaining ledger](../google-38-responses-diagnostics/remaining-ledger.json) contains14
 physicalattempts, allsingle-attemptcases. Corrected nonstream Responses passedprojects2–5;
-streamspassedprojects1/3/4. Nativepassedprojects2–5 (project1passedbeforecorrection).
-Project1nonstreamverificationandprojects2/5streamsreturned503; noerrorbodyretryoccurred
+streamspassedprojects1/3/4. Nativepassedprojects2–5 (project 1passedbeforecorrection).
+Project 1nonstreamverificationandprojects 2/5streamsreturned503; noerrorbodyretryoccurred
 because the originalanybytesbarrierwasoverlyconservative. All successfulcompatiblecalls
 completedusage/settlement/cleanup withaggregateexcessincluded; originalfailuresunchanged.
 
 Refineddiagnostic-onlystreambarrierpermitsretryafterHTTP503errorbodybutneverafterHTTP2xx
-streambytes. Reviewclearedtwo remainingattemptsforonlyprojects2/5streamslots,pinningall
+streambytes. Reviewclearedtwo remainingattemptsforonlyprojects 2/5streamslots,pinningall
 priorledgersandnonstreamprerequisites; newfocusedregression503->200SSEpasses.
+
+## Final bounded retry evidence
+
+[Retry completion](../google-38-responses-diagnostics/stream-retry-ledger.json) used the
+remaining two stream attempts on projects 2 and 5. Project 2 returned 503 twice, exhausting
+three total attempts. Project 5 returned 503 then 200, passing completion, aggregate usage,
+synthetic settlement and cleanup on its third total attempt. No successful stream was retried.
+
+[Summary](../google-38-responses-diagnostics/summary.json): native passed 5/5 projects;
+corrected nonstream Responses passed 4/5 (project 1 verification returned 503); streaming
+passed 3/5 initially and 4/5 eventually. All successful compatible cases cleared reservations
+and matched synthetic settlement. Historical accounting failures remain unchanged. No new
+400 parameter rejections were observed. This small sample is not a reliability estimate.
+
+Combined 21 physical attempts reserve 22,848 tokens under the 45-attempt/48,960-token bounds,
+with zero paid spend. Exhausted slots cannot use remaining global headroom. Final full suite:
+2,089 passed, 3 skipped, 19 deselected; coverage 89.86%. Ruff, formatting, mypy and amd64
+build/runtime smoke passed. The final retry change affects only the verifier.
+
+Production remains memory/one with unchanged image/configuration. Calls used the actual
+Responses route locally against Google, not a deployed production endpoint. Production 3.8
+enablement requires a reviewed image/configuration rollout and deployed acceptance. Retain
+operation-specific eligibility limits for project 1 nonstream and project 2 streaming.

@@ -8,7 +8,7 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | --- | --- | --- |
 | 1 adapter extraction | [Extraction evidence](../openai-compatible-adapter/evidence.md), immutable characterization fixtures | Implemented locally; recorded behavior-preserving scope passed |
 | 2a modern native text and streaming | [Fresh native results](native-text-results-2026-10-08.json), [matrix](text-verification-matrix.md) | 3.5 Flash-Lite passed both modes on five projects; 3.8 failed five nonstream cases and remains incomplete |
-| Required compatible Responses | [Eight live results](../google-compatible-signature-text/results.json), [final cancellation evidence](../google-final-cancellation/evidence.md) | 3.5 Flash-Lite simple text and SSE passed projects 2–5; project 1 repaired compatibility and other models remain unverified; incremental normal streams prove early local delivery/cleanup but retain terminal-verifier failures; final project2 cancellation proved preterminal disconnect/natural cleanup but failed conservative settlement validation; all cumulative request budgets exhausted |
+| Required compatible Responses | [Eight live results](../google-compatible-signature-text/results.json), [final cancellation evidence](../google-final-cancellation/evidence.md) | 3.5 Flash-Lite simple text and SSE passed projects 2–5; project 1 repaired compatibility and other models remain unverified; incremental normal streams prove early local delivery/cleanup but retain terminal-verifier failures; final project 2 cancellation proved preterminal disconnect/natural cleanup but failed conservative settlement validation; all cumulative request budgets exhausted |
 | Thought-inclusive live settlement | Exact usage fields in native/compatible results, [matrix](text-verification-matrix.md) | Absent thought metadata cannot prove nonzero thinking settlement; live gate incomplete |
 | Cleanup and provider failure/admission | Recorded successful cleanup; [quota evidence](../distributed-quota-accounting/evidence.md) and synthetic routing tests | Scoped success cleanup proven; deployed provider admission/failure and no failover after actual output remain unverified |
 | 2b capacity | [310-row inventory](../google-ai-studio-capacity-inventory/inventory.csv) | Selected 3.5/3.8 displayed quotas and all project IDs captured; projects independent by operator confirmation; UI TPM semantics and deployed admission remain open |
@@ -75,3 +75,10 @@ acceptance remains independent.
 Operator clarification: the five projects belong to separate accounts and use independent
 quota pools. No cross-account shared quota confirmation is required. Same-project/model
 counters aggregate across replicas; alias mapping is only relevant when aliases are selected.
+
+## Google 3.8 diagnosis and correction
+
+[Reviewed correction/evidence](../google-compatible-usage-integrity/evidence.md) conserves
+Google aggregate total in Responses and estimated settlement. All projects assessed; native
+passed 5/5, corrected nonstream4/5, eventual stream4/5 (project 5 recovered, project 2 exhausted
+ 503s). Failed historical outcomes retained; production 3.8image/config rollout pending.
