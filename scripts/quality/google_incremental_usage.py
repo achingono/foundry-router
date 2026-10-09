@@ -27,6 +27,7 @@ class IncrementalUsage:
         self.total_tokens = None
         self.thought_tokens = None
         self.final_usage = None
+        self.final_usage_shape = "absent"
         self.invalid = False
         self.overrun = False
         self.done = False
@@ -107,18 +108,63 @@ class IncrementalUsage:
             self.invalid = True
             return
         choices = event.get("choices")
+        stop_choice = self._stop_choice(choices)
+        if self.finish_reason and choices:
+            self.invalid = True
         if isinstance(choices, list):
-            self.finish_reason |= any(
-                isinstance(choice, dict) and choice.get("finish_reason") == "stop"
-                for choice in choices
-            )
+            self.finish_reason |= stop_choice
         usage = event.get("usage")
         if usage is None:
             return
         if not isinstance(usage, dict):
             self.invalid = True
             return
-        self._usage(usage, final=choices == [])
+        final = choices == [] or stop_choice
+        previous = self.final_usage
+        self._usage(usage, final=final)
+        if final and self.final_usage is not None:
+            if previous is not None:
+                self.invalid = True
+            self.final_usage_shape = "stop_choice" if stop_choice else "usage_only"
+
+    @staticmethod
+    def _stop_choice(choices):
+        if not isinstance(choices, list) or len(choices) != 1:
+            return False
+        choice = choices[0]
+        if not isinstance(choice, dict) or set(choice) - {
+            "index",
+            "delta",
+            "finish_reason",
+            "logprobs",
+        }:
+            return False
+        if (
+            type(choice.get("index")) is not int
+            or choice["index"] != 0
+            or choice.get("finish_reason") != "stop"
+            or choice.get("logprobs") is not None
+        ):
+            return False
+        delta = choice.get("delta")
+        if not isinstance(delta, dict) or set(delta) - {
+            "content",
+            "refusal",
+            "tool_calls",
+            "extra_content",
+        }:
+            return False
+        return all(
+            value is None
+            or (
+                value == ""
+                if key in {"content", "refusal"}
+                else value == []
+                if key == "tool_calls"
+                else value == {}
+            )
+            for key, value in delta.items()
+        )
 
     def _usage(self, usage, *, final):
         counts = []

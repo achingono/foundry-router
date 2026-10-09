@@ -60,7 +60,8 @@ failures. Cancellation cases were withheld; nonzero reasoning metadata remains u
 [reviewed terminal-usage amendment](../google-stream-terminal-amendment/index.md) addresses
 a synthetic verifier gap for complete usage on an inert stop choice, preserves all failed
 evidence and reserves the last four cumulative slots for three normal streams and one
-conditional natural-cancellation check; implementation is pending. Track provider
+conditional natural-cancellation check; implementation is reviewed and locally verified,
+live execution pending. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token
 settlement remains unproven. Record model, project, surface, operation, streaming mode, usage
@@ -287,4 +288,4 @@ the text-first priority and all production/startup gates while that work proceed
 
 | Billing HTTP diagnosis | Implemented locally `ce3866c`; one scoped live 429 | [Evidence](../azure-cost-http-diagnosis/evidence.md); no error-body reads, no retries, second group unqueried, no balances applied |
 | Incremental compatible stream lifecycle | Implemented locally; six live dispatches, lifecycle acceptance partial | [Plan](../google-compatible-stream-lifecycle/index.md); ten existing-budget slots, real client early delivery/natural cancellation, no reset or production change |
-| Compatible terminal amendment | Independently reviewed plan; implementation pending | [Plan](../google-stream-terminal-amendment/index.md); exact inert stop usage, three normal/one conditional cancel, old failures preserved |
+| Compatible terminal amendment | Implemented locally; live stage pending | [Plan](../google-stream-terminal-amendment/index.md); exact inert stop usage, three normal/one conditional cancel, old failures preserved |

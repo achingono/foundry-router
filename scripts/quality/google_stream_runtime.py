@@ -67,7 +67,7 @@ class ObservedBytes(httpx.AsyncByteStream):
 
 
 class IncrementalGuard(httpx.AsyncBaseTransport):
-    def __init__(self, transport, *, credential, case, reserve, progress):
+    def __init__(self, transport, *, credential, case, reserve, progress, terminal_facts=False):  # noqa: PLR0913 -- owned verifier inputs
         self.transport, self.credential, self.case = transport, credential, case
         self.reserve, self.progress = reserve, progress
         self.observer = IncrementalUsage()
@@ -77,20 +77,22 @@ class IncrementalGuard(httpx.AsyncBaseTransport):
         self.eof_time = None
         self.closed = asyncio.Event()
         self.started = time.monotonic()
+        self.terminal_facts = terminal_facts
 
     def persist(self):
-        self.progress(
-            {
-                "dispatches": self.dispatches,
-                "provider_http_status": self.provider_status,
-                "input_tokens": self.observer.input_tokens,
-                "output_tokens": self.observer.output_tokens,
-                "thought_tokens": self.observer.thought_tokens,
-                "actual_tokens": self.observer.maximum_tokens,
-                "budget_overrun": self.observer.overrun,
-                "usage_invalid": self.observer.invalid,
-            }
-        )
+        value = {
+            "dispatches": self.dispatches,
+            "provider_http_status": self.provider_status,
+            "input_tokens": self.observer.input_tokens,
+            "output_tokens": self.observer.output_tokens,
+            "thought_tokens": self.observer.thought_tokens,
+            "actual_tokens": self.observer.maximum_tokens,
+            "budget_overrun": self.observer.overrun,
+            "usage_invalid": self.observer.invalid,
+        }
+        if self.terminal_facts:
+            value.update(terminal_metadata(self.observer))
+        self.progress(value)
 
     async def handle_async_request(self, request):
         prompt = PROMPTS[self.case["prompt"]]
@@ -265,18 +267,35 @@ def make_app(settings, backend, credit, quota, caller_key, case_id):  # noqa: PL
     return app
 
 
-async def run_case(*, credential, case, transport, reserve, progress):
+def terminal_metadata(observer):
+    return {
+        "stop_seen": observer.finish_reason,
+        "done_seen": observer.done,
+        "upstream_eof": observer.eof,
+        "final_usage_shape": observer.final_usage_shape,
+    }
+
+
+async def run_case(*, credential, case, transport, reserve, progress, terminal_facts=False):  # noqa: PLR0913 -- owned verifier inputs
     caller_key = secrets.token_urlsafe(32)
     settings = compatible_settings(credential, caller_key)
     guard = IncrementalGuard(
-        transport, credential=credential, case=case, reserve=reserve, progress=progress
+        transport,
+        credential=credential,
+        case=case,
+        reserve=reserve,
+        progress=progress,
+        terminal_facts=terminal_facts,
     )
     backend = AllowedBackendClient(settings=settings)
     try:
         async with asyncio.timeout(CASE_SECONDS - 2):
-            return await _run_owned_case(
+            result = await _run_owned_case(
                 settings=settings, guard=guard, backend=backend, caller_key=caller_key, case=case
             )
+            if terminal_facts:
+                result.update(terminal_metadata(guard.observer))
+            return result
     finally:
         await protected_cleanup([backend.aclose], timeout_seconds=1)
 

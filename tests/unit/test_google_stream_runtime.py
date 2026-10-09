@@ -223,3 +223,49 @@ async def test_nonstream_invalid_usage_fails_safely(usage):
     )
     assert result["status"] == "failed" and result["usage_invalid"]
     assert result["natural_cleanup"]
+
+
+@pytest.mark.asyncio
+async def test_stop_attached_usage_through_real_route_retains_terminal_facts():
+    class StopAttached(ProviderStream):
+        async def __aiter__(self):
+            yield event(
+                {
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ready"},
+                            "finish_reason": None,
+                        }
+                    ]
+                }
+            )
+            await asyncio.sleep(0.1)
+            yield event(
+                {
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 7, "completion_tokens": 2, "total_tokens": 9},
+                }
+            )
+            yield b"data: [DONE]\n\n"
+
+    source = StopAttached()
+    progress = []
+    result = await runtime.run_case(
+        credential="synthetic-key",
+        case={
+            "case_id": "synthetic-stop",
+            "project": "project-3",
+            "stream": True,
+            "cancel": False,
+            "prompt": "reasoning",
+        },
+        terminal_facts=True,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=source)),
+        reserve=lambda: None,
+        progress=progress.append,
+    )
+    assert result["status"] == "passed", result
+    assert result["terminal_usage"] and result["final_usage_shape"] == "stop_choice"
+    assert all(result[key] for key in ("stop_seen", "done_seen", "upstream_eof"))
+    assert any(value["final_usage_shape"] == "stop_choice" for value in progress)

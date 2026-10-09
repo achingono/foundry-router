@@ -34,7 +34,7 @@ def test_fragmented_multiline_terminal_usage_requires_protocol_end_and_eof():
     for value in wire:
         observer.feed(bytes([value]))
     assert observer.maximum_tokens == 27 and not observer.terminal_usage
-    observer.feed(frame({"choices": [{"finish_reason": "stop"}]}))
+    observer.feed(frame({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}))
     observer.feed(b"data: [DONE]\n\n")
     assert not observer.terminal_usage
     observer.finish()

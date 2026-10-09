@@ -228,20 +228,26 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
     credentials=None,
     transport_factory=None,
     runner=run_case,
+    phase_cases=None,
+    stage_identity="incremental-text-2026-10-09",
+    progress_validator=validate_progress,
+    result_validator=validate_result,
+    prerequisite=None,
+    initial_progress=None,
 ):
     with locked(STAGE_DIR / "stage"):
-        phase_cases = cases()
+        phase_cases = cases() if phase_cases is None else phase_cases
         baseline = read_file(directory / "ledger-baseline.json")
         bindings = [(case["project"], case["stream"], case["case_id"]) for case in phase_cases]
         allowed = {(case["project"], case["case_id"]) for case in phase_cases}
         ledger, current = validate_ledger(ledger_path, baseline, bindings)
         results_path, progress_path = directory / "results.json", directory / "progress.json"
-        results = read_file(results_path, {"stage": "incremental-text-2026-10-09", "attempts": []})
+        results = read_file(results_path, {"stage": stage_identity, "attempts": []})
         progress = read_file(progress_path, {})
         if (
             not isinstance(results, dict)
             or set(results) != {"stage", "attempts"}
-            or results["stage"] != "incremental-text-2026-10-09"
+            or results["stage"] != stage_identity
             or not isinstance(results["attempts"], list)
             or len(results["attempts"]) > MAX_CASES
         ):
@@ -255,12 +261,12 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
                 or result["case_id"] in by_id
             ):
                 raise ValueError("Verification stage identity")
-            validate_result(result, known[result["case_id"]], current)
+            result_validator(result, known[result["case_id"]], current)
             by_id[result["case_id"]] = result
         if not isinstance(progress, dict) or set(progress) - set(known):
             raise ValueError("Verification progress identity")
         for identity, value in progress.items():
-            validate_progress(value)
+            progress_validator(value)
             case = known[identity]
             debit = current["projects"][case["project"]]["cases"].get(identity)
             if value["dispatches"] == 1 and (
@@ -327,6 +333,8 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
             ):
                 halted.add(project)
                 continue
+            if prerequisite is not None and not prerequisite(case, by_id):
+                continue
             progress[identity] = {
                 "dispatches": 0,
                 "provider_http_status": None,
@@ -337,13 +345,15 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
                 "budget_overrun": False,
                 "usage_invalid": False,
             }
+            if initial_progress is not None:
+                progress[identity].update(initial_progress)
             write_atomic(progress_path, progress)
 
             def reserve(owner=project, case_id=identity):
                 ledger.reserve(owner, case_id, MAX_TOTAL_TOKENS)
 
             def persist(value, owner=project, case_id=identity):
-                validate_progress(value)
+                progress_validator(value)
                 if value["actual_tokens"] is not None:
                     record_progress(
                         ledger,
@@ -366,7 +376,7 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
                     progress=persist,
                 )
             )
-            validate_result(result, case, ledger._read())
+            result_validator(result, case, ledger._read())
             results["attempts"].append(result)
             write_atomic(results_path, results)
             by_id[identity] = result
