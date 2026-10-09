@@ -165,7 +165,8 @@ adapter is not a substitute for that operational gate.
 ### 5a. Distributed quota accounting
 
 **Planned**. Design and verify shared quota accounting at the `ratelimit.py` boundary under
-its own reviewed plan. Current quota state is process-local, with configured per-replica
+its own [concrete plan](../distributed-quota-accounting/index.md), cleared by independent
+review before implementation. Current quota state is process-local, with configured per-replica
 limit shares; synthetic share checks do not establish live multi-replica admission safety.
 Preserve quota/credit separation, project grouping, reservation settlement, bounded failure
 handling and rollout-overlap accounting. Choose storage only against concrete requirements.
@@ -237,4 +238,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |
 | Native text follow-up | Committed `66175af`; live verification **Partially implemented** | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
 
-| Compatible provider implementation | Complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
+| Compatible provider implementation | Committed `566e404`; complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
