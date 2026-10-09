@@ -8,3 +8,8 @@ reset/lifetime teardown and explicit series budgets resolved them. Re-review cle
 implementation with no remaining Critical/Major issues. Official pinned SDK/exporter 1.45.1
 wheels inspected; transport/reader retry, environment and shutdown behavior require concrete
 confinement tests.
+
+Pinned HTTP client inspection found 3xx success and raw reason logging. Independently
+reviewed amendment uses the official SDK/export encoder with a confined single-shot
+transport and bounded complete/partial/malformed acknowledgement checks. Final amendment
+cleared before runtime edits.

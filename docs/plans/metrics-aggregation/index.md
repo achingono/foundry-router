@@ -53,11 +53,25 @@ routers use the live metrics proxy so lifespan rebinding reaches already assembl
 Enabled startup fails explicitly when dependencies or exporter construction are unavailable.
 Explicit config takes precedence over ambient OTEL endpoint/auth/compression settings; the
 confined transport disables ambient proxies/netrc/auth and cannot disable TLS verification.
-Test hostile environment sentinels without logging their values.
+Test hostile environment sentinels without logging their values. Reject enabled startup when
+OTEL_SDK_DISABLED=true instead of silently running a disabled meter; construct explicit
+Resource (without ambient detectors) and AlwaysOffExemplarFilter so trace/request IDs never
+enter exemplars.
 SDK export occurs on its periodic reader thread, never waits on provider traffic. Bound
 export deadlines/retries through the official exporter; inspect its exact transport behavior
-rather than assuming no redirects or bounded retries. If library defaults violate these
-requirements, supply a confined HTTP session/adapter and test exact dispatch limits.
+rather than assuming no redirects or bounded retries. Inspection of pinned 1.45.1 found the HTTP client treats 3xx as successful delivery, retries
+transient failures and logs transport exception/reason strings. Use the official SDK
+MetricExporter interface and official OTLP protobuf encoder with a confined single-shot
+HTTP transport rather than inheriting those client semantics. Explicit cumulative temporality,
+1 MiB maximum protobuf request, 64 KiB bounded acknowledgement, HTTPS/TLS/no redirects/no
+ambient proxy settings and sanitized failure categories define this exporter. No provider
+outputs or raw collector errors are logged. Accept HTTP 200 OTLP protobuf acknowledgements
+only; an empty body is the valid empty protobuf response. Decode bounded
+ExportMetricsServiceResponse and distinguish partial_success.rejected_data_points from full
+delivery; malformed protobuf or partial rejection is a failed/partial health category, never
+complete acknowledgement. Discard error_message, logging only categories and numeric rejection
+counts. Test empty/full/partial/malformed200 and3xx/429/5xx. One failed export retries only at the next
+periodic cumulative snapshot; final flush loss remains visible and cannot be fabricated.
 Exporter failures cannot alter inference success or financial settlement, but log redacted
 error type/category and expose local exporter-health state without claiming delivery.
 Wrapper `reset()` resets only the local Prometheus view: cumulative OTel instruments never
