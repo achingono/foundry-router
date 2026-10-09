@@ -326,6 +326,8 @@ class TestZenStreaming:
         assert result.retryable_failure is False
         assert result.force_charge is True
         assert context.closed is True
+        env.cooldown.assert_awaited_once()
+        assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
 
     async def test_pre_output_429_is_failover_eligible(self) -> None:
         context = _FakeStreamContext(status=429, error=b"slow")
@@ -484,7 +486,10 @@ class TestZenStatusAndStreamingLifecycle:
         result, _, credit, metrics, quota = await self._forward_stream(context, "req-cleanup")
         credit.finalize_request.side_effect = RuntimeError("synthetic credit failure")
         metrics.observe_request.side_effect = RuntimeError("synthetic metrics failure")
-        _ = [part async for part in result.response.body_iterator]
+        try:
+            _ = [part async for part in result.response.body_iterator]
+        except RuntimeError:
+            pass
         credit.finalize_request.assert_awaited_once()
         metrics.observe_request.assert_awaited_once()
         quota.finalize_request.assert_awaited_once()
