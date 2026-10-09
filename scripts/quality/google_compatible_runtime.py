@@ -197,10 +197,12 @@ def compatible_settings(credential, caller_key):
     )
 
 
-async def run_compatible_case(*, credential, ledger, project, case_id, transport, stream):  # noqa: PLR0913 -- owned verification inputs
+async def run_compatible_case(  # noqa: PLR0913 -- explicit owned verification inputs
+    *, credential, ledger, project, case_id, transport, stream, guard_factory=CompatibleGuard
+):
     caller_key = secrets.token_urlsafe(32)
     settings = compatible_settings(credential, caller_key)
-    guard = CompatibleGuard(
+    guard = guard_factory(
         transport,
         credential=credential,
         ledger=ledger,
