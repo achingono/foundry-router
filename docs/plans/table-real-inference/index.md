@@ -1,6 +1,8 @@
 # Isolated Table-backed real Azure inference
 
-**Implemented** preparation locally; deployment and live acceptance pending, 2026-10-08.
+**Partially implemented**; approved isolated deployment passed on2026-10-09, live acceptance
+failed/unverified. Model-1 returned503 with retained reservation; model-2 has an ambiguous
+started entry. Streaming/restart withheld; no replay. See [evidence](evidence.md).
 Required roadmap gate 4a. Production remains memory/one. See [evidence](evidence.md).
 The operator authorized four requests across the two existing real-test model configurations,
 zero retries, at most 1,024 output tokens each and $0.15 total local estimated cost.

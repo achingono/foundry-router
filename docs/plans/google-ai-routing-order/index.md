@@ -151,7 +151,9 @@ Verify Table-backed real nonstreaming/streaming inference, usage settlement, res
 cleanup and provider failure/admission behavior for the intended deployment. The independently
 reviewed [isolated Table inference plan](../table-real-inference/index.md) prepares four
 bounded Azure cases. Preparation, independent review and ARM validation passed; concrete
-deployment approval remains pending. Record exact
+deployment was explicitly approved and completed. Binding/readiness passed, but the first
+nonstream case returned503 with an active reservation and the second has an ambiguous
+started entry; streaming/restart withheld, no replay. Record exact
 scope and failures. Close fs-openclaw inference/provider gaps with bounded verification
 before admitting that backend to the cut-over scope. For Google inclusion, require selected
 operation evidence and quota configuration from 2a/2b. Google catalog completion and deferred
@@ -269,8 +271,8 @@ graph TD
 Adapter extraction and text evidence reconciliation are locally complete. The fresh native
 stage is recorded; next close scoped compatibility/accounting gates and implement independently
 reviewed workstreams. Quota and metrics implementations are locally complete. Remaining independent work includes
-capacity investigation, Table real-traffic acceptance after approval of the
-[refreshed reviewed image](../table-real-image-refresh/evidence.md), and live cost-provider acceptance.
+capacity investigation, diagnosis of the failed/ambiguous isolated Table acceptance on the
+[approved reviewed image](../table-real-image-refresh/evidence.md), and live cost-provider acceptance.
 Google live gates cannot consume further requests under the exhausted retained ledger. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
@@ -290,7 +292,7 @@ the text-first priority and all production/startup gates while that work proceed
 | Cost reconciliation implementation | Complete locally; Azure billing acceptance unverified | [Evidence](../azure-cost-reconciliation/evidence.md); atomic downward-only estimates, confined identity transport, cycle/mapping binding and real Azurite concurrency/restart |
 | Compatible text live stage | Five failed public cases; provider 200 and conservative settlement verified | [Evidence](../google-compatible-text-verification/evidence.md); no streaming after failure, no overrun or production change |
 | Stateless compatible text repair | Committed `25b4d72`; eight scoped live cases passed | [Evidence](../google-compatible-signature-text/evidence.md); required Responses surface, exact bounded signature omission, full quality and independent review; production unchanged |
-| Table real-inference preparation | Committed `0ebe0db`; deployment approval pending | [Evidence](../table-real-inference/evidence.md); isolated app/tables/grants and immutable image prepared, ARM validation/what-if passed |
+| Table real-inference | Approved image pushed and isolated app deployed; acceptance failed/unverified | [Evidence](../table-real-inference/evidence.md); binding/readiness passed, model-1 nonstream503 with active reservation, model-2 ambiguous, streaming/restart withheld |
 | Cost schema diagnosis | Committed observer `193a65d`; first-group non-USD confirmed | [Evidence](../azure-cost-schema-diagnosis/evidence.md); USD-only policy preserved, no balances applied, second group unverified |
 | Subscription billing currency | Implemented locally `fdb34ec`; CAD live acceptance unverified | [Evidence](../azure-cost-currency/evidence.md); configurable USD/CAD, dated public daily conversion, billing HTTP rejection, no balances applied |
 
@@ -299,4 +301,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Compatible terminal amendment | Implemented locally; three live terminal-gate failures, cancellation withheld | [Plan](../google-stream-terminal-amendment/index.md); exact inert stop usage, three normal/one conditional cancel, old failures preserved |
 | Final stateless cancellation | Committed verifier `aef4fae`; one live settlement failure | [Evidence](../google-final-cancellation/evidence.md); early disconnect/natural cleanup passed, conservative settlement mismatch; all request budgets exhausted |
 | Stream settlement integrity | Implemented locally and independently reviewed; live correction unverified | [Evidence](../google-stream-settlement-integrity/evidence.md); partial counts retain reservation until clean EOF/finish, observed input quota preserved, no new provider calls |
-| Table prepared-image refresh | Implemented locally; current digest approval pending | [Evidence](../table-real-image-refresh/evidence.md); current reviewed runtime, image-only private change, ARM validation/what-if passed, no push/deployment |
+| Table prepared-image refresh | Current digest approved and pushed | [Evidence](../table-real-image-refresh/evidence.md); current reviewed runtime, image-only private change, ARM validation/what-if passed; isolated deployment recorded separately |

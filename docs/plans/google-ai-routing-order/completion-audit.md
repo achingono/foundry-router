@@ -14,7 +14,7 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | 2b capacity | [310-row inventory](../google-ai-studio-capacity-inventory/inventory.csv) | Recorded quota dimensions preserved; selected 3.5/3.8 quotas, actual project IDs and shared-model limits incomplete; unknowns cannot become executable unlimited groups |
 | 3 media | Linked feature evidence in [roadmap](index.md) | Deferred, with existing startup/live/resource gates retained |
 | 3 tools/signed continuation | [Signed evidence](../google-ai-studio-tools-multimodal/signed-continuation/evidence.md) | Conditional; required client/schema/round-trip/live enablement remains incomplete |
-| 4a Table real inference | [Prepared test evidence](../table-real-inference/evidence.md), [current image refresh](../table-real-image-refresh/evidence.md), private digest-pinned parameters and ARM what-if | Preparation refreshed to reviewed runtime; validation/what-if pass; new app/tables/grants not deployed, four calls/restart not executed; concrete current-digest approval pending |
+| 4a Table real inference | [Isolated test evidence](../table-real-inference/evidence.md), [current image refresh](../table-real-image-refresh/evidence.md) | Approved image push/deployment/binding/readiness passed; model-1 nonstream503 with active reservation, model-2 ambiguous started entry; no streaming/restart; acceptance remains unverified and replay forbidden |
 | fs-openclaw exact inference coverage | [Production evidence](../production-inference/evidence.md), prepared two-model test mapping | Existing production calls exercised fs-swarm; prepared test mapping does not establish fs-openclaw coverage; gate incomplete |
 | 4b reconciled estimates/go/drain/rollback | [Operations guidance](../../operations/shared-resource-credit.md) | Guidance exists; concrete approved starting estimates and go decision not recorded |
 | 4c/4d production Table cut-over/acceptance | Synthetic Table evidence and production memory/one invariant | Incomplete; production must remain memory/one until prior gates and go decision |
@@ -25,8 +25,8 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | 7 configurable compatible providers | [Provider evidence](../openai-compatible-provider/evidence.md) | Implemented locally; exact additional upstream/model live compatibility remains unverified |
 | Workflow and phase commits | Roadmap phase table, git history, latest verification evidence | Independent reviews and phase commits recorded; latest full suite 2,046 passed/89.76%, partial-stream settlement checks passed, Ruff/mypy clean; amd64 Docker build/import smoke passed for forwarding correction; conditional Sonar script absent |
 
-The next dependent action is the prepared isolated Table deployment, awaiting the already
-presented concrete approval. Independent cost conversion now has a reviewed configurable
+The next dependent action is diagnosis of the approved isolated Table acceptance failure,
+preserving the active reservation and ambiguous started entry without replay. Independent cost conversion now has a reviewed configurable
 subscription-currency and public daily-rate policy; the bounded live billing rejection leaves
 acceptance open. Deployment approval is not implied by elapsed time or by the active goal.
 Remaining provider/capacity/collector stages need their own
@@ -47,8 +47,11 @@ inferred from that classification. Authenticated quota export and shared mapping
 requested. The current execution ledger independently confirms 20 requests consumed on
 every project; unused token headroom cannot authorize another request.
 
-Next dependent action remains approval of the current Table image push and isolated
+At this checkpoint, the next dependent action was approval of the current Table image push and isolated
 deployment. The already authorized four Azure inference cases can run only after the
 approved app passes binding/readiness. Production cut-over needs resulting acceptance,
 reconciled starting estimates and a separate go decision. Collector and quota inputs open
 their independent verification workstreams; no endpoint, project ID or fresh budget is inferred.
+
+The subsequent operator approval and isolated deployment are recorded in the Table evidence.
+Acceptance failed/unverified; production remains memory/one and no ledgered case may be replayed.
