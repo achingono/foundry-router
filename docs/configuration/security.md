@@ -42,8 +42,9 @@ The capacity inventory's `inventory.csv`, `quotas.csv`, `quotas.md` and `quotas/
 are local-only and explicitly ignored. A fresh clone does not include these inputs.
 Run `git check-ignore <path>` before adding a private artifact. Already tracked files also
 require removal from the index with `git rm --cached`; ignore rules alone do not protect them.
-This cleanup does not erase earlier Git commits. Source-control history needs a separately
-coordinated cleanup if historical removal is required.
+The subsequent [history cleanup](../plans/personal-information-history/index.md) removed the
+identified private artifacts and values from local Git history. Remote copies retain their previous
+history until separately coordinated updates; ignored recovery material is private and must never be published.
 
 Isolated-test image references using `registry.example.test` are sanitized representations
 of private registry references. Image manifest digests and verification outcomes are retained;

@@ -1,6 +1,6 @@
 # Personal information history cleanup
 
-## Status: Partially implemented
+## Status: Implemented
 
 ## Objective and scope
 User explicitly authorized amending previous commits to remove personal and sensitive information.

@@ -12,7 +12,8 @@ Screenshots, `inventory.csv`, `quotas.csv` and `quotas.md` contain operator proj
 They are local-only, gitignored and absent from a fresh clone. Retained quota summaries use
 project labels. Actual identifiers and credential mappings belong in private operator configuration.
 Historical statements below describe the local captures; they do not imply those captures are
-available in source control. Earlier Git commits still retain the originals.
+available in source control. The subsequent local history cleanup removed these originals from rewritten commits; remote
+copies and private recovery material require separate handling.
 
 ## Screenshot quota update, recorded 2026-10-09
 
