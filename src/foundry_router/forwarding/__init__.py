@@ -85,7 +85,15 @@ def _provider_of(settings: Any, backend_id: str) -> str:
 
 
 def _uses_translated_forwarding(settings: Any, backend_id: str) -> bool:
-    return _provider_of(settings, backend_id) in {"google_ai_studio", "openai_compatible"}
+    return _provider_of(settings, backend_id) in {
+        "google_ai_studio",
+        "openai_compatible",
+        "openrouter",
+    }
+
+
+def _is_zen_provider(settings: Any, backend_id: str) -> bool:
+    return _provider_of(settings, backend_id) == "opencode_zen"
 
 
 def _google_pre_output_failover(settings: Any, backend_id: str, status: int) -> bool:
@@ -509,6 +517,20 @@ async def forward_non_streaming_with_retries(
             output_lease=output_lease,
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
+            settings=settings,
+            backend_id=backend_id,
+            operation=operation,
+            headers=headers,
+            public_body=body,
+            upstream_body=upstream_body,
+            backend_client=backend_client,
+            set_backend_active=set_backend_active,
+            set_backend_cooldown=set_backend_cooldown,
+            api_error=api_error,
+            reservation_deadline_monotonic=reservation_deadline_monotonic,
+        )
+    if _is_zen_provider(settings, backend_id):
+        return await _forward_zen_non_streaming(
             settings=settings,
             backend_id=backend_id,
             operation=operation,
@@ -1252,6 +1274,145 @@ async def _forward_google_non_streaming_buffered(
     )
 
 
+async def _forward_zen_non_streaming(
+    *,
+    settings: Any,
+    backend_id: str,
+    operation: str,
+    headers: dict[str, str],
+    public_body: dict[str, Any],
+    upstream_body: dict[str, Any],
+    backend_client: Any,
+    set_backend_active: Any,
+    set_backend_cooldown: Any,
+    api_error: Any,
+    reservation_deadline_monotonic: float | None = None,
+) -> BackendRequestResult:
+    """Zen Responses pass-through with single-shot conservative settlement.
+
+    Wire bytes are forwarded unchanged; the attempt policy is independent of
+    Azure's retry loop. Single-shot per backend regardless of
+    ``retry_attempts``: only a pre-output 429 is failover-eligible (routing
+    re-admits with fresh quota). Confirmed pre-dispatch failures release the
+    reservation; dispatched ambiguous failures retain known usage or the full
+    estimate. Missing/invalid usage settles through the standard finalizer,
+    which charges the reserved estimate rather than zero.
+    """
+    logical_model = str(public_body.get("model", ""))
+    fallback_cost, fallback_input = _fallback_estimate_cost(
+        settings, public_body, logical_model, operation
+    )
+    if (
+        reservation_deadline_monotonic is not None
+        and time.monotonic() >= reservation_deadline_monotonic
+    ):
+        # Confirmed pre-dispatch: never contacted; release, don't charge.
+        return BackendRequestResult(
+            response=api_error(502, "Backend request exceeded its deadline", "upstream_error"),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
+    try:
+        upstream = await backend_client.request_backend(
+            backend_id, operation, headers=headers, json=upstream_body
+        )
+    except httpx.TransportError:
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(
+            response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    except httpx.HTTPError:
+        return BackendRequestResult(
+            response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
+            retryable_failure=False,
+        )
+    except asyncio.CancelledError:
+        await _shielded_google_cancel_cleanup(
+            None,
+            settings=settings,
+            backend_id=backend_id,
+            set_backend_cooldown=set_backend_cooldown,
+        )
+        return BackendRequestResult(
+            response=api_error(502, "Backend request interrupted", "upstream_error"),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    limit = (
+        MAX_GOOGLE_RESPONSE_BYTES
+        if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
+        else MAX_UPSTREAM_ERROR_BYTES
+    )
+    raw_body = upstream.content if hasattr(upstream, "content") else b""
+    if len(raw_body) > limit:
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(
+            response=api_error(502, "Backend response exceeded size limits", "upstream_error"),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    if not (HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT):
+        return await _handle_google_error_status(
+            upstream,
+            settings=settings,
+            backend_id=backend_id,
+            set_backend_cooldown=set_backend_cooldown,
+            api_error=api_error,
+            fallback_cost=fallback_cost,
+            fallback_input=fallback_input,
+        )
+    try:
+        payload = json.loads(raw_body.decode("utf-8")) if raw_body else None
+    except (UnicodeDecodeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(
+            response=api_error(502, "Backend returned an invalid response", "upstream_error"),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    await set_backend_active(backend_id)
+    headers_out: dict[str, str] = {}
+    with suppress(Exception):
+        headers_out = {
+            name: value
+            for name, value in upstream.headers.items()
+            if name.lower() in SAFE_UPSTREAM_RESPONSE_HEADERS
+        }
+    return BackendRequestResult(
+        response=Response(
+            content=raw_body,
+            status_code=200,
+            media_type="application/json",
+            headers=headers_out,
+        ),
+        retryable_failure=False,
+    )
+
+
 async def _enter_google_stream(
     context: Any,
     *,
@@ -1542,6 +1703,24 @@ async def forward_streaming_with_retries(
             pre_output_timeout_seconds=pre_output_timeout_seconds,
             reservation_deadline_monotonic=reservation_deadline_monotonic,
         )
+    if _is_zen_provider(settings, backend_id):
+        return await _forward_zen_streaming(
+            settings=settings,
+            backend_id=backend_id,
+            request_id=request_id,
+            headers=headers,
+            body=body,
+            upstream_body=upstream_body,
+            backend_client=backend_client,
+            set_backend_active=set_backend_active,
+            set_backend_cooldown=set_backend_cooldown,
+            api_error=api_error,
+            credit_store=credit_store,
+            metrics_store=metrics_store,
+            rate_limit_store=rate_limit_store,
+            pre_output_timeout_seconds=pre_output_timeout_seconds,
+            reservation_deadline_monotonic=reservation_deadline_monotonic,
+        )
 
     for attempt in range(1, max_attempts + 1):
         context = backend_client.stream_backend(
@@ -1731,6 +1910,176 @@ async def forward_streaming_with_retries(
     return BackendRequestResult(
         response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
         retryable_failure=True,
+    )
+
+
+async def _forward_zen_streaming(
+    *,
+    settings: Any,
+    backend_id: str,
+    request_id: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    upstream_body: dict[str, Any],
+    backend_client: Any,
+    set_backend_active: Any,
+    set_backend_cooldown: Any,
+    api_error: Any,
+    credit_store: Any,
+    metrics_store: Any,
+    rate_limit_store: Any | None = None,
+    pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
+    reservation_deadline_monotonic: float | None = None,
+) -> BackendRequestResult:
+    """Zen streaming pass-through with single-shot conservative settlement.
+
+    One dispatch per backend regardless of ``retry_attempts``; only a
+    pre-output 429 is failover-eligible. Post-output bytes stream unchanged
+    through the shared bounded-usage inspector, which settles known usage or
+    the reserved estimate on completion, failure, or cancellation.
+    """
+    _ = reservation_deadline_monotonic
+    logical_model = str(body.get("model", ""))
+    fallback_cost, fallback_input = _fallback_estimate_cost(
+        settings, body, logical_model, "responses"
+    )
+    context = backend_client.stream_backend(
+        backend_id,
+        "responses",
+        headers=headers,
+        json=upstream_body,
+    )
+    entered = await _enter_google_stream(
+        context,
+        settings=settings,
+        backend_id=backend_id,
+        set_backend_cooldown=set_backend_cooldown,
+        api_error=api_error,
+        fallback_cost=fallback_cost,
+        fallback_input=fallback_input,
+    )
+    if isinstance(entered, BackendRequestResult):
+        return entered
+    upstream = entered
+    if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
+        try:
+            error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
+            _ = error_body
+        except httpx.TransportError:
+            await context.__aexit__(None, None, None)
+            await set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+            )
+            return BackendRequestResult(
+                response=api_error(
+                    502,
+                    "Unable to read the configured backend error response",
+                    "upstream_error",
+                ),
+                retryable_failure=False,
+                settlement_cost_usd=fallback_cost,
+                settlement_input_tokens=fallback_input,
+                force_charge=True,
+            )
+        except httpx.HTTPError:
+            await context.__aexit__(None, None, None)
+            return BackendRequestResult(
+                response=api_error(
+                    502,
+                    "Unable to read the configured backend error response",
+                    "upstream_error",
+                ),
+                retryable_failure=False,
+            )
+        await context.__aexit__(None, None, None)
+        return await _handle_google_error_status(
+            upstream,
+            settings=settings,
+            backend_id=backend_id,
+            set_backend_cooldown=set_backend_cooldown,
+            api_error=api_error,
+            fallback_cost=fallback_cost,
+            fallback_input=fallback_input,
+        )
+
+    chunks = upstream.aiter_raw()
+    try:
+        async with asyncio.timeout(pre_output_timeout_seconds):
+            first_chunk = b""
+            for _ in range(MAX_EMPTY_PRE_OUTPUT_CHUNKS):
+                first_chunk = await anext(chunks)
+                if first_chunk:
+                    break
+            if not first_chunk:
+                raise httpx.ReadError("Backend emitted too many empty pre-output chunks")
+    except (StopAsyncIteration, TimeoutError, httpx.TransportError):
+        await context.__aexit__(None, None, None)
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(
+            response=api_error(
+                502,
+                "Unable to read the configured backend stream",
+                "upstream_error",
+            ),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    except httpx.HTTPError:
+        await context.__aexit__(None, None, None)
+        return BackendRequestResult(
+            response=api_error(
+                502,
+                "Unable to read the configured backend stream",
+                "upstream_error",
+            ),
+            retryable_failure=False,
+        )
+    except asyncio.CancelledError:
+        await _shielded_google_cancel_cleanup(
+            context,
+            settings=settings,
+            backend_id=backend_id,
+            set_backend_cooldown=set_backend_cooldown,
+        )
+        return BackendRequestResult(
+            response=api_error(502, "Backend stream interrupted", "upstream_error"),
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+
+    await set_backend_active(backend_id)
+    return BackendRequestResult(
+        response=StreamingResponse(
+            stream_response(
+                chunks,
+                first_chunk,
+                context,
+                request_id=request_id,
+                backend_id=backend_id,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+                model=body.get("model", ""),
+                pricing=settings.pricing,
+                status_code=upstream.status_code,
+                set_backend_cooldown=set_backend_cooldown,
+                credit_store=credit_store,
+                metrics_store=metrics_store,
+                rate_limit_store=rate_limit_store,
+            ),
+            status_code=upstream.status_code,
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache"},
+        ),
+        retryable_failure=False,
     )
 
 
