@@ -21,3 +21,13 @@ Full suite after the reviewed usage fix: 1,966 passed, 3 skipped, 18 deselected,
 89.74% coverage. Ruff lint/format and mypy (70 runtime source files) pass. Documentation
 links/diff whitespace pass; Sonar scanner script absent. Verifier-only phase needs no new
 Docker build. This verifies the current portion, not the remaining lifecycle stage.
+
+Owned loopback server/client and durable stage runner now implemented. Actual localhost
+Responses-route tests prove early public text and natural disconnect cleanup, synthetic
+inclusive thought settlement, rejection/ownership failures and retained partial overruns.
+51 focused tests pass. Final full suite: 1,997 passed, 3 skipped, 18 deselected; coverage
+89.74%. Ruff lint/format and mypy (70 runtime files), relative links and diff whitespace
+pass. Contextual review cleared all Critical/Major findings; see
+[review](implementation-review.md). Verifier-only work needs no Docker rebuild; Sonar
+scanner script absent. [Immutable baseline](ledger-baseline.json) copies the existing full
+cumulative ledger with no budget reset. No live requests sent in implementation.

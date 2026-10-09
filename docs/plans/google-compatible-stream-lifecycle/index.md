@@ -1,6 +1,6 @@
 # Incremental Google compatible stream lifecycle
 
-**Planned**, 2026-10-09 UTC. Required Responses text workstream 2a still lacks real
+**Implemented locally**, 2026-10-09 UTC; bounded live execution pending. Required Responses text workstream 2a still lacks real
 incremental delivery/cancellation and nonzero thinking settlement evidence. The eight
 successful prior compatible cases buffered upstream data in the verification guard; their
 completion/settlement evidence remains valid but cannot clear these lifecycle gates.
