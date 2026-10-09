@@ -87,3 +87,11 @@ reservation age, image digest, identity, pinned secrets, ingress and optional mo
 binding/verifier focused selection: 33 passed. This changes verifier-only code, with no image,
 deployment parameters or external approval scope change. Full verification: 1,891 passed,
 3 skipped, 18 deselected; coverage 89.73%. Ruff lint/format and strict mypy passed.
+
+## Troubleshooting, 2026-10-09
+
+Historical logs show routing selection followed by a Table transaction HTTP 400.
+The reaper later cleared model-1 inflight and conservatively charged 0.03081 USD estimate.
+The [write metadata correction](../table-write-metadata/evidence.md) removes read metadata
+from SDK write bodies while preserving conditional ETags. Local checks pass; cloud exec
+probe returned WebSocket 404. Original failed/ambiguous entries remain unchanged.

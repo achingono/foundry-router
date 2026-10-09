@@ -1,8 +1,8 @@
 # Table entity write metadata boundary
 
-**Planned**. Historical isolated-test logs show one selected request followed by an Azure
-TableTransactionError400. The retained reservation was subsequently conservatively reaped,
-clearing inflight and debiting0.03081USD estimate. This establishes Table transaction failure
+**Partially implemented**. Historical isolated-test logs show one selected request followed by an Azure
+TableTransactionError HTTP 400. The retained reservation was subsequently conservatively reaped,
+clearing inflight and debiting 0.03081 USD estimate. This establishes Table transaction failure
 and recovery, not the exact provider response or Azure error message.
 
 Code inspection finds settlement intent copies a normalized read entity containing
@@ -23,7 +23,7 @@ Independent review before implementation. Verify with real SDK serialization/rec
 HTTP transaction bytes that read-then-update settlement intent contains no metadata body
 properties and still carries If-Match; cover conditional conflict/no mutation and full
 credit finalize/recovery through a strict property-name fake and real local Azurite. Run
-full>=80%, Ruff/format/mypy, Docker, contextual review, links/operations/traceability.
+full coverage >=80%, Ruff/format/mypy, Docker, contextual review, links/operations/traceability.
 
 Retain old live ledger and safe diagnostic evidence. No old request replay or manual balance
 reset. Local correction cannot clear cloud acceptance. A bounded isolated synthetic Table

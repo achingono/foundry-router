@@ -213,6 +213,7 @@ Azure Responses v1 deployment substitution, bounded SSE usage inspection and nes
 | Requirement | Implementation Status | Package | Evidence |
 | --- | --- | --- | --- |
 | Conditional Azure Table provisioning, identity-only client wiring, `memory`/`table` state-backend validation | Implemented (template + settings code) | `infra/main.bicep`, `src/foundry_router/config/`, `src/foundry_router/state/azure.py` | `tests/unit/test_distributed_wiring.py`, `tests/unit/test_config.py` |
+| Table writes exclude read metadata while preserving conditional ETags | Implemented locally; cloud acceptance open | `src/foundry_router/state/azure.py` | [Metadata evidence](../plans/table-write-metadata/evidence.md); SDK wire/strict Azurite/full suite |
 | Table health/credit adapters with create-if-absent sync, ETag-guarded transactions, recompute-on-conflict | Implemented | `src/foundry_router/state/table.py` | `tests/unit/test_table_concurrency.py`, `tests/unit/test_table_client.py` |
 | Failover releases first-backend reservation before second selection (no cross-partition orphan) | Implemented | `src/foundry_router/routing/` | Deep-review Finding 1; `tests/unit/test_main.py` failover tests |
 | `finalize_request(backend_id=None)` scans configured partitions (not only TTL cache) | Implemented | `src/foundry_router/state/table.py` | Deep-review Finding 6 |

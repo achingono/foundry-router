@@ -44,6 +44,10 @@ class _FakeAioClient:
         self.created: list[dict] = []
         self.create_error: Exception | None = None
         self.query_calls: list[tuple[str, dict]] = []
+        self.upserted: list[dict] = []
+
+    async def upsert_entity(self, entity, **kwargs):
+        self.upserted.append(dict(entity))
 
     async def submit_transaction(self, batch):
         self.submitted = list(batch)
@@ -210,6 +214,109 @@ async def test_try_create_false_on_exists() -> None:
     fake.create_error = err
     client = _client_with(fake)
     assert await client.try_create_entity({"PartitionKey": "b1", "RowKey": "balance"}) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["Create", "Update", "UpdateMerge", "upsert", "create"])
+async def test_writes_remove_transport_metadata_without_mutating_application_fields(operation):
+    from azure.core import MatchConditions
+
+    entity = {
+        "PartitionKey": "b1",
+        "RowKey": "req-r1",
+        "odata.etag": 'W/"read-etag"',
+        "odata.metadata": "read-only",
+        "Timestamp": "read-only",
+        "metadata": "application-value",
+        "settlement_charge": "0.001",
+    }
+    original = dict(entity)
+    fake = _FakeAioClient()
+    client = _client_with(fake)
+    if operation == "upsert":
+        await client.upsert_entity(entity)
+        written = fake.upserted[0]
+    elif operation == "create":
+        assert await client.try_create_entity(entity)
+        written = fake.created[0]
+    else:
+        await client.try_batch_transaction(
+            [_TransactionEntity("b1", "req-r1", operation, entity, 'W/"conditional-etag"')]
+        )
+        written = fake.submitted[0][1]
+        if operation in {"Update", "UpdateMerge"}:
+            assert fake.submitted[0][2]["etag"] == 'W/"conditional-etag"'
+            assert fake.submitted[0][2]["match_condition"] == MatchConditions.IfNotModified
+    assert written == {
+        "PartitionKey": "b1",
+        "RowKey": "req-r1",
+        "metadata": "application-value",
+        "settlement_charge": "0.001",
+    }
+    assert entity == original
+
+
+@pytest.mark.asyncio
+async def test_real_sdk_transaction_wire_keeps_if_match_outside_entity_body():
+    from azure.core.credentials import AccessToken
+    from azure.core.pipeline.transport import AsyncHttpTransport
+    from azure.data.tables.aio import TableClient
+
+    class CaptureCompleteError(RuntimeError):
+        pass
+
+    class Credential:
+        async def get_token(self, *scopes, **kwargs):
+            return AccessToken("synthetic-token", 4102444800)
+
+    class RecordingTransport(AsyncHttpTransport):
+        request = None
+
+        async def open(self):
+            pass
+
+        async def close(self):
+            pass
+
+        async def __aexit__(self, *args):
+            await self.close()
+
+        async def send(self, request, **kwargs):
+            self.request = request
+            raise CaptureCompleteError("request captured before network dispatch")
+
+    transport = RecordingTransport()
+    client = _client_with(_FakeAioClient())
+    client._client = TableClient(
+        "https://placeholder.table.core.windows.net",
+        table_name="routercredit",
+        credential=Credential(),
+        transport=transport,
+    )
+    read_entity = {
+        "PartitionKey": "b1",
+        "RowKey": "req-r1",
+        "odata.etag": 'W/"read-etag"',
+        "odata.metadata": "read-only",
+        "Timestamp": "read-only",
+        "metadata": "application-value",
+        "settlement_charge": "0.001",
+    }
+    try:
+        with pytest.raises(CaptureCompleteError):
+            await client.try_batch_transaction(
+                [_TransactionEntity("b1", "req-r1", "Update", read_entity, 'W/"read-etag"')]
+            )
+        body = transport.request.body
+        wire = body.decode() if isinstance(body, bytes) else body
+        assert 'If-Match: W/"read-etag"' in wire
+        assert '"settlement_charge": "0.001"' in wire
+        assert '"metadata": "application-value"' in wire
+        assert "odata.etag" not in wire
+        assert "odata.metadata" not in wire
+        assert '"Timestamp"' not in wire
+    finally:
+        await client.close()
 
 
 @pytest.mark.asyncio

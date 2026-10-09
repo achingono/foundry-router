@@ -86,13 +86,22 @@ def prefix_upper_bound(prefix: str) -> str:
     return prefix[:-1] + chr(last + 1)
 
 
+def _write_entity(entity: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep read metadata out of payloads; ETags travel through conditional headers."""
+    return {
+        key: value
+        for key, value in entity.items()
+        if key not in {"odata.etag", "odata.metadata", "Timestamp"}
+    }
+
+
 def _map_operation(op: _TransactionEntity) -> Any:
     """Map one adapter operation to an SDK transaction tuple."""
     from azure.core import MatchConditions
     from azure.data.tables import UpdateMode
 
     if op.operation == "Create":
-        return ("create", dict(op.entity or {}))
+        return ("create", _write_entity(op.entity or {}))
     if op.operation in ("Update", "UpdateMerge"):
         if op.row_key in {_BALANCE_ROW_KEY, "quota"} and op.etag is None:
             raise TableEntityMissingEtagError("balance write without ETag is refused (fail closed)")
@@ -101,7 +110,7 @@ def _map_operation(op: _TransactionEntity) -> Any:
         if op.etag is not None:
             kwargs["match_condition"] = MatchConditions.IfNotModified
             kwargs["etag"] = op.etag
-        return ("update", dict(op.entity or {}), kwargs)
+        return ("update", _write_entity(op.entity or {}), kwargs)
     if op.operation == "Delete":
         key = {"PartitionKey": op.partition_key, "RowKey": op.row_key}
         if op.etag is not None:
@@ -188,7 +197,7 @@ class AzureTableEntityClient:
         from azure.data.tables import UpdateMode
 
         try:
-            await self._get_client().upsert_entity(dict(entity), mode=UpdateMode.REPLACE)
+            await self._get_client().upsert_entity(_write_entity(entity), mode=UpdateMode.REPLACE)
         except Exception as exc:
             _logger.warning(
                 "table_upsert_failed",
@@ -202,7 +211,7 @@ class AzureTableEntityClient:
         from azure.core.exceptions import HttpResponseError, ResourceExistsError
 
         try:
-            await self._get_client().create_entity(dict(entity))
+            await self._get_client().create_entity(_write_entity(entity))
         except HttpResponseError as exc:
             if _error_code(exc) == "EntityAlreadyExists":
                 return False

@@ -37,6 +37,11 @@ before the balance transaction. If that intent write fails, recovery falls back 
 the reserved estimate; if it commits but acknowledgement is lost, the stored intent wins. Existing
 intent is not overwritten by later free-release attempts. Reconciliation can correct overestimates.
 
+Azure write bodies exclude read-only `odata.etag`, `odata.metadata` and `Timestamp`;
+ETags remain conditional request headers. Application fields, including `metadata`, are
+preserved. The [metadata correction](../plans/table-write-metadata/evidence.md) passes
+local SDK wire and strict Azurite checks; cloud acceptance remains open.
+
 Finalization and recovery guard fresh **balance and reservation ETags in one batch**, rereading and
 recomputing after conflicts. Confirmed missing rows prevent double debit after commit-then-timeout.
 Table admission exceptions and exhausted conflicts raise typed errors, never `False`; possible

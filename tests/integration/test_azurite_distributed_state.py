@@ -25,6 +25,42 @@ pytestmark = pytest.mark.azurite
 
 
 @pytest.mark.asyncio
+async def test_settlement_and_recovery_obey_cloud_property_names(azurite: AzuriteFixture):
+    """Azurite accepts dotted names, so reject them at its SDK boundary explicitly."""
+    client = await azurite.client(azurite.credit_table)
+    sdk = client._get_client()
+    submit = sdk.submit_transaction
+    guarded_writes = 0
+
+    async def strict_submit(batch):
+        nonlocal guarded_writes
+        for operation in batch:
+            if operation[0] != "delete":
+                assert all(key.isidentifier() for key in operation[1])
+                assert "Timestamp" not in operation[1]
+            if operation[0] == "update":
+                assert operation[2]["etag"]
+                guarded_writes += 1
+        return await submit(batch)
+
+    sdk.submit_transaction = strict_submit
+    store = AzureTableCreditStore(client)
+    await store.sync_from_settings(shared_settings())
+    assert await store.try_assign_reservation("settle", "a", 4, **POLICY)
+    await store.finalize_request("settle", backend_id="a", charge_reserved=True, charged_cost_usd=2)
+    assert await store.try_assign_reservation("recover", "b", 3, **POLICY)
+    assert (
+        await store.reap_expired_reservations(1, datetime.now(UTC) + timedelta(seconds=1000)) == 1
+    )
+    balance = await client.get_entity("account", "balance")
+    assert balance["estimated_remaining_usd"] == 5
+    assert balance["reserved_inflight_usd"] == 0
+    assert await client.get_entity("account", "req-settle") is None
+    assert await client.get_entity("account", "req-recover") is None
+    assert guarded_writes >= 4
+
+
+@pytest.mark.asyncio
 async def test_failed_membership_sync_blocks_egress_then_same_settings_recovers(
     azurite: AzuriteFixture,
 ) -> None:
