@@ -40,7 +40,7 @@ and .085 synthetic USD debit each). Four streams returned provider/public HTTP 2
 public completed events and matching input/output usage; local debits were .009, .009,
 .080 and .086 USD. Natural upstream close and zero reservations passed all six cases.
 No overrun occurred. Provider reasoning metadata was absent; nonzero thought settlement
-remains unknown. Total observed usage 434 tokens; all six 1,088-token reservations remain
+remains unknown. Total observed usage 354 tokens; all six 1,088-token reservations remain
 nonrefundable in the cumulative ledger.
 
 All four streams remain failed under this verifier's terminal-usage acceptance: their
