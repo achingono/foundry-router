@@ -152,8 +152,8 @@
       }
     },
     "project-3": {
-      "requests": 15,
-      "tokens": 12928,
+      "requests": 16,
+      "tokens": 14016,
       "halted": false,
       "cases": {
         "old0-txt-gemini-2.5-flash-lite-project-3": {
@@ -211,6 +211,10 @@
         "c08n-txt-gemini-3.5-flash-lite-project-3": {
           "reserved_tokens": 1088,
           "actual_tokens": 9
+        },
+        "d08n-wrapper-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
         }
       }
     },

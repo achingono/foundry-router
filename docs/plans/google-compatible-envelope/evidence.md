@@ -14,3 +14,9 @@ The diagnostic reserve remains consumed; no repeat of this case is permitted.
 - Ten diagnostic tests passed with 91.41% observer coverage; combined compatibility tests pass.
 - Persisted identity/schema/ledger validation fixes the review finding and refuses corruption.
 - Ruff/format/strict mypy pass; full suite 1,804 passed, 3 platform skips, 18 deselected, 89.67% coverage. No runtime adapter change. Independent final review cleared all material findings, with 37 combined cases passing.
+
+[Follow-up wrapper result](wrapper-result.json): one project-3 nonstream diagnostic identified
+exact extra_content.google.thought_signature nonempty string, small lengthclass, unknown counts0.
+Provider200/public502, observed7input/1completion, $0.008 synthetic debit matched, cleanup/nooverrun.
+No signature bytes retained. Operator requires Responses; a separate concrete stateless signature
+policy is under review before any runtime repair.
