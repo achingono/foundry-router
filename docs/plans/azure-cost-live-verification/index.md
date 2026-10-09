@@ -1,6 +1,6 @@
 # Azure cost read-only acceptance
 
-**Planned**, 2026-10-08. Verify the implemented [provider](../azure-cost-reconciliation/index.md)
+**Implemented** locally, live acceptance pending, 2026-10-08. Verify the implemented [provider](../azure-cost-reconciliation/index.md)
 using current developer Azure CLI identity and operator-supplied gitignored production resource
 mapping. No permissions granted, deployments changed or router balances updated.
 
