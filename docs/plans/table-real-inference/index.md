@@ -31,6 +31,13 @@ module cannot accept these settings, add optional typed fields preserving existi
 and run relevant contract tests/full quality/Docker/deep review. Quota stays memory/one;
 cost provider stays static; no collector or distributed quota deployment in this phase.
 
+Deployment preflight must check the actual runtime setting names
+`FOUNDRY_RATE_LIMIT_BACKEND` and `FOUNDRY_TELEMETRY_ENABLED`, rather than invented
+quota/exporter aliases. Missing values preserve memory/disabled defaults; explicit nondefault
+values reject before inference. Regression fixtures must mutate the live Table mode, tables,
+image digest, identity, secret versions, optional modes and ingress independently, proving
+each wrong deployment fails binding without provider traffic. Keep approval scope unchanged.
+
 Before requesting external-write approval, finish template/parameters/scripts/review,
 local verification, ARM validation and what-if, and present exact app/tables/grants/image
 scope. Approval applies to the concrete isolated deployment and image push, not production.
