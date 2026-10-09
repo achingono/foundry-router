@@ -53,7 +53,8 @@ stage passed all eight simple-text Responses nonstream/stream cases on projects 
 Project 1 repaired compatibility, other models and embeddings remain unverified. The
 [reviewed incremental lifecycle plan](../google-compatible-stream-lifecycle/index.md) uses
 only the ten remaining cumulative request slots for actual loopback client delivery, natural
-cancellation cleanup and scoped thinking-usage observations; implementation/execution are pending. Track provider
+cancellation cleanup and scoped thinking-usage observations. Incremental usage/progress
+accounting is implemented and reviewed; server/client, stage runner and execution remain pending. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token
 settlement remains unproven. Record model, project, surface, operation, streaming mode, usage
@@ -279,4 +280,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Subscription billing currency | Implemented locally `fdb34ec`; CAD live acceptance unverified | [Evidence](../azure-cost-currency/evidence.md); configurable USD/CAD, dated public daily conversion, billing HTTP rejection, no balances applied |
 
 | Billing HTTP diagnosis | Implemented locally `ce3866c`; one scoped live 429 | [Evidence](../azure-cost-http-diagnosis/evidence.md); no error-body reads, no retries, second group unqueried, no balances applied |
-| Incremental compatible stream lifecycle | Independently reviewed plan; implementation pending | [Plan](../google-compatible-stream-lifecycle/index.md); ten existing-budget slots, real client early delivery/natural cancellation, no reset or production change |
+| Incremental compatible stream lifecycle | Partially implemented; usage observer/progress reviewed, loopback/runner pending | [Plan](../google-compatible-stream-lifecycle/index.md); ten existing-budget slots, real client early delivery/natural cancellation, no reset or production change |
