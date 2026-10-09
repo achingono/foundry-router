@@ -169,8 +169,11 @@ Cost Management supplies delayed reported costs, not remaining promotional credi
 cycle-bound billing ceilings atomically without replenishing local debits; preserve estimates
 on unavailable/incomplete data and keep reservation cleanup independent of provider outages.
 The [bounded read-only acceptance attempt](../azure-cost-live-verification/evidence.md)
-returned no accepted ceilings; live scope/permission/query acceptance remains unverified. This work can proceed before
-cut-over and does not block quota or metrics implementation. Cut-over still requires reconciled starting estimates; implementing this
+returned no accepted ceilings; live scope/permission/query acceptance remains unverified.
+The one immutable diagnostic follow-up reached provider validation and returned a schema
+rejection, without applying balances. Preserve strict completeness/currency/membership rules.
+This work can proceed before cut-over and does not block quota or metrics implementation.
+Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
 
 ## 5. Distributed quota and metrics — independent engineering workstreams

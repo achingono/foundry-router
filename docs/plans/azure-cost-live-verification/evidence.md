@@ -30,3 +30,13 @@ interruption. Original results remain untouched. Twenty diagnostic/acceptance te
 Ruff lint/format and strict mypy passed. Independent contextual implementation review found
 no Critical/Major issues. Fresh metadata preflight passed for both groups without billing calls.
 Full suite: 1,867 passed, 3 skipped, 18 deselected; coverage 89.73%. Runtime/image are unchanged.
+
+## Single diagnostic refresh
+
+Implementation committed as `1f135cd`. [Diagnostic result](diagnostic-results.json) records
+the provider boundary and fixed `schema` rejection category after 4.101 seconds, with no
+accepted ceilings and no balance application. [Started marker](diagnostic-started.json)
+prevents repeat execution. The original result remains unchanged. This narrows the observed
+failure to provider response validation; it does not identify a particular invalid column,
+row, currency or completeness condition. Permission status remains unverified, and validation
+was not loosened. Any further response-shape diagnosis needs its own reviewed finite scope.
