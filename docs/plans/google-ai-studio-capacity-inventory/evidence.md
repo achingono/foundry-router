@@ -26,7 +26,7 @@ Separate final one-shot quota diagnostics intentionally followed daily exhaustio
 
 ## Operator screenshot import, 2026-10-09
 
-All five [screenshots](quotas.md) inspected visually, including project IDs in address bars.
+All five screenshots (local-only `quotas.md`) inspected visually, including project IDs in address bars.
 Sixty-five visible rows transcribed with SHA-256 source hashes; quota denominators used,
 not 28-day peak usage numerators. All 310 inventory project IDs populated; 44 unambiguous
 model matches receive separate UI columns. Both selected exact models have displayed limits

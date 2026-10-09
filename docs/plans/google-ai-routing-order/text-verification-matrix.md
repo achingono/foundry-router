@@ -6,7 +6,7 @@ follow-up section records new native execution; no production configuration chan
 
 ## Evidence boundaries
 
-The [inventory CSV](../google-ai-studio-capacity-inventory/inventory.csv) preserves the
+The inventory CSV (local-only `../google-ai-studio-capacity-inventory/inventory.csv`) preserves the
 classified 2026-10-07 native router counts and separately records 2026-10-08 direct probes.
 The [inventory narrative](../google-ai-studio-capacity-inventory/index.md) explains the
 unclassified pilot and invalid-key attempts. Ledger usage is transport/accounting evidence,

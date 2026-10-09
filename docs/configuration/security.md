@@ -33,6 +33,22 @@ backends and quota groups by configured IDs only; they never include credentials
 and quota configuration separate from API key strings. Google recommends restricting API keys and
 keeping them confidential; see [API key security guidance](https://docs.cloud.google.com/docs/authentication/api-keys-use).
 
+## Operator information in repository artifacts
+
+Keep personal contact details, real project/account identifiers, credential mappings and
+operator screenshots out of tracked files. Use ignored `private/` or `screenshots/` directories
+for originals and publish sanitized summaries with project labels and example domains.
+The capacity inventory's `inventory.csv`, `quotas.csv`, `quotas.md` and `quotas/` directory
+are local-only and explicitly ignored. A fresh clone does not include these inputs.
+Run `git check-ignore <path>` before adding a private artifact. Already tracked files also
+require removal from the index with `git rm --cached`; ignore rules alone do not protect them.
+This cleanup does not erase earlier Git commits. Source-control history needs a separately
+coordinated cleanup if historical removal is required.
+
+Isolated-test image references using `registry.example.test` are sanitized representations
+of private registry references. Image manifest digests and verification outcomes are retained;
+the example host is not an operational endpoint. Original captures stay in ignored private storage.
+
 ## Identity and Deployment
 
 Configured `openai_compatible` backends use server-owned Bearer credentials, with caller

@@ -93,3 +93,12 @@ docs/plans/azure-cost-live-verification/diagnostic-started.json.lock
 docs/plans/azure-cost-schema-diagnosis/diagnostic-started.json.lock
 docs/plans/azure-cost-currency/diagnostic-started.json.lock
 docs/plans/azure-cost-http-diagnosis/diagnostic-started.json.lock
+
+# Operator-private captures and account-identifying quota inventories.
+# Keep originals local; .gitignore alone does not untrack existing files.
+private/
+screenshots/
+/docs/plans/google-ai-studio-capacity-inventory/quotas/
+/docs/plans/google-ai-studio-capacity-inventory/inventory.csv
+/docs/plans/google-ai-studio-capacity-inventory/quotas.csv
+/docs/plans/google-ai-studio-capacity-inventory/quotas.md

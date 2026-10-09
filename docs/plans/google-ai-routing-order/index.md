@@ -83,7 +83,7 @@ clear compatibility or media gates.
 
 **Partially implemented**. The inventory records 310 historical/current project/model
 combinations; 24 buckets have provider-confirmed RPM and input TPM, and 19 of those have RPD.
-[Operator screenshots](../google-ai-studio-capacity-inventory/quotas.md) now supply all five
+Operator screenshots (local-only `../google-ai-studio-capacity-inventory/quotas.md`) now supply all five
 project IDs and selected 3.5 Flash-Lite/3.8 Flash displayed RPM/TPM/RPD. Remaining work includes:
 
 - Applicable input-token semantics for UI TPM and credential-to-project
@@ -307,7 +307,7 @@ the text-first priority and all production/startup gates while that work proceed
 
 ## Google quota screenshot checkpoint, 2026-10-09
 
-[Captured quota inputs](../google-ai-studio-capacity-inventory/quotas.md) now record all five
+Captured quota inputs (local-only `../google-ai-studio-capacity-inventory/quotas.md`) now record all five
 project IDs and selected-model limits: 3.5 Flash-Lite 15 RPM/250,000 UI TPM/500 RPD;
 3.8 Flash 5 RPM/250,000 UI TPM/20 RPD per project. Numeric selected-model inputs are
 available. UI token dimension and credential-to-project verification remain

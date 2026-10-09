@@ -44,3 +44,7 @@ logs/
 # Temporary
 tmp/
 temp/
+
+# Operator-private captures (Git ignore rules do not filter Docker context).
+**/private/
+**/screenshots/

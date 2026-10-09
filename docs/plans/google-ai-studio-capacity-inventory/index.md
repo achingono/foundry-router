@@ -2,13 +2,21 @@
 
 For candidate workloads and the evidence behind them, see [Google model task guidance](../../operations/google-model-task-guidance.md).
 
-**Partially implemented**, compiled 2026-10-08 from historical discovery/pricing (2026-10-06), native router observations (2026-10-07), and refreshed catalogs/live quota measurements (2026-10-08). All **310 project/model combinations** (305 historical rows plus five newly discovered rows) are recorded in [inventory.csv](inventory.csv). Provider quota responses establish RPM for **24 model/project buckets**: 10 RPM for 2.5 Flash-Lite on projects 1–2 and 5 RPM for the verified Flash/Robotics buckets below. All 24 buckets have provider-confirmed 250,000 input TPM; 19 have provider-confirmed 20 RPD. Remaining quotas are explicitly unknown.
+**Partially implemented**, compiled 2026-10-08 from historical discovery/pricing (2026-10-06), native router observations (2026-10-07), and refreshed catalogs/live quota measurements (2026-10-08). All **310 project/model combinations** (305 historical rows plus five newly discovered rows) are recorded in local-only `inventory.csv`. Provider quota responses establish RPM for **24 model/project buckets**: 10 RPM for 2.5 Flash-Lite on projects 1–2 and 5 RPM for the verified Flash/Robotics buckets below. All 24 buckets have provider-confirmed 250,000 input TPM; 19 have provider-confirmed 20 RPD. Remaining quotas are explicitly unknown.
 
-The labels `project-1` through `project-5` follow credential-array index order in the validation runner. Operator-supplied [quota screenshots](quotas.md) now identify all five project IDs and displayed limits for both selected models. All five projects are operator-confirmed free-tier; credential-to-project association and independent tier verification remain uncaptured. The initial inventory used repository evidence only. The user subsequently authorized live measurements using the existing Key Vault secret; live diagnostics are documented below. Keys remained in memory; production settings were unchanged.
+The labels `project-1` through `project-5` follow credential-array index order in the validation runner. Operator-supplied quota screenshots (local-only `quotas.md`) now identify all five project IDs and displayed limits for both selected models. All five projects are operator-confirmed free-tier; credential-to-project association and independent tier verification remain uncaptured. The initial inventory used repository evidence only. The user subsequently authorized live measurements using the existing Key Vault secret; live diagnostics are documented below. Keys remained in memory; production settings were unchanged.
+
+## Private capture handling
+
+Screenshots, `inventory.csv`, `quotas.csv` and `quotas.md` contain operator project identifiers.
+They are local-only, gitignored and absent from a fresh clone. Retained quota summaries use
+project labels. Actual identifiers and credential mappings belong in private operator configuration.
+Historical statements below describe the local captures; they do not imply those captures are
+available in source control. Earlier Git commits still retain the originals.
 
 ## Screenshot quota update, recorded 2026-10-09
 
-[Captured quotas](quotas.md) transcribe 65 visible UI rows. All 310 inventory rows now carry
+Captured quotas (local-only `quotas.md`) transcribe 65 visible UI rows. All 310 inventory rows now carry
 operator-supplied project IDs; 44 unambiguous catalog matches have separate `quota_ui_*`
 fields. These supplement historical provider measurements. Both selected models have numeric
 RPM/TPM/RPD on every project; shared buckets and the UI TPM token dimension remain open.
