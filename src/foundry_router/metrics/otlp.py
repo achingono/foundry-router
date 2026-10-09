@@ -74,15 +74,19 @@ class ConfinedMetricExporter(MetricExporter):
         return MetricExportResult.FAILURE
 
     async def _dispatch(self, payload: bytes, duration: float) -> tuple[str | None, int]:
-        async with asyncio.timeout(duration), httpx.AsyncClient(
-            transport=self._transport,
-            trust_env=False,
-            follow_redirects=False,
-            verify=True,
-            timeout=duration,
-        ) as client, client.stream(
-            "POST", self._endpoint, headers=self._headers, content=payload
-        ) as response:
+        async with (
+            asyncio.timeout(duration),
+            httpx.AsyncClient(
+                transport=self._transport,
+                trust_env=False,
+                follow_redirects=False,
+                verify=True,
+                timeout=duration,
+            ) as client,
+            client.stream(
+                "POST", self._endpoint, headers=self._headers, content=payload
+            ) as response,
+        ):
             if response.status_code != HTTP_OK:
                 return "http_status", 0
             acknowledgement = bytearray()
