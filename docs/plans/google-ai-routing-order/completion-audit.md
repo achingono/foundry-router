@@ -63,3 +63,11 @@ to the isolated Table app. Both unused streaming cases passed completion, usage 
 and cleanup; original failed/ambiguous nonstream entries remain unchanged. Four-request
 Azure authorization is exhausted. Original nonstream/restart acceptance, quotas and deployed
 collector verification remain open. Production remains memory/one.
+
+## Google quota inputs received
+
+[Operator screenshots](../google-ai-studio-capacity-inventory/quotas.md) supply project IDs
+and displayed selected-model limits on all five projects. The earlier missing numeric/identity
+input checkpoint is historical. Shared quota groups, UI TPM dimension and credential mapping
+verification remain open; exhausted budgets are unchanged. Collector deployment/aggregation
+acceptance remains independent.

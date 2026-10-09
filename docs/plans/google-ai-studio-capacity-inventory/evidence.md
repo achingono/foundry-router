@@ -23,3 +23,21 @@ Five refreshed catalogs: 50 models each, HTTP 200. Survey: 65 attempts, 41 compl
 Provider-confirmed inventory: 24 RPM values, 24 input-TPM values (250,000), 19 RPD values (20). Five of the verified RPM buckets still lack daily metadata. Other catalog models retain unknown quota fields where inaccessible, unstable, not documented free-tier or untested. Actual project IDs/current account tier and cross-alias shared limits remain uncaptured. No inference content or raw error messages saved. The one interrupted router attempt has a durable debit but no persisted outcome; retained as unknown.
 
 Separate final one-shot quota diagnostics intentionally followed daily exhaustion to seek missing TPM dimensions, as reviewed. They are not ordinary inference retries; all repeated ramps stopped at first failure and no quota bypass was attempted. Large prompt token values were estimates; source usage captures actuals where available. Independent contextual review found one Major documentation claim (operations hub incorrectly said TPM/RPD were still pending); corrected. Lead dates, current catalog union completeness, workload scope and capture timestamps were corrected as review suggestions. The separate review session verified the corrected catalog union and response-completion timestamps; final contextual review cleared with no open Critical/Major findings. Authoritative coverage of every catalog quota remains an open gate; measurement results are complete for the reviewed finite stages.
+
+## Operator screenshot import, 2026-10-09
+
+All five [screenshots](quotas.md) inspected visually, including project IDs in address bars.
+Sixty-five visible rows transcribed with SHA-256 source hashes; quota denominators used,
+not 28-day peak usage numerators. All 310 inventory project IDs populated; 44 unambiguous
+model matches receive separate UI columns. Both selected exact models have displayed limits
+on all projects. Historical provider measurements/bucket IDs remain unchanged.
+
+UI TPM dimension, shared groups and ambiguous display-to-API mappings remain unknown.
+Capture time is not visible; recorded date is not asserted as the capture timestamp.
+This documentation import sends no traffic, fetches no credentials and renews no budget.
+
+Independent visual/transcription review cleared with no Critical/Major findings. CSV uniqueness,
+65 source-hash matches, all five project IDs, ten selected-model limits and relative links
+passed. Comparison against the committed inventory confirmed every historical field retained
+except the newly supplied project IDs; UI limits occupy new columns. Final diff check passed.
+Runtime tests/build are not applicable to this documentation-only import.

@@ -83,12 +83,13 @@ clear compatibility or media gates.
 
 **Partially implemented**. The inventory records 310 historical/current project/model
 combinations; 24 buckets have provider-confirmed RPM and input TPM, and 19 of those have RPD.
-Remaining work includes:
+[Operator screenshots](../google-ai-studio-capacity-inventory/quotas.md) now supply all five
+project IDs and selected 3.5 Flash-Lite/3.8 Flash displayed RPM/TPM/RPD. Remaining work includes:
 
-- Five missing RPD values within those 24 buckets and other unknown quotas, including the
-  historically tested 3.5 Flash-Lite and 3.8 Flash combinations.
-- Actual project IDs and independent tier evidence (the operator reconfirmed all five free-tier), projects 3–5 access investigation for
-  2.5 Flash/Lite, and cross-model/alias shared-limit confirmation.
+- Applicable input-token semantics for UI TPM, shared quota groups and credential-to-project
+  association; screenshot capture time and independent tier evidence are not shown.
+- Other missing quotas only when needed by the selected rollout, projects 3–5 access
+  investigation for 2.5 Flash/Lite if selected, and cross-model/alias shared-limit confirmation.
 
 Unknown values are neither zero nor unlimited. This work runs independently of extraction
 and verification code. Production quota configuration needs reviewed evidence and explicit
@@ -303,3 +304,12 @@ the text-first priority and all production/startup gates while that work proceed
 | Final stateless cancellation | Committed verifier `aef4fae`; one live settlement failure | [Evidence](../google-final-cancellation/evidence.md); early disconnect/natural cleanup passed, conservative settlement mismatch; all request budgets exhausted |
 | Stream settlement integrity | Implemented locally and independently reviewed; live correction unverified | [Evidence](../google-stream-settlement-integrity/evidence.md); partial counts retain reservation until clean EOF/finish, observed input quota preserved, no new provider calls |
 | Table prepared-image refresh | Current digest approved and pushed | [Evidence](../table-real-image-refresh/evidence.md); current reviewed runtime, image-only private change, ARM validation/what-if passed; isolated deployment recorded separately |
+
+## Google quota screenshot checkpoint, 2026-10-09
+
+[Captured quota inputs](../google-ai-studio-capacity-inventory/quotas.md) now record all five
+project IDs and selected-model limits: 3.5 Flash-Lite 15 RPM/250,000 UI TPM/500 RPD;
+3.8 Flash 5 RPM/250,000 UI TPM/20 RPD per project. Numeric selected-model inputs are
+available. Shared groups, UI token dimension and credential-to-project verification remain
+open before deployed admission tests. Screenshots do not renew consumed traffic budgets.
+The deployed metrics collector gate is independent and remains open.

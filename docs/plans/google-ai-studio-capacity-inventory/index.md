@@ -4,7 +4,14 @@ For candidate workloads and the evidence behind them, see [Google model task gui
 
 **Partially implemented**, compiled 2026-10-08 from historical discovery/pricing (2026-10-06), native router observations (2026-10-07), and refreshed catalogs/live quota measurements (2026-10-08). All **310 project/model combinations** (305 historical rows plus five newly discovered rows) are recorded in [inventory.csv](inventory.csv). Provider quota responses establish RPM for **24 model/project buckets**: 10 RPM for 2.5 Flash-Lite on projects 1–2 and 5 RPM for the verified Flash/Robotics buckets below. All 24 buckets have provider-confirmed 250,000 input TPM; 19 have provider-confirmed 20 RPD. Remaining quotas are explicitly unknown.
 
-The labels `project-1` through `project-5` follow credential-array index order in the validation runner. Real project IDs are unknown here. The operator reported five separately keyed free-tier projects; their current tier and identity have not been independently captured. The initial inventory used repository evidence only. The user subsequently authorized live measurements using the existing Key Vault secret; live diagnostics are documented below. Keys remained in memory; production settings were unchanged.
+The labels `project-1` through `project-5` follow credential-array index order in the validation runner. Operator-supplied [quota screenshots](quotas.md) now identify all five project IDs and displayed limits for both selected models. All five projects are operator-confirmed free-tier; credential-to-project association and independent tier verification remain uncaptured. The initial inventory used repository evidence only. The user subsequently authorized live measurements using the existing Key Vault secret; live diagnostics are documented below. Keys remained in memory; production settings were unchanged.
+
+## Screenshot quota update, recorded 2026-10-09
+
+[Captured quotas](quotas.md) transcribe 65 visible UI rows. All 310 inventory rows now carry
+operator-supplied project IDs; 44 unambiguous catalog matches have separate `quota_ui_*`
+fields. These supplement historical provider measurements. Both selected models have numeric
+RPM/TPM/RPD on every project; shared buckets and the UI TPM token dimension remain open.
 
 ## Observed native text operations
 
@@ -14,24 +21,24 @@ Counts represent classified router validation attempts, not uptime estimates. Si
 | --- | --- | --- | --- | --- | --- | --- |
 | project-1 | `gemini-2.5-flash` | 5 | 250,000 | 20 | 1 pass / 0 fail | Unverified |
 | project-1 | `gemini-2.5-flash-lite` | 10 | 250,000 | 20 | 1 pass / 0 fail | Unverified |
-| project-1 | `gemini-3.5-flash-lite` | Unknown | Unknown | Unknown | 3 pass / 0 fail | 1 pass / 0 fail |
-| project-1 | `gemini-3.8-flash` | Unknown | Unknown | Unknown | 1 pass / 2 fail | 1 pass / 1 fail |
+| project-1 | `gemini-3.5-flash-lite` | 15 | 250,000 (UI TPM) | 500 | 3 pass / 0 fail | 1 pass / 0 fail |
+| project-1 | `gemini-3.8-flash` | 5 | 250,000 (UI TPM) | 20 | 1 pass / 2 fail | 1 pass / 1 fail |
 | project-2 | `gemini-2.5-flash` | 5 | 250,000 | 20 | 1 pass / 0 fail | Unverified |
 | project-2 | `gemini-2.5-flash-lite` | 10 | 250,000 | 20 | 1 pass / 0 fail | Unverified |
-| project-2 | `gemini-3.5-flash-lite` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 1 pass / 0 fail |
-| project-2 | `gemini-3.8-flash` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 0 pass / 2 fail |
+| project-2 | `gemini-3.5-flash-lite` | 15 | 250,000 (UI TPM) | 500 | 1 pass / 0 fail | 1 pass / 0 fail |
+| project-2 | `gemini-3.8-flash` | 5 | 250,000 (UI TPM) | 20 | 1 pass / 0 fail | 0 pass / 2 fail |
 | project-3 | `gemini-2.5-flash` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
 | project-3 | `gemini-2.5-flash-lite` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
-| project-3 | `gemini-3.5-flash-lite` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 1 pass / 0 fail |
-| project-3 | `gemini-3.8-flash` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 0 pass / 2 fail |
+| project-3 | `gemini-3.5-flash-lite` | 15 | 250,000 (UI TPM) | 500 | 1 pass / 0 fail | 1 pass / 0 fail |
+| project-3 | `gemini-3.8-flash` | 5 | 250,000 (UI TPM) | 20 | 1 pass / 0 fail | 0 pass / 2 fail |
 | project-4 | `gemini-2.5-flash` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
 | project-4 | `gemini-2.5-flash-lite` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
-| project-4 | `gemini-3.5-flash-lite` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 1 pass / 0 fail |
-| project-4 | `gemini-3.8-flash` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 0 pass / 2 fail |
+| project-4 | `gemini-3.5-flash-lite` | 15 | 250,000 (UI TPM) | 500 | 1 pass / 0 fail | 1 pass / 0 fail |
+| project-4 | `gemini-3.8-flash` | 5 | 250,000 (UI TPM) | 20 | 1 pass / 0 fail | 0 pass / 2 fail |
 | project-5 | `gemini-2.5-flash` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
 | project-5 | `gemini-2.5-flash-lite` | Unknown | Unknown | Unknown | 0 pass / 1 fail | Unverified |
-| project-5 | `gemini-3.5-flash-lite` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 1 pass / 0 fail |
-| project-5 | `gemini-3.8-flash` | Unknown | Unknown | Unknown | 1 pass / 0 fail | 0 pass / 2 fail |
+| project-5 | `gemini-3.5-flash-lite` | 15 | 250,000 (UI TPM) | 500 | 1 pass / 0 fail | 1 pass / 0 fail |
+| project-5 | `gemini-3.8-flash` | 5 | 250,000 (UI TPM) | 20 | 1 pass / 0 fail | 0 pass / 2 fail |
 
 - **3.5 Flash-Lite / minimal:** classified nonstreaming 7 passes / 0 failures (five simple prompts plus two harder project-1 prompts); streaming 5 passes / 0 failures. The harder prompts recorded 24 and 783 total observed tokens. An additional project-1 pilot ledger observation is unclassified, as explained below.
 - **3.8 Flash / low:** classified nonstreaming 5 passes / 2 failures (the failures are harder project-1 prompts); streaming 1 pass / 9 failures over two rounds. Initial streaming failed everywhere; project-1 recovered in the second round. Provider capacity/stall failures are distinct from quota exhaustion and model entitlement.
