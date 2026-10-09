@@ -79,6 +79,13 @@ Ledger `tokens` totals retain conservative reservation debits even when actual u
 
 The CSV is an evidence inventory, not executable routing configuration. Unknown quotas must not be installed as untracked groups: the current store does not track groups without configured limits. `credit_metered: false` disables dollar admission only, never quota/resource limits. Provider quotas are allowances, not Azure balances or local cost estimates.
 
+The 2026-10-08 [stateless compatible text acceptance](../google-compatible-signature-text/evidence.md)
+is reflected separately in `compatibility_surface_observation`: exact 3.5 Flash-Lite Responses
+nonstreaming/streaming passed on projects 2–5 after the bounded signature repair. Project 1
+retains its failed pre-repair result and exhausted-stage-budget limitation. Native counts and
+provider quota fields remain unchanged. These samples do not prove embeddings, quota ceilings,
+unbuffered streaming latency/cancellation or deployment readiness.
+
 Production remains memory-backed with `maxReplicas: 1`. Native thinking-level profiles remain validation-track scoped; this inventory grants no production enablement. See [operations](../../operations/index.md), [thinking-level confinement](../google-ai-studio-tools-multimodal/live-runner/thinking-level-text-design.md) and [combination exclusion](../google-ai-studio-tools-multimodal/live-runner/quota-exclusion-design.md).
 
 ## Live measurement, 2026-10-08
