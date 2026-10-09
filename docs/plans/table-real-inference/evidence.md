@@ -36,3 +36,14 @@ Operator accepted the four-call/$0.15 estimate/output/retry limits on 2026-10-08
 
 No image push, resource deployment, restart or Table-backed inference has been performed.
 Concrete deployment approval is the next gate after recording final local verification.
+
+## Runtime-mode preflight amendment
+
+Independent plan and contextual review cleared checks for the actual runtime setting names
+`FOUNDRY_RATE_LIMIT_BACKEND` and `FOUNDRY_TELEMETRY_ENABLED`. Explicit Table quota or enabled
+telemetry now rejects; missing/memory/disabled values retain the intended test defaults.
+Fifteen independent deployment mutation/default fixtures cover Table mode/names, retries,
+reservation age, image digest, identity, pinned secrets, ingress and optional modes. Combined
+binding/verifier focused selection: 33 passed. This changes verifier-only code, with no image,
+deployment parameters or external approval scope change. Full verification: 1,891 passed,
+3 skipped, 18 deselected; coverage 89.73%. Ruff lint/format and strict mypy passed.

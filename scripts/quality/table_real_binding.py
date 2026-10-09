@@ -54,8 +54,8 @@ def deployment_fingerprint(app, parameters):  # noqa: PLR0912 -- explicit deploy
     # Optional modes must remain disabled in this isolated deployment.
     for name, default in {
         "FOUNDRY_RECONCILIATION_PROVIDER": "static",
-        "FOUNDRY_QUOTA_BACKEND": "memory",
-        "FOUNDRY_TELEMETRY_EXPORTER": "none",
+        "FOUNDRY_RATE_LIMIT_BACKEND": "memory",
+        "FOUNDRY_TELEMETRY_ENABLED": "false",
     }.items():
         if name in env and env[name].get("value") != default:
             raise ValueError("Unexpected runtime mode")
