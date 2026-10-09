@@ -79,7 +79,7 @@ class ZenAdapter:
             if key not in _ALLOWED_TOP_LEVEL:
                 return _rejection(f"Unsupported field '{key}' for Zen backends")
         for key in _FALSE_ONLY:
-            if body.get(key) is True:
+            if key in body and body[key] is not False:
                 return _rejection(f"Unsupported field '{key}' for Zen backends")
         instructions = body.get("instructions")
         if instructions is not None and not isinstance(instructions, str):
