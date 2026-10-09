@@ -35,3 +35,18 @@ no repeat Docker build is needed for a read-only script. Record exact scope/fail
 - [Exit criteria](exit-criteria.md)
 - [Risks](risk-register.md)
 - [Evidence](evidence.md)
+
+## Bounded diagnostic follow-up
+
+The first generic failure did not identify its boundary. Read-only metadata preflight now
+passes for both groups. After independent amendment review, perform exactly one additional
+refresh using the same provider, scope, identity, pagination and deadline limits above.
+Retain the first result unchanged; write a separate `diagnostic-results.json` artifact.
+Use a whole-invocation OS lock and an atomically persisted started marker before external
+calls; refuse existing started/result artifacts, including interrupted attempts. No overwrite
+or resumed refresh. Cleanup failures retain the same conservative unverified status.
+Report only fixed categories: metadata, identity, HTTP rejection, transport, schema, pagination,
+cleanup or unknown failure. Map known internal error codes through a literal allowlist;
+never emit exception strings, causes, raw response bodies, identifiers or credential values.
+Do not loosen billing validation or change permissions in response to failure. An accepted
+batch reports the existing labeled ceiling output only; never apply it to router balances.
