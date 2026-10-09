@@ -47,7 +47,7 @@ def category(error):
     return "unknown"
 
 
-def execute(*, directory=DIRECTORY, prepare=None, verify=None):
+def execute(*, directory=DIRECTORY, prepare=None, verify=None, finalize=None):
     started_path = directory / STARTED.name
     results_path = directory / DIAGNOSTIC_RESULTS.name
     with locked(started_path):
@@ -70,6 +70,8 @@ def execute(*, directory=DIRECTORY, prepare=None, verify=None):
                 "groups": [],
             }
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        if finalize is not None:
+            result = finalize(result)
         write_atomic(results_path, result)
         return result
 

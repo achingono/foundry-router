@@ -90,3 +90,4 @@ __queuestorage__/
 docs/plans/google-compatible-text-verification/stage.lock
 docs/plans/table-real-inference/ledger.json.lock
 docs/plans/azure-cost-live-verification/diagnostic-started.json.lock
+docs/plans/azure-cost-schema-diagnosis/diagnostic-started.json.lock

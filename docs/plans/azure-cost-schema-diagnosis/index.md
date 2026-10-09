@@ -1,6 +1,7 @@
 # Redacted Azure cost schema diagnosis
 
-**Planned**, 2026-10-08. The immutable prior diagnostic reached provider response validation
+**Implemented** locally; the single live invocation is pending, 2026-10-08.
+The immutable prior diagnostic reached provider response validation
 and reported only `schema`. The accepted billing contract remains USD-only ActualCost,
 exact resource membership and complete nonempty rows; no balances or permissions change.
 
