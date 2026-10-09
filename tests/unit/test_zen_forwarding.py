@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from types import SimpleNamespace
@@ -247,9 +248,12 @@ class _FakeStreamContext:
         self._chunks = list(chunks or [])
         self._error = error
         self.closed = False
+        self.exit_calls = 0
+        self.exit_error: Exception | None = None
         self.upstream = SimpleNamespace(
             status_code=status,
             headers={},
+            content=error,
             aread=self._aread,
             aiter_raw=self._aiter_raw,
         )
@@ -265,7 +269,10 @@ class _FakeStreamContext:
         return self.upstream
 
     async def __aexit__(self, *args):
+        self.exit_calls += 1
         self.closed = True
+        if self.exit_error is not None:
+            raise self.exit_error
         return False
 
 
@@ -341,3 +348,144 @@ class TestZenStreaming:
         )
         assert result.retryable_failure is True
         assert context.closed is True
+
+
+class TestZenStatusAndStreamingLifecycle:
+    async def _forward_stream(self, context: _FakeStreamContext, request_id: str = "req-life"):
+        env = _harness(SimpleNamespace(stream_backend=lambda *_a, **_k: context))
+        credit = SimpleNamespace(finalize_request=AsyncMock())
+        metrics = SimpleNamespace(observe_request=AsyncMock())
+        quota = SimpleNamespace(finalize_request=AsyncMock())
+        result = await forwarding._forward_zen_streaming(
+            settings=env.settings,
+            backend_id="zen_a",
+            request_id=request_id,
+            headers={},
+            body={"model": "gpt-5.4", "input": "hi", "stream": True},
+            upstream_body={"model": "gpt-5.4", "input": "hi"},
+            backend_client=SimpleNamespace(stream_backend=lambda *_a, **_k: context),
+            set_backend_active=env.active,
+            set_backend_cooldown=env.cooldown,
+            api_error=env.api_error,
+            credit_store=credit,
+            metrics_store=metrics,
+            rate_limit_store=quota,
+        )
+        return result, env, credit, metrics, quota
+
+    async def test_auth_statuses_are_terminal_and_set_error_cooldown(self) -> None:
+        for status in (401, 403):
+            request = AsyncMock(return_value=httpx.Response(status, content=b"auth denied"))
+            client = SimpleNamespace(request_backend=request)
+            env = _harness(client)
+            result = await forwarding._forward_zen_non_streaming(
+                settings=env.settings,
+                backend_id="zen_a",
+                operation="responses",
+                headers={},
+                public_body={"model": "gpt-5.4", "input": "hi"},
+                upstream_body={"model": "gpt-5.4", "input": "hi"},
+                backend_client=client,
+                set_backend_active=env.active,
+                set_backend_cooldown=env.cooldown,
+                api_error=env.api_error,
+            )
+            assert result.response.status_code == status
+            assert result.retryable_failure is False
+            assert result.force_charge is False
+            env.cooldown.assert_awaited_once()
+            assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+
+            context = _FakeStreamContext(status=status, error=b"auth denied")
+            streamed, stream_env, *_ = await self._forward_stream(context, f"auth-{status}")
+            assert streamed.response.status_code == status
+            assert streamed.retryable_failure is False
+            assert streamed.force_charge is False
+            stream_env.cooldown.assert_awaited_once()
+            assert stream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+            assert context.exit_calls == 1
+
+    async def test_429_is_the_only_failover_eligible_status(self) -> None:
+        context = _FakeStreamContext(status=429, error=b"rate limited")
+        result, env, *_ = await self._forward_stream(context, "req-429")
+        assert result.response.status_code == 429
+        assert result.retryable_failure is True
+        env.cooldown.assert_awaited_once()
+        assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.QUOTA_COOLDOWN
+
+        request = AsyncMock(return_value=httpx.Response(500, content=b"server error"))
+        client = SimpleNamespace(request_backend=request)
+        nonstream_env = _harness(client)
+        nonstream = await forwarding._forward_zen_non_streaming(
+            settings=nonstream_env.settings,
+            backend_id="zen_a",
+            operation="responses",
+            headers={},
+            public_body={"model": "gpt-5.4", "input": "hi"},
+            upstream_body={"model": "gpt-5.4", "input": "hi"},
+            backend_client=client,
+            set_backend_active=nonstream_env.active,
+            set_backend_cooldown=nonstream_env.cooldown,
+            api_error=nonstream_env.api_error,
+        )
+        assert nonstream.response.status_code == 500
+        assert nonstream.retryable_failure is False
+        assert nonstream.force_charge is True
+        assert nonstream.settlement_cost_usd is not None
+        nonstream_env.cooldown.assert_awaited_once()
+        assert nonstream_env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
+
+    async def test_missing_and_malformed_terminal_usage_settle_conservatively(self) -> None:
+        cases = [
+            [b'data: {"type":"response.created"}\\n\\n'],
+            [
+                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":"bad","output_tokens":-1}}}\\n\\n'
+            ],
+            [b'data: {"type":"response.created"}\\n\\n', b'data: [DONE]\\n\\n'],
+        ]
+        for index, chunks in enumerate(cases):
+            context = _FakeStreamContext(chunks=chunks)
+            result, _, credit, metrics, quota = await self._forward_stream(
+                context, f"req-missing-{index}"
+            )
+            assert result.retryable_failure is False
+            _ = [part async for part in result.response.body_iterator]
+            credit.finalize_request.assert_awaited_once_with(
+                f"req-missing-{index}",
+                backend_id="zen_a",
+                charge_reserved=True,
+                charged_cost_usd=None,
+            )
+            quota.finalize_request.assert_awaited_once_with(
+                f"req-missing-{index}", actual_input_tokens=None
+            )
+            metrics.observe_request.assert_awaited_once()
+            assert context.exit_calls == 1
+
+    async def test_downstream_cancellation_finalizes_once(self) -> None:
+        context = _FakeStreamContext(
+            chunks=[
+                b'data: {"type":"response.created"}\\n\\n',
+                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":5}}}\\n\\n',
+            ]
+        )
+        result, _, credit, metrics, quota = await self._forward_stream(context, "req-cancel")
+        iterator = result.response.body_iterator
+        assert await anext(iterator) == b'data: {"type":"response.created"}\\n\\n'
+        await iterator.aclose()
+        credit.finalize_request.assert_awaited_once()
+        metrics.observe_request.assert_awaited_once()
+        quota.finalize_request.assert_awaited_once()
+        assert context.exit_calls == 1
+
+    async def test_cleanup_failures_do_not_skip_other_finalizers(self) -> None:
+        context = _FakeStreamContext(chunks=[b'data: {"type":"response.created"}\\n\\n'])
+        context.exit_error = RuntimeError("synthetic close failure")
+        result, _, credit, metrics, quota = await self._forward_stream(context, "req-cleanup")
+        credit.finalize_request.side_effect = RuntimeError("synthetic credit failure")
+        metrics.observe_request.side_effect = RuntimeError("synthetic metrics failure")
+        _ = [part async for part in result.response.body_iterator]
+        credit.finalize_request.assert_awaited_once()
+        metrics.observe_request.assert_awaited_once()
+        quota.finalize_request.assert_awaited_once()
+        assert context.exit_calls == 1
