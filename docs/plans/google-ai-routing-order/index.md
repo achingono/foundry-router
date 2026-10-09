@@ -28,6 +28,10 @@ path. Media is deferred; tools and signed continuation are conditional on coding
 
 ### 2a. Reconcile evidence and close exact operation gaps
 
+The [text verification matrix](text-verification-matrix.md) reconciles all twenty selected
+project/model combinations, historical router counts, newer direct/router failures and
+remaining operation/accounting gates. Reconciliation is complete; live gates remain partial.
+
 **Partially implemented**. The [live runner evidence](../google-ai-studio-tools-multimodal/live-runner/evidence.md)
 and [capacity inventory](../google-ai-studio-capacity-inventory/index.md) record native
 nonstreaming and streaming attempts using existing credentials. Native 3.5 Flash-Lite passed
@@ -216,3 +220,12 @@ against existing evidence. Capacity investigation, Table test planning, distribu
 metrics and cost-integration planning can proceed independently. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
+
+## Phase transitions
+
+| Phase | Status | Evidence |
+| --- | --- | --- |
+| Current-state checkpoint | Committed `deb05a5` | Reviewed extraction and revised roadmap |
+| Pre-extraction characterization | Committed `06a6b80` | 21 immutable synthetic wire scenarios, verified before extraction |
+| Adapter extraction | Committed `3001929` | [Evidence](../openai-compatible-adapter/evidence.md): full suite, coverage, typing, local Azurite, Python 3.12 Docker smoke and implementation review |
+| Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |

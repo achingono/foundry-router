@@ -1,0 +1,98 @@
+# Text verification matrix
+
+**Partially implemented**, reconciled 2026-10-08 after adapter extraction. This is an
+analysis of existing artifacts; no new provider request or configuration change occurred.
+
+## Evidence boundaries
+
+The [inventory CSV](../google-ai-studio-capacity-inventory/inventory.csv) preserves the
+classified 2026-10-07 native router counts and separately records 2026-10-08 direct probes.
+The [inventory narrative](../google-ai-studio-capacity-inventory/index.md) explains the
+unclassified pilot and invalid-key attempts. Ledger usage is transport/accounting evidence,
+not proof of public response success; its reservation totals are not actual provider usage.
+The [fresh survey](../google-ai-studio-capacity-inventory/free-tier-survey-2026-10-08.json)
+contains provider status and thinking profile. Direct provider completions clear neither
+router translation nor streaming gates. All observations are historical samples.
+
+## Exact combinations
+
+All rows below concern native Responses text. Router columns are classified historical
+passes/failures. Direct status is from the fresh nonstreaming survey; quotas are explicit
+provider evidence where available. Unknown values remain unknown.
+
+| Project | Exact model | Thinking profile | Router nonstream pass/fail | Router stream pass/fail | Fresh direct nonstream status | RPM / input TPM / RPD |
+| --- | --- | --- | --- | --- | --- | --- |
+| project-1 | `gemini-2.5-flash` | budget 0 | 1 / 0 | Unverified | 200 | 5 / 250000 / 20 |
+| project-1 | `gemini-2.5-flash-lite` | budget 0 | 1 / 0 | Unverified | 200 | 10 / 250000 / 20 |
+| project-1 | `gemini-3.5-flash-lite` | minimal | 3 / 0 | 1 / 0 | 503 | Unknown / Unknown / Unknown |
+| project-1 | `gemini-3.8-flash` | low | 1 / 2 | 1 / 1 | 200 | Unknown / Unknown / Unknown |
+| project-2 | `gemini-2.5-flash` | budget 0 | 1 / 0 | Unverified | 200 | 5 / 250000 / 20 |
+| project-2 | `gemini-2.5-flash-lite` | budget 0 | 1 / 0 | Unverified | 200 | 10 / 250000 / 20 |
+| project-2 | `gemini-3.5-flash-lite` | minimal | 1 / 0 | 1 / 0 | ReadTimeout | Unknown / Unknown / Unknown |
+| project-2 | `gemini-3.8-flash` | low | 1 / 0 | 0 / 2 | 200 | Unknown / Unknown / Unknown |
+| project-3 | `gemini-2.5-flash` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-3 | `gemini-2.5-flash-lite` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-3 | `gemini-3.5-flash-lite` | minimal | 1 / 0 | 1 / 0 | 503 | Unknown / Unknown / Unknown |
+| project-3 | `gemini-3.8-flash` | low | 1 / 0 | 0 / 2 | 200 | Unknown / Unknown / Unknown |
+| project-4 | `gemini-2.5-flash` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-4 | `gemini-2.5-flash-lite` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-4 | `gemini-3.5-flash-lite` | minimal | 1 / 0 | 1 / 0 | ReadTimeout | Unknown / Unknown / Unknown |
+| project-4 | `gemini-3.8-flash` | low | 1 / 0 | 0 / 2 | 200 | Unknown / Unknown / Unknown |
+| project-5 | `gemini-2.5-flash` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-5 | `gemini-2.5-flash-lite` | budget 0 | 0 / 1 | Unverified | 404 | Unknown / Unknown / Unknown |
+| project-5 | `gemini-3.5-flash-lite` | minimal | 1 / 0 | 1 / 0 | 503 | Unknown / Unknown / Unknown |
+| project-5 | `gemini-3.8-flash` | low | 1 / 0 | 0 / 2 | 200 | Unknown / Unknown / Unknown |
+
+## Newer router observations and unclassified dispatch
+
+The [2026-10-08 router observer](../google-ai-studio-capacity-inventory/live-results-2026-10-08.json)
+records four failed/ambiguous 3.5 Flash-Lite nonstreaming outcomes. Its
+[cumulative ledger](../google-ai-studio-capacity-inventory/ledger-2026-10-08.json) has five
+new dispatch debits: project-3 was interrupted before result persistence. That dispatch
+has no recorded public/provider outcome and stays unclassified. These observations are
+separate from the earlier pass/fail columns above and from the direct survey.
+
+No live nonzero `thoughtsTokenCount` settlement proof is recorded. An absent field is not
+an observed zero. Synthetic thinking-inclusive usage and signature-handling tests pass,
+but that evidence cannot complete the live accounting gate.
+
+## Remaining gates and next execution scope
+
+| Gate | Existing evidence | Required next evidence |
+| --- | --- | --- |
+| Native 2.5 text on projects 1–2 | Historical router and fresh direct nonstreaming success; complete quota triplets | Bounded native streaming, terminal usage, cleanup and relevant provider failure/admission cases |
+| Native 2.5 text on projects 3–5 | Repeated provider 404 observations | Confirm operator entitlement before inclusion; keep unavailable combinations outside rollout scope |
+| Native 3.5 Flash-Lite minimal | Historical router nonstream/stream successes; newer router failures and direct 503/timeouts | Fresh bounded exact-combination verification and authoritative quotas; historical success alone cannot establish current availability |
+| Native 3.8 Flash low | Historical nonstream success/failures; streaming only project-1 recovered; all direct ramps ended 503 | Fresh streaming/client/usage evidence for selected projects and authoritative quotas; retain failed combinations explicitly |
+| Compatibility Responses nonstream/stream | Local adapter tests and exact synthetic wire fixtures | Exact-model compatibility requests through the router with client-visible results and terminal usage |
+| Compatibility embeddings | Local validation/mapping/accounting tests | Exact embedding model, supported-operation configuration, pricing/quota dimensions and bounded live usage evidence; no text-model inference of embedding support |
+| Nonzero thinking usage | Synthetic inclusive accounting tests | Provider-reported thought metadata plus public usage and exact local settlement |
+| Provider failure/admission through router | Synthetic cooldown, exclusion, retry and settlement tests; direct quota diagnostics | Bounded router traffic proving pre-output 429 handling, no failover after downstream output, and retained dispatched usage/reservations |
+| Table-backed real inference | Synthetic persistent/shared credit and health checks | Isolated Table-backed real inference/settlement/cleanup before production cut-over |
+
+These are scoped gates, not a requirement to rerun every historical case. The intended
+rollout determines required combinations. Media remains deferred and tools/continuation
+conditional under the [completion audit](../google-ai-studio-tools-multimodal/completion-audit.md).
+
+## Capacity and execution inputs
+
+Only four of the twenty text-track combinations above have complete quota triplets.
+The inventory's 24 confirmed RPM/input-TPM buckets concern a broader model set; they do
+not supply missing quotas for 3.5 Flash-Lite or 3.8 Flash. Across those 24 buckets the five
+missing RPD values are 3.5 Flash projects 2–5 and 3.6 Flash project-3. Actual Google project
+IDs, current tier confirmation and additional shared-model/alias limits remain unknown.
+
+Before new execution, bind the supplied Key Vault reference to the project roster and
+record a finite request/token/spend allowance plus the applicable durable ledger. The
+existing ledger is tied to its historical session and retains consumed debits; creating
+an empty ledger would not prove that the historical allowance reset. Keep keys, prompts,
+outputs and provider error bodies out of evidence. A new live execution contract or runner
+extension needs the repository's independent plan review before implementation.
+
+## Local checks for this reconciliation
+
+The CSV contains exactly twenty selected project/model rows. Historical totals remain
+22 classified successes / 17 failures, with the pilot separately unclassified. Fresh
+survey records exactly twenty selected attempts. The cumulative observer ledger contains
+five new dispatches, of which four have result records; no status was inferred for the
+missing fifth. Relative source links were validated. No runtime code changed in this phase.
