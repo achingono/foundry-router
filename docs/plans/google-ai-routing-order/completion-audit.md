@@ -11,7 +11,7 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | Required compatible Responses | [Eight live results](../google-compatible-signature-text/results.json), [final cancellation evidence](../google-final-cancellation/evidence.md) | 3.5 Flash-Lite simple text and SSE passed projects 2–5; project 1 repaired compatibility and other models remain unverified; incremental normal streams prove early local delivery/cleanup but retain terminal-verifier failures; final project2 cancellation proved preterminal disconnect/natural cleanup but failed conservative settlement validation; all cumulative request budgets exhausted |
 | Thought-inclusive live settlement | Exact usage fields in native/compatible results, [matrix](text-verification-matrix.md) | Absent thought metadata cannot prove nonzero thinking settlement; live gate incomplete |
 | Cleanup and provider failure/admission | Recorded successful cleanup; [quota evidence](../distributed-quota-accounting/evidence.md) and synthetic routing tests | Scoped success cleanup proven; deployed provider admission/failure and no failover after actual output remain unverified |
-| 2b capacity | [310-row inventory](../google-ai-studio-capacity-inventory/inventory.csv) | Recorded quota dimensions preserved; selected 3.5/3.8 quotas, actual project IDs and shared-model limits incomplete; unknowns cannot become executable unlimited groups |
+| 2b capacity | [310-row inventory](../google-ai-studio-capacity-inventory/inventory.csv) | Selected 3.5/3.8 displayed quotas and all project IDs captured; projects independent by operator confirmation; UI TPM semantics and deployed admission remain open |
 | 3 media | Linked feature evidence in [roadmap](index.md) | Deferred, with existing startup/live/resource gates retained |
 | 3 tools/signed continuation | [Signed evidence](../google-ai-studio-tools-multimodal/signed-continuation/evidence.md) | Conditional; required client/schema/round-trip/live enablement remains incomplete |
 | 4a Table real inference | [Isolated test evidence](../table-real-inference/evidence.md), [current image refresh](../table-real-image-refresh/evidence.md) | Approved image push/deployment/binding/readiness passed; original model-1 nonstream503/model-2 ambiguous; reaper cleared; supplemental streams passed; original nonstream/restart open; replay forbidden |
@@ -68,6 +68,10 @@ collector verification remain open. Production remains memory/one.
 
 [Operator screenshots](../google-ai-studio-capacity-inventory/quotas.md) supply project IDs
 and displayed selected-model limits on all five projects. The earlier missing numeric/identity
-input checkpoint is historical. Shared quota groups, UI TPM dimension and credential mapping
+input checkpoint is historical. UI TPM dimension and credential mapping
 verification remain open; exhausted budgets are unchanged. Collector deployment/aggregation
 acceptance remains independent.
+
+Operator clarification: the five projects belong to separate accounts and use independent
+quota pools. No cross-account shared quota confirmation is required. Same-project/model
+counters aggregate across replicas; alias mapping is only relevant when aliases are selected.

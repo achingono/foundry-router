@@ -86,7 +86,7 @@ combinations; 24 buckets have provider-confirmed RPM and input TPM, and 19 of th
 [Operator screenshots](../google-ai-studio-capacity-inventory/quotas.md) now supply all five
 project IDs and selected 3.5 Flash-Lite/3.8 Flash displayed RPM/TPM/RPD. Remaining work includes:
 
-- Applicable input-token semantics for UI TPM, shared quota groups and credential-to-project
+- Applicable input-token semantics for UI TPM and credential-to-project
   association; screenshot capture time and independent tier evidence are not shown.
 - Other missing quotas only when needed by the selected rollout, projects 3–5 access
   investigation for 2.5 Flash/Lite if selected, and cross-model/alias shared-limit confirmation.
@@ -310,6 +310,11 @@ the text-first priority and all production/startup gates while that work proceed
 [Captured quota inputs](../google-ai-studio-capacity-inventory/quotas.md) now record all five
 project IDs and selected-model limits: 3.5 Flash-Lite 15 RPM/250,000 UI TPM/500 RPD;
 3.8 Flash 5 RPM/250,000 UI TPM/20 RPD per project. Numeric selected-model inputs are
-available. Shared groups, UI token dimension and credential-to-project verification remain
+available. UI token dimension and credential-to-project verification remain
 open before deployed admission tests. Screenshots do not renew consumed traffic budgets.
 The deployed metrics collector gate is independent and remains open.
+
+The operator confirms all five Google projects belong to separate accounts. Each project
+is an independent quota pool; no cross-account shared quota gate applies. Same-model
+counters must still aggregate across router replicas within a project. Alias equivalence
+only needs confirmation if aliases/variants are selected for rollout.

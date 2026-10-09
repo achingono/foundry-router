@@ -41,3 +41,8 @@ Independent visual/transcription review cleared with no Critical/Major findings.
 passed. Comparison against the committed inventory confirmed every historical field retained
 except the newly supplied project IDs; UI limits occupy new columns. Final diff check passed.
 Runtime tests/build are not applicable to this documentation-only import.
+
+Operator clarified that all five projects belong to separate accounts. Planning now states
+independent project quota pools explicitly; same-project/model counters across router
+replicas are separate from account independence. Alias mapping is only a conditional gate
+when aliases/variants are selected. No quota limits or runtime settings changed.
