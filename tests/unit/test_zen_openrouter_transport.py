@@ -72,9 +72,7 @@ class TestZenTransport:
 
 class TestOpenRouterTransport:
     @respx.mock
-    async def test_openrouter_chat_url_auth_and_namespaced_model(
-        self, monkeypatch
-    ) -> None:
+    async def test_openrouter_chat_url_auth_and_namespaced_model(self, monkeypatch) -> None:
         _settings(
             monkeypatch,
             '{"or_a": {"provider": "openrouter", "endpoint": "https://openrouter.ai/api/v1", "credential": "synthetic-or-key", "deployment": "organization/model"}}',
@@ -90,9 +88,7 @@ class TestOpenRouterTransport:
             captured["body"] = jsonlib.loads(request.content.decode())
             return httpx.Response(200, json={"ok": True})
 
-        respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
-            side_effect=capture
-        )
+        respx.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=capture)
         client = AllowedBackendClient()
         response = await client.request_backend(
             "or_a",

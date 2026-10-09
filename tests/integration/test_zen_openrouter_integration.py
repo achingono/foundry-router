@@ -54,9 +54,7 @@ def zen_settings(*, second=False, metered=False):
         if metered
         else "{}",
         backend_cycle_start_day_json=json.dumps(dict.fromkeys(ids, 1)) if metered else "{}",
-        backend_cycle_allowance_usd_json=json.dumps(dict.fromkeys(ids, 1000))
-        if metered
-        else "{}",
+        backend_cycle_allowance_usd_json=json.dumps(dict.fromkeys(ids, 1000)) if metered else "{}",
         backend_initial_estimated_remaining_usd_json=json.dumps(dict.fromkeys(ids, 1000))
         if metered
         else "{}",
@@ -213,9 +211,7 @@ def test_openrouter_translated_responses_and_bearer(monkeypatch, stream):
         )
     else:
         upstream = httpx.Response(200, json=chat_ok())
-    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
-        return_value=upstream
-    )
+    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(return_value=upstream)
     response = TestClient(app).post(
         "/openai/v1/responses",
         headers={"api-key": "client-key"},

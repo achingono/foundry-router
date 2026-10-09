@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 
 from foundry_router import forwarding
 from foundry_router.config import Settings
@@ -36,7 +35,7 @@ def _settings() -> Settings:
     )
 
 
-def _harness(monkeypatch, client: object):
+def _harness(client: object):
     settings = _settings()
     active = AsyncMock()
     cooldown = AsyncMock()
@@ -65,13 +64,13 @@ def _ok_body() -> bytes:
 
 
 class TestZenNonStreaming:
-    async def test_success_forwards_bytes_unchanged(self, monkeypatch) -> None:
+    async def test_success_forwards_bytes_unchanged(self) -> None:
         raw = _ok_body()
         request = AsyncMock(
             return_value=httpx.Response(200, content=raw, headers={"content-type": "x"})
         )
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -91,12 +90,10 @@ class TestZenNonStreaming:
         env.active.assert_awaited_once_with("zen_a")
         request.assert_awaited_once()
 
-    async def test_ambiguous_5xx_is_terminal_force_charge_single_dispatch(
-        self, monkeypatch
-    ) -> None:
+    async def test_ambiguous_5xx_is_terminal_force_charge_single_dispatch(self) -> None:
         request = AsyncMock(return_value=httpx.Response(500, content=b"boom"))
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -116,10 +113,10 @@ class TestZenNonStreaming:
         env.cooldown.assert_awaited_once()
         assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
 
-    async def test_pre_output_429_is_failover_eligible(self, monkeypatch) -> None:
+    async def test_pre_output_429_is_failover_eligible(self) -> None:
         request = AsyncMock(return_value=httpx.Response(429, content=b"slow"))
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -137,10 +134,10 @@ class TestZenNonStreaming:
         request.assert_awaited_once()
         assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.QUOTA_COOLDOWN
 
-    async def test_auth_failure_is_terminal_without_charge(self, monkeypatch) -> None:
+    async def test_auth_failure_is_terminal_without_charge(self) -> None:
         request = AsyncMock(return_value=httpx.Response(401, content=b"no"))
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -157,12 +154,12 @@ class TestZenNonStreaming:
         assert result.force_charge is False
         request.assert_awaited_once()
 
-    async def test_transport_error_force_charges_estimate(self, monkeypatch) -> None:
-        async def fail(*args, **kwargs):
+    async def test_transport_error_force_charges_estimate(self) -> None:
+        async def fail(*_args, **_kwargs):
             raise httpx.ConnectError("down")
 
         client = SimpleNamespace(request_backend=fail)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -179,10 +176,10 @@ class TestZenNonStreaming:
         assert result.force_charge is True
         assert result.settlement_cost_usd is not None
 
-    async def test_malformed_success_body_force_charges(self, monkeypatch) -> None:
+    async def test_malformed_success_body_force_charges(self) -> None:
         request = AsyncMock(return_value=httpx.Response(200, content=b"not json"))
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -198,12 +195,10 @@ class TestZenNonStreaming:
         assert result.retryable_failure is False
         assert result.force_charge is True
 
-    async def test_expired_deadline_releases_without_dispatch(
-        self, monkeypatch
-    ) -> None:
+    async def test_expired_deadline_releases_without_dispatch(self) -> None:
         request = AsyncMock(return_value=httpx.Response(200, content=_ok_body()))
         client = SimpleNamespace(request_backend=request)
-        env = _harness(monkeypatch, client)
+        env = _harness(client)
         result = await forwarding._forward_zen_non_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -252,16 +247,14 @@ class _FakeStreamContext:
 
 
 class TestZenStreaming:
-    async def test_success_streams_unchanged_single_dispatch(
-        self, monkeypatch
-    ) -> None:
+    async def test_success_streams_unchanged_single_dispatch(self) -> None:
         chunks = [
             b'data: {"type":"response.created"}\n\n',
             b'data: {"response":{"usage":{"input_tokens":10,"output_tokens":5}}}\n\n',
         ]
         context = _FakeStreamContext(status=200, chunks=chunks)
-        client = SimpleNamespace(stream_backend=lambda *a, **k: context)
-        env = _harness(monkeypatch, client)
+        client = SimpleNamespace(stream_backend=lambda *_a, **_k: context)
+        env = _harness(client)
         result = await forwarding._forward_zen_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -281,10 +274,10 @@ class TestZenStreaming:
         assert result.response.status_code == 200
         env.active.assert_awaited_once_with("zen_a")
 
-    async def test_pre_output_500_is_terminal_force_charge(self, monkeypatch) -> None:
+    async def test_pre_output_500_is_terminal_force_charge(self) -> None:
         context = _FakeStreamContext(status=500, error=b"boom")
-        client = SimpleNamespace(stream_backend=lambda *a, **k: context)
-        env = _harness(monkeypatch, client)
+        client = SimpleNamespace(stream_backend=lambda *_a, **_k: context)
+        env = _harness(client)
         result = await forwarding._forward_zen_streaming(
             settings=env.settings,
             backend_id="zen_a",
@@ -304,10 +297,10 @@ class TestZenStreaming:
         assert result.force_charge is True
         assert context.closed is True
 
-    async def test_pre_output_429_is_failover_eligible(self, monkeypatch) -> None:
+    async def test_pre_output_429_is_failover_eligible(self) -> None:
         context = _FakeStreamContext(status=429, error=b"slow")
-        client = SimpleNamespace(stream_backend=lambda *a, **k: context)
-        env = _harness(monkeypatch, client)
+        client = SimpleNamespace(stream_backend=lambda *_a, **_k: context)
+        env = _harness(client)
         result = await forwarding._forward_zen_streaming(
             settings=env.settings,
             backend_id="zen_a",

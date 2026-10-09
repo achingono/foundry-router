@@ -38,7 +38,9 @@ ASCII_DELETE = 127
 class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
-    provider: Literal["azure_foundry", "google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"] = "azure_foundry"
+    provider: Literal[
+        "azure_foundry", "google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"
+    ] = "azure_foundry"
     api_surface: Literal["openai_compat", "native"] = "openai_compat"
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
@@ -81,18 +83,14 @@ class BackendConfig(BaseModel):
         path = urlsplit(raw).path
         # This baseline accepts literal root segments, not encoded routing syntax.
         if "%" in path or any(segment in {".", ".."} for segment in path.split("/")):
-            raise ValueError(
-                f"{label} endpoint cannot contain encoded or dot path segments"
-            )
+            raise ValueError(f"{label} endpoint cannot contain encoded or dot path segments")
         if "//" in path or unquote(path) != path:
             raise ValueError(f"{label} endpoint must be a safe API root")
-        operation_suffixes = ("/chat/completions", "/embeddings", "/responses")
+        operation_suffixes: tuple[str, ...] = ("/chat/completions", "/embeddings", "/responses")
         if provider == "opencode_zen":
             operation_suffixes += ("/messages", "/systemone")
         if path.rstrip("/").endswith(operation_suffixes):
-            raise ValueError(
-                f"{label} endpoint must be an API root, not an operation path"
-            )
+            raise ValueError(f"{label} endpoint must be an API root, not an operation path")
         return value
 
     @field_validator("credit_group")
@@ -184,8 +182,7 @@ class BackendConfig(BaseModel):
                 )
             ):
                 raise ValueError(
-                    "Compatible and OpenRouter backends require a bounded "
-                    "physical model identifier"
+                    "Compatible and OpenRouter backends require a bounded physical model identifier"
                 )
             if self.supported_operations is None:
                 self.supported_operations = ["responses"]

@@ -212,9 +212,7 @@ class ZenAdapter:
             body=dict(upstream), input_tokens=input_tokens, output_tokens=output_tokens
         )
 
-    def translate_error(
-        self, status_code: int, upstream_body: bytes | None
-    ) -> TranslatedError:
+    def translate_error(self, status_code: int, upstream_body: bytes | None) -> TranslatedError:
         _ = upstream_body  # Never relay provider bodies.
         if status_code in (401, 403):
             return TranslatedError(

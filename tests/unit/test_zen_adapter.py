@@ -24,7 +24,10 @@ class TestZenValidation:
 
     def test_full_stateless_text_accepted(self, adapter: ZenAdapter) -> None:
         body = _body(
-            input=[{"role": "system", "content": "be brief"}, {"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+            input=[
+                {"role": "system", "content": "be brief"},
+                {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+            ],
             instructions="follow policy",
             metadata={"trace": "abc"},
             max_output_tokens=64,
@@ -94,9 +97,7 @@ class TestZenValidation:
                 "input": [
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "input_image", "image_url": "https://x/y.png"}
-                        ],
+                        "content": [{"type": "input_image", "image_url": "https://x/y.png"}],
                     }
                 ]
             },
@@ -137,9 +138,7 @@ class TestZenTranslation:
         assert "max_completion_tokens" not in upstream
         assert "stream_options" not in upstream
 
-    def test_build_upstream_body_rejects_other_operations(
-        self, adapter: ZenAdapter
-    ) -> None:
+    def test_build_upstream_body_rejects_other_operations(self, adapter: ZenAdapter) -> None:
         with pytest.raises(ValueError, match="only the Responses operation"):
             adapter.build_upstream_body(
                 "embeddings", _body(), deployment="gpt-5.4", default_output_tokens=8
@@ -170,9 +169,7 @@ class TestZenTranslation:
         "status,code",
         [(429, "rate_limit_exceeded"), (500, "upstream_error"), (400, "upstream_error")],
     )
-    def test_translate_error_mapping(
-        self, adapter: ZenAdapter, status: int, code: str
-    ) -> None:
+    def test_translate_error_mapping(self, adapter: ZenAdapter, status: int, code: str) -> None:
         assert adapter.translate_error(status, None).code == code
 
     def test_stream_decoder_raises(self, adapter: ZenAdapter) -> None:
