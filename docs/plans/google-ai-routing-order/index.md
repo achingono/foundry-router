@@ -2,6 +2,8 @@
 
 **Planned** roadmap, revised 2026-10-08 following review. Individual statuses below
 separate implemented code, observed live behavior, and remaining gates.
+The [completion audit](completion-audit.md) records requirement-by-requirement evidence and
+remaining work; the full roadmap is not complete.
 
 The numbered workstreams are priorities and deployment milestones, not strictly sequential
 tiers. Independent implementation and planning can proceed in parallel. Live execution and
