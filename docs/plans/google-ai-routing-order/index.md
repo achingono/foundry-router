@@ -62,7 +62,12 @@ a synthetic verifier gap for complete usage on an inert stop choice, preserves a
 evidence and reserves the last four cumulative slots for three normal streams and one
 conditional natural-cancellation check; implementation is reviewed and locally verified,
 three new streams completed publicly with early delivery/cleanup, but failed strict stop-choice
-qualification; conditional cancellation was withheld. One project2 slot remains. Track provider
+qualification; conditional cancellation was withheld. The final project2 slot was subsequently
+consumed by the [reviewed cancellation stage](../google-final-cancellation/evidence.md): early
+preterminal disconnect and natural cleanup passed, conservative settlement validation failed.
+The [local forwarding correction](../google-stream-settlement-integrity/evidence.md) preserves
+the reservation until verified stream completion; live correction acceptance remains unverified.
+All five cumulative request budgets are exhausted. Track provider
 failure/admission behavior through the router separately from direct quota probes. Local
 combination exclusion is implemented with synthetic verification; live nonzero thinking-token
 settlement remains unproven. Record model, project, surface, operation, streaming mode, usage
@@ -264,7 +269,9 @@ graph TD
 Adapter extraction and text evidence reconciliation are locally complete. The fresh native
 stage is recorded; next close scoped compatibility/accounting gates and implement independently
 reviewed workstreams. Quota and metrics implementations are locally complete. Remaining independent work includes
-capacity investigation, Table real-traffic test planning and live cost-provider acceptance. Each implementation still
+capacity investigation, Table real-traffic acceptance after approval of the
+[refreshed reviewed image](../table-real-image-refresh/evidence.md), and live cost-provider acceptance.
+Google live gates cannot consume further requests under the exhausted retained ledger. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
 

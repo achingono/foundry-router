@@ -7,7 +7,8 @@ are now consumed; no replay or budget reset. Latest three recorded normal stream
 completed events, matching independently observed input/output counts/debits, early text
 before provider EOF and natural cleanup, but failed an additional verifier-only inertstop
 predicate. Those failed outcomes remain immutable; their raw stop shapes are unknown.
-One cumulative project2 request slot remains; no other project can be called.
+At plan review, one cumulative project2 request slot remained. It is now consumed; no
+project has a remaining request slot under this ledger.
 
 ## Correct verification boundary
 
