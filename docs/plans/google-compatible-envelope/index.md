@@ -53,3 +53,14 @@ claim for synthetic debits. Compatibility streaming remains gated on new-stage n
 - [Exit criteria](exit-criteria.md)
 - [Risks](risk-register.md)
 - [Evidence](evidence.md)
+
+## Required Responses follow-up
+
+The operator confirmed OpenAI-compatible Responses is required. One additional distinct
+project-3 nonstream diagnostic is proposed to identify only the allowlisted wrapper shape
+inside nonempty `extra_content`: `google`/`gemini` object presence, unknown-key counts and
+`thought_signature`/`thoughtSignature`/`signature` types, nonempty flags and bounded byte-length
+classes. Never retain signature bytes or arbitrary keys. Keep exact guard, reserve 1,088,
+same shared lock/ledger, separate immutable updated baseline, deterministic unique case,
+no retries and strict persisted-result schema validation. This is one additional diagnosis,
+not permission to enable unknown provider state.
