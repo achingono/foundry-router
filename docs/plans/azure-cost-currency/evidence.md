@@ -22,4 +22,12 @@ Independent contextual review found a partial-acquisition lifecycle issue, fixed
 owned rate acquisition and failure-injection verification. Final review reports no Critical
 or Major findings; single immutable CAD acceptance entrypoint also cleared. Canonical
 configuration, operations, security, traceability and routing roadmap are updated.
-Live CAD acceptance is pending; production has not changed.
+The single immutable read-only CAD acceptance invocation completed in 6.129 seconds with
+`status: unverified`, provider-boundary `http_rejection`, no accepted groups and
+`balance_applied: false`. See [result](diagnostic-results.json) and
+[consumed invocation marker](diagnostic-started.json). Public-rate validation preceded
+billing requests, but no complete batch/rate metadata was returned, so no numerical live
+conversion claim is made. Billing rejection does not establish authorization, data
+completeness or either group's accepted ceiling. No raw HTTP error was retained; do not
+infer its status or cause. No automatic retries or replay; prior failures remain unchanged.
+Live two-group CAD acceptance remains unverified; production has not changed.

@@ -178,7 +178,7 @@ The [schema diagnosis](../azure-cost-schema-diagnosis/evidence.md) confirmed non
 on the first group's otherwise structurally valid response. The independently reviewed
 [subscription currency policy](../azure-cost-currency/index.md) supports configured USD/CAD
 billing and a dated Bank of Canada daily average for conservative USD estimates. Local
-implementation is verified; the new bounded CAD acceptance remains pending and the second
+implementation is verified; the new bounded CAD acceptance returned a billing HTTP rejection and the second
 group remains unverified.
 This work can proceed before cut-over and does not block quota or metrics implementation.
 Cut-over still requires reconciled starting estimates; implementing this
@@ -272,3 +272,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Stateless compatible text repair | Committed `25b4d72`; eight scoped live cases passed | [Evidence](../google-compatible-signature-text/evidence.md); required Responses surface, exact bounded signature omission, full quality and independent review; production unchanged |
 | Table real-inference preparation | Committed `0ebe0db`; deployment approval pending | [Evidence](../table-real-inference/evidence.md); isolated app/tables/grants and immutable image prepared, ARM validation/what-if passed |
 | Cost schema diagnosis | Committed observer `193a65d`; first-group non-USD confirmed | [Evidence](../azure-cost-schema-diagnosis/evidence.md); USD-only policy preserved, no balances applied, second group unverified |
+| Subscription billing currency | Implemented locally `fdb34ec`; CAD live acceptance unverified | [Evidence](../azure-cost-currency/evidence.md); configurable USD/CAD, dated public daily conversion, billing HTTP rejection, no balances applied |

@@ -1,6 +1,6 @@
 # Subscription billing currency and daily CAD conversion
 
-**Implemented locally**, 2026-10-08; bounded live acceptance pending. Operator confirmed all current subscriptions bill in CAD and
+**Implemented locally**, 2026-10-08; bounded live acceptance unverified (billing HTTP rejection). Operator confirmed all current subscriptions bill in CAD and
 requested publicly available daily average conversion, with currency configurable per
 subscription. Prior [schema diagnosis](../azure-cost-schema-diagnosis/evidence.md) observed
 non-USD billing for fs-openclaw; this is the concrete requirement for extending USD-only cost
