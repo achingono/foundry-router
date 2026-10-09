@@ -47,6 +47,14 @@ updated without changing any other parameters or models. ARM validation and fini
 what-if succeeded with the same one-app/two-table/two-grant scope. Push/deployment remain
 pending approval of this current digest; earlier evidence remains historical.
 
+## Approved isolated execution, 2026-10-09
+
+Operator explicitly approved the isolated Table image push and deployment after the refreshed
+digest and one-app/two-table/two-grant scope were presented. The four Azure inference calls
+retain the previously accepted limits: zero retries, at most1,024 output tokens each and
+$0.15 total estimated cost. Approval covers this isolated test, not production cut-over,
+scale-out or a collector deployment. Image push/deployment execution is now underway.
+
 ## Runtime-mode preflight amendment
 
 Independent plan and contextual review cleared checks for the actual runtime setting names
