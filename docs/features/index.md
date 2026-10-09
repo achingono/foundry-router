@@ -1,6 +1,6 @@
 # Runtime Features
 
-## Status: Implemented (multi-worker metrics aggregation Planned)
+## Status: Implemented locally; deployed quota/metrics aggregation and production Table cut-over remain unverified
 
 The router is more than a load balancer. It is a model router, quota-aware failover layer, credit scheduler, and billing-cycle-aware capacity pool.
 
@@ -15,12 +15,12 @@ The router is more than a load balancer. It is a model router, quota-aware failo
 - Streaming terminal usage extraction for accurate reservation settlement. **Implemented**
 - Structured explainable routing decision logging. **Implemented**
 - Persistent or externally reconciled usage/cost state via periodic reconciliation loop (`reconciliation_interval_minutes` + `InMemoryCreditStore.apply_reconciled_remaining` / `AzureTableCreditStore.apply_reconciled_remaining`). **Implemented**
-- `CreditStore`, `HealthStore`, injected-client Azure Table adapters, the identity-only Table client, and conditional state wiring. Code and Azurite tests are **Implemented**; deployed multi-replica shared state is **Partially implemented** until Azure validation and a two-replica deployment pass.
-- Liveness/readiness, structured logs, and Prometheus metrics (single-process). **Implemented**; multi-process aggregation via `prometheus_client` multiprocess or OpenTelemetry remains **Planned**.
+- `CreditStore`, `HealthStore`, identity-only Azure Table adapters and conditional state wiring are **Implemented**. [Synthetic one/two-replica and cross-RG Azure verification](../plans/table-existing-cross-rg/evidence.md) passed; Table-backed real inference and production cut-over remain unverified.
+- Liveness/readiness, structured logs and single-process Prometheus metrics are **Implemented**. Opt-in [OTLP aggregation](../plans/metrics-aggregation/evidence.md) passed local two-worker/restart verification; deployed collector acceptance remains unverified.
 - Secure credentials, IaC (Bicep), automated deployment, local mocked-backend development, and tests. **Implemented**
 
 ## Optional and Future Capabilities
 
-Managed identity, Azure Cost Management reconciliation, model aliases, graceful stale-cost degradation, custom domains, Application Insights dashboards, per-model policies, dynamic weights, simulation mode, and additional regions are optional or future scope. They must not make the initial proxy unnecessarily large.
+Managed identity and model aliases are **Implemented**. The [Azure Cost Management adapter](../plans/azure-cost-reconciliation/evidence.md) is **Implemented** locally; live billing acceptance remains unverified. Custom domains, Application Insights dashboards, dynamic weights, simulation mode and additional regions remain optional or future scope.
 
 See [routing and scheduling](routing.md) for the safety-critical policy.

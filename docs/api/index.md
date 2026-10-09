@@ -1,14 +1,14 @@
 # Public API
 
-## Status: Implemented (Responses, embeddings, models, health, admin/status, metrics single-process; Google text/embeddings adapter Implemented with mocked verification, real Google inference Planned; `chat/completions` remains optional Planned)
+## Status: Implemented locally; scoped Google Responses text live verification passed; embeddings live verification and `chat/completions` remain unverified/Planned respectively
 
 The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
 Azure Responses uses `POST {endpoint}/openai/v1/responses` without an API-version query, substituting the selected deployment name into the body `model`. Azure embeddings retains `POST {endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_version}`. The initial backend is the highest-weight healthy candidate for the model, with backend ID used as the deterministic tie-breaker. Azure SSE bytes are forwarded unchanged; bounded usage inspection accepts terminal `response.usage` as well as top-level usage.
 
-## Google AI Studio Adapter (Implemented, Mocked Verification)
+## Google AI Studio Adapter (Implemented; scoped text live verification)
 
-Configured `google_ai_studio` backends are usable through the existing Responses and embeddings API via an explicit protocol adapter (`src/foundry_router/api/adapters/`). Google's OpenAI-compatible surface is `POST {endpoint-root}/v1beta/openai/chat/completions` and `POST {endpoint-root}/v1beta/openai/embeddings` with `Authorization: Bearer <server-side key>` (verified 2026-10-05). Client authentication is never forwarded. The baseline text/embeddings subset and opt-in [tools, structured text and bounded inline image input](../operations/google-features.md) are verified with strict mocked Chat Completions/envelope contracts; real Google inference remains **Planned** (opt-in live gate). It must not be advertised as full compatibility with tool-dependent coding-agent workflows.
+Configured `google_ai_studio` backends use an explicit Responses/embeddings protocol adapter (`src/foundry_router/api/adapters/`). Google's compatible routes are `POST {endpoint-root}/v1beta/openai/chat/completions` and `POST {endpoint-root}/v1beta/openai/embeddings` with server-owned Bearer authentication. Client authentication is never forwarded. [Live simple-text Responses and streaming](../plans/google-compatible-signature-text/evidence.md) passed for exact `gemini-3.5-flash-lite` on projects 2–5. These samples do not establish embeddings, other models, tools, signed continuation, production enablement or unbuffered stream latency/cancellation. The baseline embeddings subset and opt-in [tools, structured text and bounded inline image input](../operations/google-features.md) retain local mocked verification and separate live gates.
 
 | Public input | Google mapping or outcome |
 | --- | --- |

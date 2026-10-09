@@ -1,6 +1,6 @@
 # Foundry Router Documentation
 
-Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry and Google AI Studio backends. It presents configured model pools with forwarding, health-aware retry/cooldown/failover, credit-cycle scheduling, and single-process quota-aware Google key routing. Google quota routing is **Implemented** for single-process deployments with in-memory accounting; cross-replica quota aggregation remains **Planned**. Cost reconciliation remains a background loop with a pluggable adapter; live Azure Cost Management integration is **Planned**. Redis remains a separately approved future hot-state optimization.
+Foundry Router is a lightweight, OpenAI-compatible proxy for Azure AI Foundry and Google AI Studio backends. It presents configured model pools with forwarding, health-aware retry/cooldown/failover, credit-cycle scheduling and quota-aware routing. Opt-in [Table quota accounting](plans/distributed-quota-accounting/index.md) and [OTLP metrics aggregation](plans/metrics-aggregation/index.md) are **Implemented** locally; deployed provider admission and collector acceptance remain unverified. The [Azure Cost Management adapter](plans/azure-cost-reconciliation/index.md) is **Implemented** locally, with live billing acceptance still unverified. Redis remains a separately approved future hot-state optimization.
 
 ## Repository Status
 
@@ -46,7 +46,7 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Phase 08 credit-integrity and boundary hardening plan](plans/phase-08-credit-integrity-hardening/index.md)
 - [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
 - [Google AI Studio capacity inventory (Partially implemented; selected quotas measured, remaining quotas pending)](plans/google-ai-studio-capacity-inventory/index.md)
-- [Google AI Studio backends and Responses adapter plan (Implemented with mocked verification; real inference Planned)](plans/google-ai-studio-adapter/index.md)
+- [Google AI Studio backends and Responses adapter plan (Implemented locally)](plans/google-ai-studio-adapter/index.md); [scoped compatible text live evidence](plans/google-compatible-signature-text/evidence.md)
 - [Google AI Studio tools and multimodal follow-up plan (Partially implemented; unsigned tools/structured text/small PNG, live gate Planned)](plans/google-ai-studio-tools-multimodal/index.md)
 - [Logical model aliases plan (Planned)](plans/model-aliases/index.md)
 - [Phase 10 Bicep existing-resource support plan](plans/phase-10-bicep-existing-resource-support/index.md)
