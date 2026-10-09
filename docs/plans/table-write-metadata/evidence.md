@@ -32,4 +32,25 @@ The supplemental runner holds both ledger locks and preserves the original bytes
 Review caught the original stage validator requiring passing nonstream predecessors; an
 explicit strict supplemental result validator corrected this before traffic. Synthetic two-pass,
 first/second-failure stop, observation persistence and replay refusal checks passed.
-See [runner checks](supplemental-runner-result.json).
+See [runner checks](supplemental-runner-result.json), the exact reviewed
+[runner source](supplemental-runner.txt) and [synthetic check source](supplemental-runner-checks.txt).
+
+## Corrected isolated deployment and live streaming
+
+The verified corrected image was pushed and only the existing isolated app image changed.
+Azure CLI temporarily normalized secretRef-only environment entries with empty values;
+binding rejected the response. A scoped ARM template patch restored exact configuration
+equivalence before provider traffic. [Deployment binding](deployment-result.json) passed.
+
+Both previously unattempted [supplemental streaming cases](supplemental-ledger.json) passed:
+HTTP 200, terminal completed/text flags, verified usage, matching local estimated debit and
+zero active/inflight reservations. Model-1: 12 input/22 output tokens, 0.00078 USD estimated
+debit. Model-2: 12 input/30 output tokens, 0.00102 USD estimated debit.
+[Post-run status](post-supplemental-status.json) confirms both cleared.
+
+The original ledger SHA-256 remains unchanged. Both old entries consume request/reservation
+budget; total maximum four cases reserve 0.12544 USD under the original 0.15 USD limit.
+No remaining router requests are available in that authorization. No Google calls, production
+changes, manual balance reset or restart occurred. Original nonstream acceptance and restart
+remain open; supplemental evidence establishes streaming settlement on the corrected cloud
+image and does not rewrite the failed history or prove the exact old Azure error text.

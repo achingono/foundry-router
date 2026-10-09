@@ -95,3 +95,9 @@ The reaper later cleared model-1 inflight and conservatively charged 0.03081 USD
 The [write metadata correction](../table-write-metadata/evidence.md) removes read metadata
 from SDK write bodies while preserving conditional ETags. Local checks pass; cloud exec
 probe returned WebSocket 404. Original failed/ambiguous entries remain unchanged.
+
+The corrected isolated image subsequently passed both previously unused streaming cases
+in a separate immutable supplemental ledger. HTTP 200, completion, usage settlement and
+reservation cleanup passed for both Azure models. Original nonstream entries remain
+unmodified; all four authorized request slots are consumed and full acceptance/restart
+remain open. See [supplemental evidence](../table-write-metadata/evidence.md).

@@ -14,7 +14,7 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | 2b capacity | [310-row inventory](../google-ai-studio-capacity-inventory/inventory.csv) | Recorded quota dimensions preserved; selected 3.5/3.8 quotas, actual project IDs and shared-model limits incomplete; unknowns cannot become executable unlimited groups |
 | 3 media | Linked feature evidence in [roadmap](index.md) | Deferred, with existing startup/live/resource gates retained |
 | 3 tools/signed continuation | [Signed evidence](../google-ai-studio-tools-multimodal/signed-continuation/evidence.md) | Conditional; required client/schema/round-trip/live enablement remains incomplete |
-| 4a Table real inference | [Isolated test evidence](../table-real-inference/evidence.md), [current image refresh](../table-real-image-refresh/evidence.md) | Approved image push/deployment/binding/readiness passed; model-1 nonstream503 with active reservation, model-2 ambiguous started entry; no streaming/restart; acceptance remains unverified and replay forbidden |
+| 4a Table real inference | [Isolated test evidence](../table-real-inference/evidence.md), [current image refresh](../table-real-image-refresh/evidence.md) | Approved image push/deployment/binding/readiness passed; original model-1 nonstream503/model-2 ambiguous; reaper cleared; supplemental streams passed; original nonstream/restart open; replay forbidden |
 | fs-openclaw exact inference coverage | [Production evidence](../production-inference/evidence.md), prepared two-model test mapping | Existing production calls exercised fs-swarm; prepared test mapping does not establish fs-openclaw coverage; gate incomplete |
 | 4b reconciled estimates/go/drain/rollback | [Operations guidance](../../operations/shared-resource-credit.md) | Guidance exists; concrete approved starting estimates and go decision not recorded |
 | 4c/4d production Table cut-over/acceptance | Synthetic Table evidence and production memory/one invariant | Incomplete; production must remain memory/one until prior gates and go decision |
@@ -55,3 +55,11 @@ their independent verification workstreams; no endpoint, project ID or fresh bud
 
 The subsequent operator approval and isolated deployment are recorded in the Table evidence.
 Acceptance failed/unverified; production remains memory/one and no ledgered case may be replayed.
+
+## Table troubleshooting checkpoint
+
+[Metadata correction](../table-write-metadata/evidence.md) implemented and deployed only
+to the isolated Table app. Both unused streaming cases passed completion, usage settlement
+and cleanup; original failed/ambiguous nonstream entries remain unchanged. Four-request
+Azure authorization is exhausted. Original nonstream/restart acceptance, quotas and deployed
+collector verification remain open. Production remains memory/one.

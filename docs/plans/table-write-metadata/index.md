@@ -1,6 +1,6 @@
 # Table entity write metadata boundary
 
-**Partially implemented**. Historical isolated-test logs show one selected request followed by an Azure
+**Implemented** (write boundary and supplemental live streaming); original full acceptance remains open. Historical isolated-test logs show one selected request followed by an Azure
 TableTransactionError HTTP 400. The retained reservation was subsequently conservatively reaped,
 clearing inflight and debiting 0.03081 USD estimate. This establishes Table transaction failure
 and recovery, not the exact provider response or Azure error message.
@@ -52,3 +52,7 @@ tokens each, zero retries and 0.12544 USD total maximum local estimate under the
 0.15 USD limit. Persist each fresh case before dispatch; stop all supplemental traffic on
 failure, ambiguity, overrun or incomplete settlement. Supplemental passes cannot reclassify
 original failures or prove the full four-case acceptance/restart gate.
+
+The corrected isolated image and both supplemental streaming settlements passed live.
+See [evidence](evidence.md). Original nonstream failure/ambiguity and restart acceptance
+remain open; the original four-request authorization is exhausted.

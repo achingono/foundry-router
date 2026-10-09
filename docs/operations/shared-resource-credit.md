@@ -40,7 +40,8 @@ intent is not overwritten by later free-release attempts. Reconciliation can cor
 Azure write bodies exclude read-only `odata.etag`, `odata.metadata` and `Timestamp`;
 ETags remain conditional request headers. Application fields, including `metadata`, are
 preserved. The [metadata correction](../plans/table-write-metadata/evidence.md) passes
-local SDK wire and strict Azurite checks; cloud acceptance remains open.
+local SDK wire and strict Azurite checks plus both supplemental isolated Azure streaming
+settlements. Original full nonstream/restart acceptance remains open.
 
 Finalization and recovery guard fresh **balance and reservation ETags in one batch**, rereading and
 recomputing after conflicts. Confirmed missing rows prevent double debit after commit-then-timeout.
