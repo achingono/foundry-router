@@ -37,6 +37,16 @@ Operator accepted the four-call/$0.15 estimate/output/retry limits on 2026-10-08
 No image push, resource deployment, restart or Table-backed inference has been performed.
 Concrete deployment approval is the next gate after recording final local verification.
 
+## Current reviewed runtime image refresh
+
+The earlier prepared digest above is superseded for the pending deployment by the
+[reviewed image refresh](../table-real-image-refresh/evidence.md). Current runtime manifest:
+`registry.example.test/foundry-router@sha256:d8f68e5c638510a38ad30c3cadb80d96bd97ae1936a46c75083ac1b7d59fd438`.
+Platform/config/layer hashes and network-disabled imports passed. Private image/fingerprint
+updated without changing any other parameters or models. ARM validation and finite read-only
+what-if succeeded with the same one-app/two-table/two-grant scope. Push/deployment remain
+pending approval of this current digest; earlier evidence remains historical.
+
 ## Runtime-mode preflight amendment
 
 Independent plan and contextual review cleared checks for the actual runtime setting names

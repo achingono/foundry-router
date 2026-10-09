@@ -1,6 +1,6 @@
 # Refresh prepared Table inference image
 
-**Planned**. The prepared isolated Table inference image predates subscription currency and
+**Implemented** preparation locally; push/deployment approval pending. The earlier prepared isolated Table inference image predates subscription currency and
 stream accounting corrections. The [Table test plan](../table-real-inference/index.md)
 requires reviewed current source. Refresh preparation before the pending deployment approval.
 
