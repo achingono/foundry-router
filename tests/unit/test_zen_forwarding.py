@@ -437,11 +437,11 @@ class TestZenStatusAndStreamingLifecycle:
 
     async def test_missing_and_malformed_terminal_usage_settle_conservatively(self) -> None:
         cases = [
-            [b'data: {"type":"response.created"}\\n\\n'],
+            [b'data: {"type":"response.created"}\n\n'],
             [
-                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":"bad","output_tokens":-1}}}\\n\\n'
+                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":"bad","output_tokens":-1}}}\n\n'
             ],
-            [b'data: {"type":"response.created"}\\n\\n', b'data: [DONE]\\n\\n'],
+            [b'data: {"type":"response.created"}\n\n', b'data: [DONE]\n\n'],
         ]
         for index, chunks in enumerate(cases):
             context = _FakeStreamContext(chunks=chunks)
@@ -465,13 +465,13 @@ class TestZenStatusAndStreamingLifecycle:
     async def test_downstream_cancellation_finalizes_once(self) -> None:
         context = _FakeStreamContext(
             chunks=[
-                b'data: {"type":"response.created"}\\n\\n',
-                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":5}}}\\n\\n',
+                b'data: {"type":"response.created"}\n\n',
+                b'data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":5}}}\n\n',
             ]
         )
         result, _, credit, metrics, quota = await self._forward_stream(context, "req-cancel")
         iterator = result.response.body_iterator
-        assert await anext(iterator) == b'data: {"type":"response.created"}\\n\\n'
+        assert await anext(iterator) == b'data: {"type":"response.created"}\n\n'
         await iterator.aclose()
         credit.finalize_request.assert_awaited_once()
         metrics.observe_request.assert_awaited_once()
@@ -479,7 +479,7 @@ class TestZenStatusAndStreamingLifecycle:
         assert context.exit_calls == 1
 
     async def test_cleanup_failures_do_not_skip_other_finalizers(self) -> None:
-        context = _FakeStreamContext(chunks=[b'data: {"type":"response.created"}\\n\\n'])
+        context = _FakeStreamContext(chunks=[b'data: {"type":"response.created"}\n\n'])
         context.exit_error = RuntimeError("synthetic close failure")
         result, _, credit, metrics, quota = await self._forward_stream(context, "req-cleanup")
         credit.finalize_request.side_effect = RuntimeError("synthetic credit failure")
@@ -489,3 +489,18 @@ class TestZenStatusAndStreamingLifecycle:
         metrics.observe_request.assert_awaited_once()
         quota.finalize_request.assert_awaited_once()
         assert context.exit_calls == 1
+
+    async def test_cancellation_during_pre_output_read_closes_and_settles_estimate(self) -> None:
+        class CancelBeforeOutput(_FakeStreamContext):
+            async def _aiter_raw(self):
+                raise asyncio.CancelledError
+                yield b""
+
+        context = CancelBeforeOutput()
+        result, env, *_ = await self._forward_stream(context, "req-preoutput-cancel")
+        assert result.retryable_failure is False
+        assert result.force_charge is True
+        assert result.settlement_cost_usd is not None
+        assert context.exit_calls == 1
+        env.cooldown.assert_awaited_once()
+        assert env.cooldown.await_args.kwargs["state"] == BackendHealthState.ERROR_COOLDOWN
