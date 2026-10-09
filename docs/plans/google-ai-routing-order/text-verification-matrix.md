@@ -1,7 +1,8 @@
 # Text verification matrix
 
 **Partially implemented**, reconciled 2026-10-08 after adapter extraction. This is an
-analysis of existing artifacts; no new provider request or configuration change occurred.
+analysis of existing artifacts through the local reconciliation phase. The later authorized
+follow-up section records new native execution; no production configuration changed.
 
 ## Evidence boundaries
 
@@ -79,8 +80,9 @@ conditional under the [completion audit](../google-ai-studio-tools-multimodal/co
 Only four of the twenty text-track combinations above have complete quota triplets.
 The inventory's 24 confirmed RPM/input-TPM buckets concern a broader model set; they do
 not supply missing quotas for 3.5 Flash-Lite or 3.8 Flash. Across those 24 buckets the five
-missing RPD values are 3.5 Flash projects 2–5 and 3.6 Flash project-3. Actual Google project
-IDs, current tier confirmation and additional shared-model/alias limits remain unknown.
+missing RPD values are 3.5 Flash projects 2–5 and 3.6 Flash project-3. The operator reconfirmed on 2026-10-08 that all five projects are free-tier; the CSV
+retains `operator_reported_free_tier`. Actual Google project IDs and additional shared-model/alias
+limits remain unknown; operator tier confirmation is not an authenticated provider capture.
 
 Before new execution, bind the supplied Key Vault reference to the project roster and
 record a finite request/token/spend allowance plus the applicable durable ledger. The
@@ -96,3 +98,34 @@ The CSV contains exactly twenty selected project/model rows. Historical totals r
 survey records exactly twenty selected attempts. The cumulative observer ledger contains
 five new dispatches, of which four have result records; no status was inferred for the
 missing fifth. Relative source links were validated. No runtime code changed in this phase.
+
+## Authorized follow-up stage, 2026-10-08
+
+The operator supplied `foundry-router-production-google-keys`, confirmed a string-array
+of free-tier keys and authorized all available budget. Read-only Azure discovery resolved
+the secret metadata; its value is captured only into memory by the existing runner.
+This first finite stage reuses the reviewed native text/stream contracts and carries all
+prior cumulative ledger debits forward, retaining the stricter 20-request/20,000-reserved-token
+per-project limits. It runs at most twenty new cases: 3.5 Flash-Lite and 3.8 Flash
+nonstreaming on five projects each, then streaming only for passing nonstream combinations
+within the remaining caps. No retries; first failed/ambiguous outcome stops that model/project
+for the stage. Zero paid spend, original body/output/deadline bounds, isolated memory/one
+stores and unchanged production apply. Further stages require their concrete protocol and
+budget gate; this stage does not create fresh historical allowance by clearing a ledger.
+
+### Follow-up outcomes
+
+[Persisted results](native-text-results-2026-10-08.json) record fifteen actual dispatches;
+[the retained ledger](ledger-native-text-2026-10-08.json) includes every prior debit plus
+these requests. 3.5 Flash-Lite minimal passed nonstreaming and streaming on all five keys
+(ten successes), with valid public text and 8–9 observed total tokens. 3.8 Flash low failed
+nonstreaming on all five: projects 1–4 returned public 502 after about 20–21 seconds;
+project-5 returned public 503 after 1.33 seconds. Provider status is not captured by this
+runner, so the public codes do not identify provider error causes. All five have unknown
+usage and retain their full 1,088-token debit. No 3.8 streaming was dispatched after failure.
+
+No overrun occurred. Project-1 cumulative accounting is 19 requests/17,280 reserved tokens;
+projects 2–5 each have 14 requests/11,840 tokens. Thought metadata is absent for all attempts,
+so nonzero thinking settlement remains unverified. These results establish the recorded
+3.5 native text/client/usage cases only; quota ceilings, provider failure/admission traffic,
+compatibility Responses/embeddings, Table-backed real inference and production gates remain.

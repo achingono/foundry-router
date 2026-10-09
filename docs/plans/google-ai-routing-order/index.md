@@ -30,7 +30,9 @@ path. Media is deferred; tools and signed continuation are conditional on coding
 
 The [text verification matrix](text-verification-matrix.md) reconciles all twenty selected
 project/model combinations, historical router counts, newer direct/router failures and
-remaining operation/accounting gates. Reconciliation is complete; live gates remain partial.
+remaining operation/accounting gates. Reconciliation and a [fresh native stage](native-text-results-2026-10-08.json) are recorded:
+3.5 Flash-Lite passed nonstreaming/streaming on all five keys; 3.8 Flash failed all five
+nonstreaming cases. Remaining live/accounting/production gates stay partial.
 
 **Partially implemented**. The [live runner evidence](../google-ai-studio-tools-multimodal/live-runner/evidence.md)
 and [capacity inventory](../google-ai-studio-capacity-inventory/index.md) record native
@@ -189,7 +191,8 @@ alone does not clear this gate.
 ## 7. Future OpenAI-compatible providers
 
 **Planned**, explicitly separate from extraction. A new configurable `openai_compatible`
-provider needs its own reviewed endpoint, credential, capability and verification plan.
+provider has a [concrete endpoint, credential and capability plan](../openai-compatible-provider/index.md)
+awaiting independent review before runtime implementation.
 It depends on the validated generic adapter from workstream 1, not on completion of media,
 production cut-over or scale-out.
 
@@ -229,3 +232,5 @@ the text-first priority and all production/startup gates while that work proceed
 | Pre-extraction characterization | Committed `06a6b80` | 21 immutable synthetic wire scenarios, verified before extraction |
 | Adapter extraction | Committed `3001929` | [Evidence](../openai-compatible-adapter/evidence.md): full suite, coverage, typing, local Azurite, Python 3.12 Docker smoke and implementation review |
 | Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |
+
+| Native text follow-up | **Partially implemented** live verification | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
