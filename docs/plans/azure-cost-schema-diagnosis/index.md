@@ -1,6 +1,7 @@
 # Redacted Azure cost schema diagnosis
 
-**Implemented** locally; the single live invocation is pending, 2026-10-08.
+**Implemented** locally and the single diagnosis completed, 2026-10-08. The first group
+returned non-USD currency; strict USD-only billing acceptance remains unverified.
 The immutable prior diagnostic reached provider response validation
 and reported only `schema`. The accepted billing contract remains USD-only ActualCost,
 exact resource membership and complete nonempty rows; no balances or permissions change.

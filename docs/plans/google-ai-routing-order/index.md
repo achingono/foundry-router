@@ -172,6 +172,9 @@ The [bounded read-only acceptance attempt](../azure-cost-live-verification/evide
 returned no accepted ceilings; live scope/permission/query acceptance remains unverified.
 The one immutable diagnostic follow-up reached provider validation and returned a schema
 rejection, without applying balances. Preserve strict completeness/currency/membership rules.
+The [schema diagnosis](../azure-cost-schema-diagnosis/evidence.md) confirmed non-USD currency
+on the first group's otherwise structurally valid response. A reviewed currency policy is
+required before accepting it against USD allowances; the second group remains unverified.
 This work can proceed before cut-over and does not block quota or metrics implementation.
 Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
@@ -262,3 +265,5 @@ the text-first priority and all production/startup gates while that work proceed
 | Cost reconciliation implementation | Complete locally; Azure billing acceptance unverified | [Evidence](../azure-cost-reconciliation/evidence.md); atomic downward-only estimates, confined identity transport, cycle/mapping binding and real Azurite concurrency/restart |
 | Compatible text live stage | Five failed public cases; provider 200 and conservative settlement verified | [Evidence](../google-compatible-text-verification/evidence.md); no streaming after failure, no overrun or production change |
 | Stateless compatible text repair | Committed `25b4d72`; eight scoped live cases passed | [Evidence](../google-compatible-signature-text/evidence.md); required Responses surface, exact bounded signature omission, full quality and independent review; production unchanged |
+| Table real-inference preparation | Committed `0ebe0db`; deployment approval pending | [Evidence](../table-real-inference/evidence.md); isolated app/tables/grants and immutable image prepared, ARM validation/what-if passed |
+| Cost schema diagnosis | Committed observer `193a65d`; first-group non-USD confirmed | [Evidence](../azure-cost-schema-diagnosis/evidence.md); USD-only policy preserved, no balances applied, second group unverified |
