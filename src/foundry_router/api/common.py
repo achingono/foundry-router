@@ -144,6 +144,7 @@ async def finalize_non_streaming_credit(
     response: Response,
     credit_store: Any,
     rate_limit_store: Any | None = None,
+    quota_attempt_id: str | None = None,
     backend_id: str | None = None,
 ) -> float | None:
     is_success = 200 <= response.status_code < 300
@@ -171,7 +172,7 @@ async def finalize_non_streaming_credit(
         if rate_limit_store is not None:
             usage = extract_response_usage_tokens(response)
             await rate_limit_store.finalize_request(
-                request_id,
+                quota_attempt_id or request_id,
                 actual_input_tokens=usage[0] if usage is not None else None,
             )
     return charged_cost

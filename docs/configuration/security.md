@@ -85,3 +85,8 @@ An early 503 may arrive with the request body unconsumed, which can preclude con
 callers should treat this 503 as retryable through their normal backoff path. These local controls
 do not establish the remaining aggregate resource or live-provider gates. See
 [signed evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/evidence.md).
+
+Shared quota Table access uses the existing identity-only client and a separate table.
+Mandatory ETags and explicitly classified conflicts guard quota writes. State parsing,
+record count and actual UTF-16 property bytes are bounded; storage failures expose only a
+sanitized quota-state error. No keys, prompts or generated output enter quota state.

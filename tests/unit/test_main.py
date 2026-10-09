@@ -1830,7 +1830,7 @@ class TestOpenAIEndpoints:
         )
         assert assessment.available_credit_usd == pytest.approx(200.0)
 
-    def test_cancelled_first_backend_releases_credit_reservation(self) -> None:
+    def test_cancelled_first_backend_settles_possible_dispatch(self) -> None:
         settings = Settings(
             backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "a", "deployment": "gpt-4"}}',
             models_json='{"gpt-4": {"backends": {"backend_a": 1.0}}}',
@@ -1869,7 +1869,7 @@ class TestOpenAIEndpoints:
                 min_credit_reserve_percent=0.0,
             )
         )
-        assert assessment.available_credit_usd == pytest.approx(200.0)
+        assert assessment.available_credit_usd == pytest.approx(199.8771)
 
     def test_second_backend_exception_releases_credit_reservation(self) -> None:
         settings = Settings(

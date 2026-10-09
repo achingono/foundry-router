@@ -94,7 +94,7 @@ def _map_operation(op: _TransactionEntity) -> Any:
     if op.operation == "Create":
         return ("create", dict(op.entity or {}))
     if op.operation in ("Update", "UpdateMerge"):
-        if op.row_key == _BALANCE_ROW_KEY and op.etag is None:
+        if op.row_key in {_BALANCE_ROW_KEY, "quota"} and op.etag is None:
             raise TableEntityMissingEtagError("balance write without ETag is refused (fail closed)")
         mode = UpdateMode.REPLACE if op.operation == "Update" else UpdateMode.MERGE
         kwargs: dict[str, Any] = {"mode": mode}
@@ -245,7 +245,10 @@ class AzureTableEntityClient:
             if (
                 code == "UpdateConditionNotSatisfied"
                 and target is not None
-                and (target.row_key == _BALANCE_ROW_KEY or target.row_key.startswith("req-"))
+                and (
+                    target.row_key in {_BALANCE_ROW_KEY, "quota"}
+                    or target.row_key.startswith("req-")
+                )
                 and target.operation in ("Update", "UpdateMerge", "Delete")
                 and target.etag is not None
             ):

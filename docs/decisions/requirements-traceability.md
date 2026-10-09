@@ -274,3 +274,12 @@ Signed intake/worker hardening is **Implemented** locally: pre-buffer admission,
 capacity ownership, abandoned-error redaction, strict canonical depth and owned snapshots.
 Signed enablement remains **Partially implemented** pending resource and live gates. See
 [runtime hardening evidence](../plans/google-ai-studio-tools-multimodal/signed-continuation/runtime-hardening.md).
+
+## Shared quota accounting
+
+| Requirement | Status | Boundary | Evidence |
+| --- | --- | --- | --- |
+| Full-group atomic quota across workers, independent of credit | Implemented locally | `state/quota.py`, `ratelimit.py` | `test_table_quota.py`, `test_azurite_quota.py` |
+| Durable per-attempt failover and conservative cancellation settlement | Implemented locally | Routing/API/forwarding view | `test_table_quota_integration.py`, lifecycle regressions |
+| Fail-closed bounds, policy changes, clocks and identity-only startup | Implemented locally | Config/state/main | [Plan evidence](../plans/distributed-quota-accounting/evidence.md) |
+| Deployed multi-replica provider admission and clock guarantees | Planned | Rollout acceptance | Production remains memory/one |

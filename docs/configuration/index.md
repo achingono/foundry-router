@@ -156,7 +156,7 @@ It also validates two request-intake and reservation-lifecycle bounds introduced
 - `FOUNDRY_MAX_REQUEST_BODY_BYTES` (default 2,097,152 bytes / 2 MiB): maximum accepted request body size, enforced before JSON parsing for `/openai/v1/responses` and `/openai/v1/embeddings`.
 - `FOUNDRY_RESERVATION_MAX_AGE_SECONDS` (default 900 seconds): maximum reservation age before conservative settlement. Valid retained settlement intent wins; otherwise the full reserved estimate is charged, including legacy/pre-egress rows. Confirmed explicit releases charge zero.
 
-The optional distributed state backend is `memory` by default. When `FOUNDRY_STATE_BACKEND=table`, configure `FOUNDRY_TABLE_ENDPOINT`, `FOUNDRY_TABLE_HEALTH_NAME`, and `FOUNDRY_TABLE_CREDIT_NAME`; the endpoint must be HTTPS and contain no credential or query string. `FOUNDRY_TABLE_REQUEST_TIMEOUT_SECONDS` bounds Table SDK connect/read timeouts. `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` is set by Bicep from `maxReplicas` and divides configured provider quota limits per replica; readiness names any group/dimension whose effective share is zero. Table settings are ignored in memory mode. Table-mode wiring and tests are implemented, but a two-replica Azure deployment and production cut-over remain unverified.
+The optional distributed state backend is `memory` by default. When `FOUNDRY_STATE_BACKEND=table`, configure `FOUNDRY_TABLE_ENDPOINT`, `FOUNDRY_TABLE_HEALTH_NAME`, and `FOUNDRY_TABLE_CREDIT_NAME`; the endpoint must be HTTPS and contain no credential or query string. `FOUNDRY_TABLE_REQUEST_TIMEOUT_SECONDS` bounds Table SDK connect/read timeouts. `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` is set by Bicep from `maxReplicas` and divides configured provider quota limits per replica; readiness names any group/dimension whose effective share is zero. Storage fields are used when either credit/health or quota selects Table. Table-mode wiring and tests are implemented, but a two-replica Azure deployment and production cut-over remain unverified.
 
 `GET /health/ready` reports whether every unique routable metered credit group has complete credit configuration and every configured model has pricing, surfacing incomplete configuration without failing config load outright. Non-metered backends are excluded only from dollar-credit completeness checks. Table probes require one balance row per routable metered group and still check health-table reachability for non-metered topology.
 
@@ -269,3 +269,22 @@ ceiling; non-metered audio pools require zero price. Every billable outcome reta
 input/server TOTAL token allowance plus10seconds of audio cost; known usage updates input TPM
 and public usage without generic output repricing. Settings rejects `audio_output` until
 [remaining gates](../plans/google-ai-studio-tools-multimodal/generated-audio/evidence.md) pass.
+
+## Shared quota configuration
+
+**Implemented** locally with mocked API and real Azurite verification. Default
+`FOUNDRY_RATE_LIMIT_BACKEND=memory` retains process-local replica shares. Opt-in `table`
+uses identity-only `FOUNDRY_TABLE_ENDPOINT` and a separate `FOUNDRY_TABLE_QUOTA_NAME`
+(default `routerquota`), independently of credit/health `FOUNDRY_STATE_BACKEND`.
+Every backend quota group needs nonempty configured limits; shared Table limits are full
+project/group limits and are not divided by `FOUNDRY_RATE_LIMIT_REPLICA_SHARE`.
+Table quota reservation age must be positive and ≤3,600 seconds (default 900).
+
+The store has a conservative 70-second minute window and blocks admissions in the
+five-second interval on either side of Pacific midnight. Participating hosts must be
+UTC-synchronized within five seconds; deployment clock and real provider admission remain
+rollout gates. One atomic state row holds at most 256 retained attempts and 48 KiB of
+serialized UTF-16 storage bytes per group; capacity fails closed. Each dispatched attempt,
+including failover, consumes quota independently of monetary credit.
+See the [shared quota plan](../plans/distributed-quota-accounting/index.md) for lifecycle,
+policy fingerprints and drained rollout requirements. No production settings changed.

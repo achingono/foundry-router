@@ -89,3 +89,8 @@ A configurable `openai_compatible` provider is **Implemented with mocked verific
 the [provider contract](../plans/openai-compatible-provider/index.md), with independent bounded
 text hooks in `compatible_text.py`, exact-root Bearer transport and shared translated lifecycle.
 Exact upstream/model live compatibility remains **Planned**.
+
+`state/quota.py` owns durable quota counters, bounded state, conditional admission and
+settlement. `ratelimit.py` retains the store protocol, memory implementation and immutable
+attempt-bound forwarding view. Routing owns candidate attempt identities; credit and
+telemetry continue to use logical request IDs.

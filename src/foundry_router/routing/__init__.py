@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -35,7 +36,7 @@ from foundry_router.health import (
     BackendHealthState,
     cooldown_exhausted_response,
 )
-from foundry_router.ratelimit import effective_quota_limits
+from foundry_router.ratelimit import QuotaStoreError, configured_quota_limits
 from foundry_router.routing.exclusion import (
     classify_exclusion_event,
     exclusion_stream_mode,
@@ -53,6 +54,7 @@ class BackendSelectionResult:
     operation_unsupported: bool = False
     feature_rejection: Any | None = None
     admission_ticket: Any = None
+    quota_attempt_id: str | None = None
 
 
 def ranked_model_backends(
@@ -287,7 +289,10 @@ async def select_candidate_backend(
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
     exclusion_store: Any = None,
+    _quota_attempts: list[str] | None = None,
 ) -> BackendSelectionResult:
+    if _quota_attempts is None:
+        _quota_attempts = []
     if intake_deadline_monotonic is not None:
         if time.monotonic() >= intake_deadline_monotonic:
             return BackendSelectionResult(
@@ -319,6 +324,7 @@ async def select_candidate_backend(
                     seal_context=seal_context,
                     prepared_continuation=prepared_continuation,
                     exclusion_store=exclusion_store,
+                    _quota_attempts=_quota_attempts,
                 )
         except TimeoutError:
             # Storage cancellation can race a committed admission. Always release
@@ -329,8 +335,14 @@ async def select_candidate_backend(
                 )
             ]
             if rate_limit_store is not None:
-                operations.append(lambda: rate_limit_store.release_request(request_id))
-            await protected_cleanup(operations)
+                operations.extend(
+                    partial(rate_limit_store.release_request, attempt)
+                    for attempt in (_quota_attempts or [request_id])
+                )
+            try:
+                await protected_cleanup(operations)
+            except BaseException as cleanup_error:
+                logger.warning("intake_cleanup_failed", error_type=type(cleanup_error).__name__)
             return BackendSelectionResult(
                 None,
                 [],
@@ -342,16 +354,27 @@ async def select_candidate_backend(
             )
         else:
             if time.monotonic() >= intake_deadline_monotonic:
+                operations = [
+                    partial(
+                        credit_store.finalize_request,
+                        request_id,
+                        backend_id=result.backend_id,
+                        charge_reserved=False,
+                        charged_cost_usd=None,
+                    )
+                ]
                 if exclusion_store is not None:
-                    await exclusion_store.release(result.admission_ticket)
-                await credit_store.finalize_request(
-                    request_id,
-                    backend_id=result.backend_id,
-                    charge_reserved=False,
-                    charged_cost_usd=None,
-                )
+                    operations.append(partial(exclusion_store.release, result.admission_ticket))
                 if rate_limit_store is not None:
-                    await rate_limit_store.release_request(request_id)
+                    operations.append(
+                        partial(
+                            rate_limit_store.release_request, result.quota_attempt_id or request_id
+                        )
+                    )
+                try:
+                    await protected_cleanup(operations)
+                except BaseException as cleanup_error:
+                    logger.warning("intake_cleanup_failed", error_type=type(cleanup_error).__name__)
                 return BackendSelectionResult(
                     None,
                     [],
@@ -509,10 +532,7 @@ async def select_candidate_backend(
     }
     # D6 option B: routing evaluates the same per-replica effective limits the
     # store enforces, so the re-sync below cannot silently revert the share.
-    effective_limits = effective_quota_limits(
-        {group: dict(limits) for group, limits in quota_limits.items()},
-        int(getattr(settings, "rate_limit_replica_share", 1)),
-    )
+    effective_limits = configured_quota_limits(settings)
     configured_groups = sorted(
         {
             quota_group
@@ -830,27 +850,42 @@ async def select_candidate_backend(
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
         if reserved:
+            quota_attempt_id = (
+                str(uuid.uuid4())
+                if getattr(settings, "rate_limit_backend", "memory") == "table"
+                else request_id
+            )
+            _quota_attempts.append(quota_attempt_id)
             quota_group = quota_group_by_backend[backend_id]
             if rate_limit_store is not None and quota_group in effective_limits:
                 try:
                     quota_reserved = await rate_limit_store.try_reserve_estimate(
-                        request_id,
+                        quota_attempt_id,
                         quota_group,
                         estimated_input_tokens=estimate.input_tokens,
                         reservation_max_age_seconds=settings.reservation_max_age_seconds,
                         allow_over_limit=protected_quota_fallback,
                     )
                 except BaseException:
-                    # Cancellation/outage during quota admission must not orphan credit.
+                    # Preserve the original admission/cancellation error when cleanup fails.
                     try:
-                        await credit_store.finalize_request(
-                            request_id,
-                            backend_id=backend_id,
-                            charge_reserved=False,
-                            charged_cost_usd=None,
+                        await protected_cleanup(
+                            [
+                                partial(
+                                    credit_store.finalize_request,
+                                    request_id,
+                                    backend_id=backend_id,
+                                    charge_reserved=False,
+                                    charged_cost_usd=None,
+                                ),
+                                partial(rate_limit_store.release_request, quota_attempt_id),
+                            ]
                         )
-                    finally:
-                        await rate_limit_store.release_request(request_id)
+                    except BaseException as cleanup_error:
+                        logger.warning(
+                            "quota_admission_cleanup_failed",
+                            error_type=type(cleanup_error).__name__,
+                        )
                     raise
                 if not quota_reserved:
                     rate_limit_reservation_failed = True
@@ -872,9 +907,32 @@ async def select_candidate_backend(
                     continue
             admission_ticket = None
             if exclusion_store is not None:
-                admission_ticket = await exclusion_store.admit(
-                    backend_id, operation, stream_mode, probe=exclusion_probe
-                )
+                try:
+                    admission_ticket = await exclusion_store.admit(
+                        backend_id, operation, stream_mode, probe=exclusion_probe
+                    )
+                except BaseException:
+                    operations = [
+                        partial(
+                            credit_store.finalize_request,
+                            request_id,
+                            backend_id=backend_id,
+                            charge_reserved=False,
+                            charged_cost_usd=None,
+                        )
+                    ]
+                    if rate_limit_store is not None:
+                        operations.append(
+                            partial(rate_limit_store.release_request, quota_attempt_id)
+                        )
+                    try:
+                        await protected_cleanup(operations)
+                    except BaseException as cleanup_error:
+                        logger.warning(
+                            "quota_admission_cleanup_failed",
+                            error_type=type(cleanup_error).__name__,
+                        )
+                    raise
                 if admission_ticket is None:
                     await credit_store.finalize_request(
                         request_id,
@@ -883,7 +941,7 @@ async def select_candidate_backend(
                         charged_cost_usd=None,
                     )
                     if rate_limit_store is not None:
-                        await rate_limit_store.release_request(request_id)
+                        await rate_limit_store.release_request(quota_attempt_id)
                     continue
             try:
                 _emit_routing_decision(
@@ -911,6 +969,7 @@ async def select_candidate_backend(
                 snapshots,
                 False,
                 admission_ticket=admission_ticket,
+                quota_attempt_id=quota_attempt_id,
             )
 
     _emit_routing_decision(
@@ -1003,6 +1062,7 @@ async def _execute_backend_with_deadline(
     operation: str,
     body: dict[str, Any],
     api_error: Any,
+    quota_attempt_id: str | None = None,
 ) -> BackendRequestResult:
     """Run one backend attempt bounded by the reservation deadline.
 
@@ -1020,9 +1080,10 @@ async def _execute_backend_with_deadline(
         )
     try:
         async with asyncio.timeout(remaining):
-            backend_result: BackendRequestResult = await execute_backend(
-                backend_id, reservation_deadline_monotonic=deadline_monotonic
-            )
+            kwargs: dict[str, Any] = {"reservation_deadline_monotonic": deadline_monotonic}
+            if getattr(settings, "rate_limit_backend", "memory") == "table":
+                kwargs["quota_attempt_id"] = quota_attempt_id
+            backend_result: BackendRequestResult = await execute_backend(backend_id, **kwargs)
             return backend_result
     except TimeoutError:
         return _deadline_exceeded_result(settings, model, operation, body, api_error)
@@ -1098,6 +1159,11 @@ async def execute_with_single_failover(
             prepared_continuation=prepared_continuation,
             exclusion_store=exclusion_store,
         )
+    except QuotaStoreError:
+        return await record_and_return(
+            api_error(503, "Quota state could not be confirmed", "quota_store_unavailable"),
+            backend_id=None,
+        )
     except CreditStoreError:
         if rate_limit_store is not None:
             await rate_limit_store.release_request(request_id)
@@ -1171,6 +1237,11 @@ async def execute_with_single_failover(
         )
 
     first_backend_id = first_selection.backend_id
+    active_quota_attempt = first_selection.quota_attempt_id or request_id
+    quota_uncertain = False
+    possible_dispatch = False
+    quota_finalization_attempted = False
+    active_backend = first_backend_id
     reservation_closed_or_transferred = False
     credit_finalization_attempted = False
     original_finalize = finalize_non_streaming_credit
@@ -1179,8 +1250,11 @@ async def execute_with_single_failover(
     # reservation their settlement closes.
 
     async def finalize_credit(**kwargs: Any) -> Any:
-        nonlocal credit_finalization_attempted
+        nonlocal credit_finalization_attempted, quota_finalization_attempted
         credit_finalization_attempted = True
+        quota_finalization_attempted = True
+        if getattr(settings, "rate_limit_backend", "memory") == "table":
+            kwargs["quota_attempt_id"] = active_quota_attempt
         return await original_finalize(**kwargs)
 
     async def settle_billable(result: BackendRequestResult, backend_id: str) -> None:
@@ -1205,7 +1279,7 @@ async def execute_with_single_failover(
         if rate_limit_store is not None:
             operations.append(
                 lambda: rate_limit_store.finalize_request(
-                    request_id, actual_input_tokens=input_tokens
+                    active_quota_attempt, actual_input_tokens=input_tokens
                 )
             )
         await protected_cleanup(operations)
@@ -1213,16 +1287,19 @@ async def execute_with_single_failover(
     finalize_non_streaming_credit = finalize_credit
 
     try:
+        possible_dispatch = True
         first_result = await _execute_backend_with_deadline(
             execute_backend,
             first_backend_id,
             deadline_monotonic=reservation_deadline,
+            quota_attempt_id=active_quota_attempt,
             settings=settings,
             model=model,
             operation=operation,
             body=body,
             api_error=api_error,
         )
+        possible_dispatch = not first_result.confirmed_pre_dispatch
         await _record_combination_attempt(
             exclusion_store,
             metrics_store,
@@ -1235,7 +1312,7 @@ async def execute_with_single_failover(
 
         if not first_result.retryable_failure or prepared_continuation is not None:
             if first_result.confirmed_pre_dispatch and rate_limit_store is not None:
-                await rate_limit_store.release_request(request_id)
+                await rate_limit_store.release_request(active_quota_attempt)
             if not isinstance(first_result.response, StreamingResponse):
                 if bool(getattr(first_result, "force_charge", False)):
                     finalized_cost = getattr(first_result, "settlement_cost_usd", None)
@@ -1298,11 +1375,13 @@ async def execute_with_single_failover(
             except Exception:
                 failover_estimate = None
             await rate_limit_store.finalize_request(
-                request_id,
+                active_quota_attempt,
                 actual_input_tokens=(
                     failover_estimate.input_tokens if failover_estimate is not None else None
                 ),
             )
+        possible_dispatch = False
+        quota_finalization_attempted = False
         second_selection = await select_candidate_backend(
             settings,
             model,
@@ -1323,6 +1402,8 @@ async def execute_with_single_failover(
             exclusion_store=exclusion_store,
         )
         second_backend_id = second_selection.backend_id
+        if second_backend_id is not None:
+            active_quota_attempt = second_selection.quota_attempt_id or request_id
         if second_backend_id is None:
             if second_selection.pricing_unavailable:
                 await finalize_non_streaming_credit(
@@ -1434,16 +1515,20 @@ async def execute_with_single_failover(
                 estimated_cost_usd=None,
             )
 
+        possible_dispatch = True
+        active_backend = second_backend_id
         second_result = await _execute_backend_with_deadline(
             execute_backend,
             second_backend_id,
             deadline_monotonic=reservation_deadline,
+            quota_attempt_id=active_quota_attempt,
             settings=settings,
             model=model,
             operation=operation,
             body=body,
             api_error=api_error,
         )
+        possible_dispatch = not second_result.confirmed_pre_dispatch
         await _record_combination_attempt(
             exclusion_store,
             metrics_store,
@@ -1454,7 +1539,7 @@ async def execute_with_single_failover(
             ticket=second_selection.admission_ticket,
         )
         if second_result.confirmed_pre_dispatch and rate_limit_store is not None:
-            await rate_limit_store.release_request(request_id)
+            await rate_limit_store.release_request(active_quota_attempt)
         if not isinstance(second_result.response, StreamingResponse):
             if bool(getattr(second_result, "force_charge", False)):
                 finalized_cost = getattr(second_result, "settlement_cost_usd", None)
@@ -1484,6 +1569,12 @@ async def execute_with_single_failover(
             )
         reservation_closed_or_transferred = True
         return await record_and_return(second_result.response, backend_id=second_backend_id)
+    except QuotaStoreError:
+        quota_uncertain = True
+        return await record_and_return(
+            api_error(503, "Quota state could not be confirmed", "quota_store_unavailable"),
+            backend_id=first_backend_id,
+        )
     except CreditStoreError:
         credit_finalization_attempted = True
         return await record_and_return(
@@ -1491,26 +1582,39 @@ async def execute_with_single_failover(
             backend_id=first_backend_id,
         )
     finally:
+        operations: list[Any] = []
         if exclusion_store is not None:
-            await exclusion_store.release(first_selection.admission_ticket)
+            operations.append(partial(exclusion_store.release, first_selection.admission_ticket))
             if "second_selection" in locals():
-                await exclusion_store.release(second_selection.admission_ticket)
-        if not reservation_closed_or_transferred and rate_limit_store is not None:
-            await rate_limit_store.release_request(request_id)
-        if not reservation_closed_or_transferred and not credit_finalization_attempted:
-            try:
-                await credit_store.finalize_request(
-                    request_id,
-                    backend_id=None,
-                    charge_reserved=False,
-                    charged_cost_usd=None,
+                operations.append(
+                    partial(exclusion_store.release, second_selection.admission_ticket)
                 )
-            except TypeError as exc:
-                if "backend_id" in str(exc):
-                    await credit_store.finalize_request(
-                        request_id,
-                        charge_reserved=False,
-                        charged_cost_usd=None,
+        if not reservation_closed_or_transferred:
+            if (
+                not quota_uncertain
+                and not quota_finalization_attempted
+                and rate_limit_store is not None
+            ):
+                if possible_dispatch:
+                    operations.append(
+                        partial(rate_limit_store.finalize_request, active_quota_attempt)
                     )
                 else:
-                    raise
+                    operations.append(
+                        partial(rate_limit_store.release_request, active_quota_attempt)
+                    )
+            if not credit_finalization_attempted:
+                operations.append(
+                    partial(
+                        credit_store.finalize_request,
+                        request_id,
+                        backend_id=active_backend,
+                        charge_reserved=possible_dispatch,
+                        charged_cost_usd=None,
+                    )
+                )
+        if operations:
+            try:
+                await protected_cleanup(operations)
+            except BaseException as cleanup_error:
+                logger.warning("request_cleanup_failed", error_type=type(cleanup_error).__name__)

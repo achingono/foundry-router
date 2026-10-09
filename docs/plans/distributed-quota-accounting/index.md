@@ -1,6 +1,6 @@
 # Distributed quota accounting
 
-**Planned**, 2026-10-08. Workstream 5a of the
+**Implemented** locally, 2026-10-08. Deployed/provider admission remains unverified. Workstream 5a of the
 [routing roadmap](../google-ai-routing-order/index.md). Production remains memory/one.
 
 ## Contract

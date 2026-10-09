@@ -16,6 +16,34 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+class QuotaStoreError(RuntimeError):
+    """Shared quota ownership or usage could not be safely confirmed."""
+
+
+def configured_quota_limits(settings: Any) -> dict[str, dict[str, int]]:
+    """Use full shared limits for Table; retain local replica shares for memory."""
+    limits = getattr(settings, "quota_group_rate_limits", {})
+    if getattr(settings, "rate_limit_backend", "memory") == "table":
+        return {group: dict(values) for group, values in limits.items()}
+    return effective_quota_limits(limits, int(getattr(settings, "rate_limit_replica_share", 1)))
+
+
+class AttemptQuotaStore:
+    """Immutable forwarding view binding a logical request to one quota attempt."""
+
+    def __init__(self, store: Any, attempt_id: str) -> None:
+        self._store = store
+        self._attempt_id = attempt_id
+
+    async def finalize_request(
+        self, request_id: str, *, actual_input_tokens: int | None = None
+    ) -> None:
+        _ = request_id
+        await self._store.finalize_request(
+            self._attempt_id, actual_input_tokens=actual_input_tokens
+        )
+
+
 @dataclass(frozen=True)
 class QuotaGroupSnapshot:
     quota_group: str

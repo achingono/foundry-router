@@ -268,7 +268,7 @@ async def test_failed_settlement_never_free_releases_and_quota_cleanup_runs(stor
     assert store.finalize_request.await_count == 1
     assert store.finalize_request.call_args.kwargs["charge_reserved"] is True
     quota.finalize_request.assert_awaited_once()
-    quota.release_request.assert_awaited_once()
+    quota.release_request.assert_not_awaited()
 
 
 @pytest.mark.asyncio

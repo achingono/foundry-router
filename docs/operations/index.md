@@ -72,3 +72,19 @@ Fail over an unavailable backend, cooldown 429 and repeated 5xx failures, return
 - [Google tool, structured text and small PNG feature operations](google-features.md) (Implemented with synthetic/client verification; live gate Planned)
 - [Google model task guidance](google-model-task-guidance.md) maps candidate workloads to published benchmarks, model guides and public reports, with local availability and capability gates.
 - [Google AI Studio capacity inventory](../plans/google-ai-studio-capacity-inventory/index.md) records all discovered project/model combinations and dated native operation outcomes. Provider 429s establish selected model RPM, input TPM and RPD values; remaining quotas are explicitly unknown. Use its dated provider evidence and capture procedure before changing quota configuration.
+
+## Opt-in Table quota operations
+
+**Implemented** and locally verified; production remains memory/one. Shared quota uses a
+separate Table and identity permissions, independently of credit/health state. Provisioning,
+Azure clocks, actual provider admission, deployed metrics and rollout overlap require
+separate acceptance evidence before scale-out. Do not enable Table quota by assuming
+synthetic credit Table validation proves these gates.
+
+Drain every writer before changing group membership, limits, accounting policy or expiry.
+The persisted fingerprint also requires no pending attempts, an empty 70-second window and
+prior admission day elapsed outside Pacific-midnight uncertainty. Restart preserves usage;
+local reset never clears shared quota. Storage outages and ambiguous acknowledgements fail
+closed. Resolve retained uncertainty through same-attempt settlement or conservative expiry,
+without reusing an attempt ID or deleting the row. Capacity is 256 retained records and
+48 KiB UTF-16 state per group; this bounds correctness for small free-tier workloads.

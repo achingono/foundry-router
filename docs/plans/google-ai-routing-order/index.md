@@ -164,10 +164,10 @@ adapter is not a substitute for that operational gate.
 
 ### 5a. Distributed quota accounting
 
-**Planned**. Design and verify shared quota accounting at the `ratelimit.py` boundary under
-its own [concrete plan](../distributed-quota-accounting/index.md), cleared by independent
-review before implementation. Current quota state is process-local, with configured per-replica
-limit shares; synthetic share checks do not establish live multi-replica admission safety.
+**Implemented** locally under the independently reviewed
+[quota plan](../distributed-quota-accounting/index.md). Opt-in Table quota enforces full
+shared group limits; default memory state retains per-replica shares. Atomic fake-client
+and real Azurite tests passed. Deployed multi-replica provider admission remains unverified.
 Preserve quota/credit separation, project grouping, reservation settlement, bounded failure
 handling and rollout-overlap accounting. Choose storage only against concrete requirements.
 Implementation and isolated verification do not depend on production cut-over or live cost
@@ -239,3 +239,5 @@ the text-first priority and all production/startup gates while that work proceed
 | Native text follow-up | Committed `66175af`; live verification **Partially implemented** | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
 
 | Compatible provider implementation | Committed `566e404`; complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
+
+| Distributed quota implementation | Complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |

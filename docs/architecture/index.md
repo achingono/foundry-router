@@ -61,3 +61,9 @@ history and bounded inline image intake (PNG, opt-in baseline JPEG/static VP8L).
 credit owns estimates and routing owns eligibility/reservations. Immutable request-local tool/
 format context flows to translation and decoders. No conversation cache or native surface exists.
 See [feature implementation](../plans/google-ai-studio-tools-multimodal/implementation/index.md).
+
+Opt-in Table quota accounting is **Implemented** locally and independent of credit/health
+storage. One bounded atomic group row admits full configured limits across workers;
+per-attempt ownership prevents failover from erasing earlier provider consumption. Real
+Azurite concurrency/persistence passed; deployed provider admission and clock guarantees
+remain unverified. Production remains memory/one.

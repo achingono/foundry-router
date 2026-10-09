@@ -140,3 +140,15 @@ image token ceilings. Google image profiles require separate Google-only logical
 and local dollar estimates stay separate, including on non-metered keys. Valid generated usage
 settles schema/tool failures; unknown usage retains the full reserve. Intake/storage waits and
 original reservation lifetime are bounded without restarting on failover.
+
+## Durable shared quota
+
+**Implemented** locally: opt-in Table quota admission uses full configured group limits
+across independent workers, with ETag-guarded accounting and separate server-owned IDs
+for each candidate attempt. A dispatched 429 followed by failover preserves both attempts.
+Unknown dispatched usage or expiry retains estimates; only confirmed non-dispatch releases
+quota. Caller cancellation after possible dispatch conservatively settles credit and quota.
+Storage uncertainty returns sanitized 503 `quota_store_unavailable` and prevents another
+backend dispatch. Explicit protected emergency fallback can exceed numeric quota limits,
+but cannot bypass storage correctness or row capacity. Live multi-replica provider admission
+and deployment clock guarantees remain unverified.

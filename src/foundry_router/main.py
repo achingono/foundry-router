@@ -101,33 +101,34 @@ def build_stores(settings: Any) -> tuple[Any, Any, Any, tuple[Any, ...]]:
     constructs shared Azure Table stores with identity-only clients.
     """
     module = sys.modules[__name__]
-    if getattr(settings, "state_backend", "memory") != "table":
-        return (
-            module.__dict__["_health_store"],
-            module.__dict__["_credit_store"],
-            module.__dict__["_rate_limit_store"],
-            (),
-        )
-    from foundry_router.state.azure import AzureTableEntityClient
-    from foundry_router.state.table import AzureTableCreditStore, AzureTableHealthStore
+    health, credit, rate = (
+        module.__dict__[name] for name in ("_health_store", "_credit_store", "_rate_limit_store")
+    )
+    clients = []
+    shared_state = getattr(settings, "state_backend", "memory") == "table"
+    shared_quota = getattr(settings, "rate_limit_backend", "memory") == "table"
+    if shared_state or shared_quota:
+        from foundry_router.state.azure import AzureTableEntityClient
+        from foundry_router.state.quota import AzureTableRateLimitStore
+        from foundry_router.state.table import AzureTableCreditStore, AzureTableHealthStore
 
-    timeout = float(getattr(settings, "table_request_timeout_seconds", 5.0))
-    health_client = AzureTableEntityClient(
-        endpoint=settings.table_endpoint,
-        table_name=settings.table_health_name,
-        request_timeout_seconds=timeout,
-    )
-    credit_client = AzureTableEntityClient(
-        endpoint=settings.table_endpoint,
-        table_name=settings.table_credit_name,
-        request_timeout_seconds=timeout,
-    )
-    return (
-        AzureTableHealthStore(health_client),
-        AzureTableCreditStore(credit_client),
-        module.__dict__["_rate_limit_store"],
-        (health_client, credit_client),
-    )
+        def client(name: str) -> Any:
+            result = AzureTableEntityClient(
+                endpoint=settings.table_endpoint,
+                table_name=name,
+                request_timeout_seconds=float(
+                    getattr(settings, "table_request_timeout_seconds", 5.0)
+                ),
+            )
+            clients.append(result)
+            return result
+
+        if shared_state:
+            health = AzureTableHealthStore(client(settings.table_health_name))
+            credit = AzureTableCreditStore(client(settings.table_credit_name))
+        if shared_quota:
+            rate = AzureTableRateLimitStore(client(settings.table_quota_name))
+    return health, credit, rate, tuple(clients)
 
 
 def _table_client_for(table: str) -> Any | None:
@@ -195,6 +196,8 @@ async def _extra_readiness_checks() -> dict[str, bool]:
         )
     except Exception:
         bad = []
+    if getattr(settings, "rate_limit_backend", "memory") == "table":
+        bad = []
     checks["rate_limit_share_valid"] = not bad
     for group, dim in bad:
         logger.warning(
@@ -206,6 +209,17 @@ async def _extra_readiness_checks() -> dict[str, bool]:
         checks[f"rate_limit_share_{group}_{dim}_valid"] = False
     if getattr(settings, "state_backend", "memory") == "table":
         checks["state_store_reachable"] = await _probe_state_stores(settings)
+    if getattr(settings, "rate_limit_backend", "memory") == "table":
+        try:
+            client = _table_client_for(settings.table_quota_name)
+            snapshots = await _rate_limit_store.snapshot_quota_groups(
+                sorted(settings.quota_group_rate_limits)
+            )
+            checks["quota_store_reachable"] = client is not None and len(snapshots) == len(
+                settings.quota_group_rate_limits
+            )
+        except Exception:
+            checks["quota_store_reachable"] = False
     return checks
 
 

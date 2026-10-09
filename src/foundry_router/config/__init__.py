@@ -25,6 +25,7 @@ from foundry_router.config.model_aliases import parse_model_aliases
 from foundry_router.credit_groups import credit_membership, validate_credit_group
 
 MAX_COMPATIBLE_MODEL_BYTES = 512
+MAX_TABLE_QUOTA_AGE_SECONDS = 3600
 ASCII_CONTROL_LIMIT = 32
 ASCII_DELETE = 127
 
@@ -448,6 +449,12 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_RATE_LIMIT_REPLICA_SHARE",
         description="Replica divisor for per-replica quota shares (from maxReplicas)",
     )
+    rate_limit_backend: Literal["memory", "table"] = Field(
+        default="memory", validation_alias="FOUNDRY_RATE_LIMIT_BACKEND"
+    )
+    table_quota_name: str = Field(
+        default="routerquota", validation_alias="FOUNDRY_TABLE_QUOTA_NAME"
+    )
 
     # Backend local credit-cycle allowance estimates (JSON string)
     backend_cycle_allowance_usd_json: str = Field(
@@ -867,7 +874,7 @@ class Settings(BaseSettings):
 
         # Phase 11: conditional state-backend validation (memory ignores storage fields
         # so existing Settings(...) fixtures keep passing).
-        if self.state_backend == "table":
+        if self.state_backend == "table" or self.rate_limit_backend == "table":
             endpoint = (self.table_endpoint or "").strip()
             if not endpoint:
                 raise ValueError("FOUNDRY_TABLE_ENDPOINT is required when state_backend is table")
@@ -895,9 +902,20 @@ class Settings(BaseSettings):
             for label, value in (
                 ("FOUNDRY_TABLE_HEALTH_NAME", self.table_health_name),
                 ("FOUNDRY_TABLE_CREDIT_NAME", self.table_credit_name),
+                ("FOUNDRY_TABLE_QUOTA_NAME", self.table_quota_name),
             ):
                 if not isinstance(value, str) or not name_pattern.match(value):
                     raise ValueError(f"{label} must be 3-63 alphanumerics starting with a letter")
+        if self.rate_limit_backend == "table":
+            if self.reservation_max_age_seconds > MAX_TABLE_QUOTA_AGE_SECONDS:
+                raise ValueError("Table quota reservation age must be at most 3600 seconds")
+            if self.table_quota_name in {self.table_health_name, self.table_credit_name}:
+                raise ValueError("Quota table must be separate from health and credit tables")
+            if any(
+                not self.quota_group_rate_limits.get(backend.quota_group or key)
+                for key, backend in self.backends.items()
+            ):
+                raise ValueError("Table quota requires nonempty limits for every backend group")
 
         return self
 

@@ -54,6 +54,7 @@ from foundry_router.forwarding import (
     retry_delay_seconds,
     stream_response,
 )
+from foundry_router.ratelimit import AttemptQuotaStore
 from foundry_router.routing import (
     execute_with_single_failover,
     ranked_model_backends,
@@ -312,7 +313,7 @@ def build_router(
                     operation="responses",
                     body=canonical_body,
                     request_id=request.state.request_key,
-                    execute_backend=lambda backend_id, *, reservation_deadline_monotonic: (
+                    execute_backend=lambda backend_id, *, reservation_deadline_monotonic, quota_attempt_id=None: (
                         forward_streaming_with_retries(
                             settings=settings,
                             backend_id=backend_id,
@@ -326,7 +327,11 @@ def build_router(
                             api_error=api_error,
                             credit_store=credit_store,
                             metrics_store=metrics_store,
-                            rate_limit_store=rate_limit_store,
+                            rate_limit_store=(
+                                AttemptQuotaStore(rate_limit_store, quota_attempt_id)
+                                if quota_attempt_id
+                                else rate_limit_store
+                            ),
                             reservation_deadline_monotonic=_backend_execution_deadline(
                                 settings,
                                 backend_id,
@@ -360,7 +365,7 @@ def build_router(
                 operation="responses",
                 body=canonical_body,
                 request_id=request.state.request_key,
-                execute_backend=lambda backend_id, *, reservation_deadline_monotonic: (
+                execute_backend=lambda backend_id, *, reservation_deadline_monotonic, **_quota: (
                     forward_non_streaming_with_retries(
                         output_lease=output_lease,
                         settings=settings,
@@ -442,7 +447,7 @@ def build_router(
             operation="embeddings",
             body=canonical_body,
             request_id=request.state.request_key,
-            execute_backend=lambda backend_id, *, reservation_deadline_monotonic: (
+            execute_backend=lambda backend_id, *, reservation_deadline_monotonic, **_quota: (
                 forward_non_streaming_with_retries(
                     settings=settings,
                     backend_id=backend_id,

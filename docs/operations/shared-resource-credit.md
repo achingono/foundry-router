@@ -95,3 +95,9 @@ updates committed. Live Azure Cost Management integration remains Planned.
 Production deploys twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; see [inference evidence](../plans/production-inference/evidence.md). Production stays memory/one. fs-openclaw inference, provider failure/admission traffic, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
 
 See [implementation evidence](../plans/shared-resource-credit/evidence.md).
+
+Quota ownership is independent of account credit. The opt-in Table quota store uses distinct
+attempt IDs during failover while credit/telemetry retain logical request identity. Cleanup
+after possible dispatch now settles the full credit estimate and retains quota usage on
+uncaught cancellation/exception; only confirmed non-dispatch permits zero-charge release.
+This conservative recovery also applies when credit state remains in memory.
