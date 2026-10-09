@@ -47,7 +47,7 @@ Infrastructure and runtime code are **Implemented**. Synthetic Table one/two-rep
 - [Phase 09 Google AI Studio multi-key quota-aware routing plan](plans/phase-09-google-ai-studio-multikey/index.md)
 - [Google AI Studio capacity inventory (Partially implemented; selected quotas measured, remaining quotas pending)](plans/google-ai-studio-capacity-inventory/index.md)
 - [Google AI Studio backends and Responses adapter plan (Implemented locally)](plans/google-ai-studio-adapter/index.md); [scoped compatible text live evidence](plans/google-compatible-signature-text/evidence.md)
-- [Google AI Studio tools and multimodal follow-up plan (Partially implemented; unsigned tools/structured text/small PNG, live gate Planned)](plans/google-ai-studio-tools-multimodal/index.md)
+- [OpenCode Zen and OpenRouter backends plan (Implemented locally; live gates Planned)](plans/opencode-zen-openrouter/index.md)- [Google AI Studio tools and multimodal follow-up plan (Partially implemented; unsigned tools/structured text/small PNG, live gate Planned)](plans/google-ai-studio-tools-multimodal/index.md)
 - [Logical model aliases plan (Planned)](plans/model-aliases/index.md)
 - [Phase 10 Bicep existing-resource support plan](plans/phase-10-bicep-existing-resource-support/index.md)
 - [Phase 11 distributed state wiring plan](plans/phase-11-distributed-state-wiring/index.md)
