@@ -1,6 +1,9 @@
 # Final Google stateless cancellation acceptance
 
-**Implemented locally**,2026-10-09UTC; final live acceptance pending. Latest three recorded normal streams produced actual public
+**Partially implemented**,2026-10-09UTC; local verifier passed, live cancellation settlement
+acceptance failed. See [evidence](evidence.md): early disconnect/natural cleanup passed,
+observed synthetic debit differed from required conservative fallback. All request slots
+are now consumed; no replay or budget reset. Latest three recorded normal streams produced actual public
 completed events, matching independently observed input/output counts/debits, early text
 before provider EOF and natural cleanup, but failed an additional verifier-only inertstop
 predicate. Those failed outcomes remain immutable; their raw stop shapes are unknown.

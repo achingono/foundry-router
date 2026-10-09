@@ -21,4 +21,19 @@ same-chunk DONE/cancellation race test passed separately after suite collection.
 remains scoped to its recorded runtime. Sonar scanner script is absent. Independent contextual
 review cleared the verifier changes with no remaining Critical or Major findings; reviewer
 socket rerun was interrupted, so local execution results are the verification evidence.
-The final live invocation remains pending.
+The single live invocation is now retained in [results](results.json) and durable
+[progress](progress.json). Both provider/public HTTP 200; exactly one dispatch, first
+provider chunk 0.706178 seconds and meaningful public text 0.711838 seconds. Disconnect
+preceded DONE, mirror completion and EOF; natural provider/reservation cleanup passed.
+Independently observed input13/output1/total14 were complete numeric fields but not verified
+terminal usage. Actual synthetic debit was $0.014, while the cancellation verifier required
+the conservative full request estimate; settlement_matches=false, overall status=failed.
+These are synthetic local USD accounting values, not provider billing or Azure balances.
+The failure leaves cancellation settlement acceptance open; early delivery/cleanup are scoped
+observed facts. Raw frames are not retained, so do not infer whether a stop choice was present
+or why runtime selected the observed debit. Investigate locally before changing accounting.
+
+Project2 now has 20 consumed requests and 18,368 reserved tokens, matching all other projects.
+All request budgets are exhausted; no retry, new normal case, reset or additional provider
+traffic is authorized by unused token headroom. No overrun, deployment, balance application
+or production change. Historical failed statuses remain unchanged.
