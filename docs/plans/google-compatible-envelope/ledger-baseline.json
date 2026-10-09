@@ -1,0 +1,340 @@
+{
+  "session": "google-tools-multimodal-2026-10-06",
+  "projects": {
+    "project-1": {
+      "requests": 20,
+      "tokens": 18368,
+      "halted": false,
+      "cases": {
+        "old0-txt-gemini-2.5-flash-lite-project-1": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old0-txt-gemini-2.5-flash-project-1": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-lite-project-1": {
+          "reserved_tokens": 512,
+          "actual_tokens": 8
+        },
+        "old1-txt-gemini-2.5-flash-project-1": {
+          "reserved_tokens": 512,
+          "actual_tokens": 8
+        },
+        "old1-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-hard-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-hard-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 24
+        },
+        "old2-stream-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-stream-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-stream2-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-hard2-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-hard2-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 783
+        },
+        "rate08-1-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "r08n-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08s-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08n-txt-gemini-3.8-flash-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "c08n-txt-gemini-3.5-flash-lite-project-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        }
+      }
+    },
+    "project-2": {
+      "requests": 15,
+      "tokens": 12928,
+      "halted": false,
+      "cases": {
+        "old0-txt-gemini-2.5-flash-lite-project-2": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old0-txt-gemini-2.5-flash-project-2": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-lite-project-2": {
+          "reserved_tokens": 512,
+          "actual_tokens": 8
+        },
+        "old1-txt-gemini-2.5-flash-project-2": {
+          "reserved_tokens": 512,
+          "actual_tokens": 8
+        },
+        "old2-txt-gemini-3.5-flash-lite-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.8-flash-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-stream-txt-gemini-3.5-flash-lite-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-stream-txt-gemini-3.8-flash-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-stream2-txt-gemini-3.8-flash-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "rate08-2-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "r08n-txt-gemini-3.5-flash-lite-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "r08s-txt-gemini-3.5-flash-lite-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08n-txt-gemini-3.8-flash-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "c08n-txt-gemini-3.5-flash-lite-project-2": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        }
+      }
+    },
+    "project-3": {
+      "requests": 15,
+      "tokens": 12928,
+      "halted": false,
+      "cases": {
+        "old0-txt-gemini-2.5-flash-lite-project-3": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old0-txt-gemini-2.5-flash-project-3": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-lite-project-3": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-project-3": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old2-txt-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.8-flash-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-stream-txt-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-stream-txt-gemini-3.8-flash-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-stream2-txt-gemini-3.8-flash-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "rate08-3-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "r08n-txt-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08s-txt-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08n-txt-gemini-3.8-flash-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "c08n-txt-gemini-3.5-flash-lite-project-3": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        }
+      }
+    },
+    "project-4": {
+      "requests": 15,
+      "tokens": 12928,
+      "halted": false,
+      "cases": {
+        "old0-txt-gemini-2.5-flash-lite-project-4": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old0-txt-gemini-2.5-flash-project-4": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-lite-project-4": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-project-4": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old2-txt-gemini-3.5-flash-lite-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.8-flash-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-stream-txt-gemini-3.5-flash-lite-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-stream-txt-gemini-3.8-flash-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-stream2-txt-gemini-3.8-flash-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "rate08-4-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "r08n-txt-gemini-3.5-flash-lite-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08s-txt-gemini-3.5-flash-lite-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08n-txt-gemini-3.8-flash-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "c08n-txt-gemini-3.5-flash-lite-project-4": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        }
+      }
+    },
+    "project-5": {
+      "requests": 15,
+      "tokens": 12928,
+      "halted": false,
+      "cases": {
+        "old0-txt-gemini-2.5-flash-lite-project-5": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old0-txt-gemini-2.5-flash-project-5": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-lite-project-5": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old1-txt-gemini-2.5-flash-project-5": {
+          "reserved_tokens": 512,
+          "actual_tokens": null
+        },
+        "old2-txt-gemini-3.5-flash-lite-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-txt-gemini-3.8-flash-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 8
+        },
+        "old2-stream-txt-gemini-3.5-flash-lite-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "old2-stream-txt-gemini-3.8-flash-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "old2-stream2-txt-gemini-3.8-flash-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "rate08-5-1": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "r08n-txt-gemini-3.5-flash-lite-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08s-txt-gemini-3.5-flash-lite-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        },
+        "r08n-txt-gemini-3.8-flash-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": null
+        },
+        "c08n-txt-gemini-3.5-flash-lite-project-5": {
+          "reserved_tokens": 1088,
+          "actual_tokens": 9
+        }
+      }
+    }
+  }
+}

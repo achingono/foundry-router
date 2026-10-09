@@ -17,4 +17,3 @@ it must not be inferred from HTTP codes. Every project is halted for this stage 
 Project-1 cumulative totals are 20 requests/18,368 reserved tokens; projects 2–5 are each
 15 requests/12,928 tokens. Production is unchanged. A new diagnostic contract requires review
 before any further provider traffic; this stage never retries its failed cases.
-
