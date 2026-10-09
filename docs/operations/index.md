@@ -52,7 +52,13 @@ One-replica synthetic Table runtime verification is **Implemented**: token-only 
 
 The Bicep typing foundation, identity/observability and environment/router modules are **Implemented**; the public flat parameter interface remains compatible. Use Bicep 0.47.16 or newer (minimum verified version). Direct internal module callers supply sealed config objects and preserve access-grant dependencies. See [typing evidence](../plans/bicep-typing/evidence.md), [module extraction evidence](../plans/bicep-module-extraction/evidence.md), [container module evidence](../plans/bicep-container-modules/evidence.md) and the infrastructure guide.
 
-Reconcile authoritative Azure usage/cost data every 5–15 minutes, not on every request. Expose `last_cost_reconciliation` and `cost_data_age`. If unavailable, continue with labeled local estimates, mark the state stale, and optionally route more conservatively. Never treat stale estimates as authoritative.
+The opt-in Azure Cost Management provider queries reported USD costs in the background at
+the configured reconciliation interval (default ten minutes). Atomic cycle-bound ceilings
+can lower local remaining estimates without replenishing concurrent spend. Authenticated
+reconciliation diagnostics expose provider kind, last attempt/success and failure/stale state;
+fetch time does not establish billing completeness. Unavailable/incomplete evidence preserves
+local estimates while reservation maintenance continues. Live Azure query acceptance remains
+unverified; see the [contract](../plans/azure-cost-reconciliation/index.md).
 
 ## Failure Handling
 

@@ -153,12 +153,13 @@ state. Successful verification completes cut-over; scale-out remains gated.
 
 ### 4e. Live cost reconciliation adapter — independent implementation
 
-**Planned** under the concrete [cost reconciliation plan](../azure-cost-reconciliation/index.md),
+**Implemented** locally under the independently reviewed [cost reconciliation plan](../azure-cost-reconciliation/index.md),
 building on the [existing reconciliation boundary](../../operations/shared-resource-credit.md).
 Cost Management supplies delayed reported costs, not remaining promotional credit. Apply
 cycle-bound billing ceilings atomically without replenishing local debits; preserve estimates
-on unavailable/incomplete data and keep reservation cleanup independent of provider outages. This work can proceed before cut-over and does not block quota or metrics
-implementation. Cut-over still requires reconciled starting estimates; implementing this
+on unavailable/incomplete data and keep reservation cleanup independent of provider outages.
+Live scope/permission/query acceptance remains unverified. This work can proceed before
+cut-over and does not block quota or metrics implementation. Cut-over still requires reconciled starting estimates; implementing this
 adapter is not a substitute for that operational gate.
 
 ## 5. Distributed quota and metrics — independent engineering workstreams
@@ -228,7 +229,7 @@ graph TD
 Adapter extraction and text evidence reconciliation are locally complete. The fresh native
 stage is recorded; next close scoped compatibility/accounting gates and implement independently
 reviewed workstreams. Quota and metrics implementations are locally complete. Remaining independent work includes
-capacity investigation, Table real-traffic test planning and the reviewed cost provider phase. Each implementation still
+capacity investigation, Table real-traffic test planning and live cost-provider acceptance. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve
 the text-first priority and all production/startup gates while that work proceeds.
 
@@ -244,3 +245,4 @@ the text-first priority and all production/startup gates while that work proceed
 | Compatible provider implementation | Committed `566e404`; complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |
 | Distributed quota implementation | Committed `c028a9f`; complete locally; deployed admission unverified | [Evidence](../distributed-quota-accounting/evidence.md); bounded shared counters, durable attempt IDs, conservative cancellation, real Azurite verification; production unchanged |
 | Metrics aggregation implementation | Committed `0d7b4c5`; complete locally; deployed collector unverified | [Evidence](../metrics-aggregation/evidence.md); bounded OTLP, process lifetime identities, actual periodic two-worker/restart collection; production unchanged |
+| Cost reconciliation implementation | Complete locally; Azure billing acceptance unverified | [Evidence](../azure-cost-reconciliation/evidence.md); atomic downward-only estimates, confined identity transport, cycle/mapping binding and real Azurite concurrency/restart |

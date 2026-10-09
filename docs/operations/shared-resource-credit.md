@@ -89,7 +89,13 @@ backend aliases, normalize the complete input before writes, coalesce equal amou
 conflicting values for one group. `last_updated_credit_groups` is the unique-account count;
 `last_updated_backends` remains a compatibility alias for that count. Reconciliation is not a
 cross-account atomic transaction; storage failures mark the attempt failed even if earlier account
-updates committed. Live Azure Cost Management integration remains Planned.
+updates committed. The opt-in Azure Cost Management provider is implemented locally, with live Azure acceptance
+unverified. It supplies cycle-bound downward-only billing ceilings, never replacement promotional
+balances: atomic memory/Table updates retain concurrent debits and inflight reservations.
+Reported costs can be delayed/incomplete; repeated/lower reported cost cannot replenish local
+credit. Query success does not establish billing completeness. Scope/resource/cycle policy changes
+invalidate old results. Provider failures preserve estimates, and ownership/reaper maintenance
+still runs. See the [reconciliation plan](../plans/azure-cost-reconciliation/index.md).
 
 ## Production Gate
 

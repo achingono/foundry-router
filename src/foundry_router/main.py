@@ -335,9 +335,42 @@ def _build_metrics_store(settings: Any) -> Any:
     return InMemoryMetricsStore()
 
 
+async def _close_metrics_lifetime() -> None:
+    global _shutdown_event
+    try:
+        if hasattr(_metrics_store, "shutdown"):
+            await _metrics_store.shutdown()
+    except BaseException as exc:
+        logger.warning("metrics_shutdown_failed", error_type=type(exc).__name__)
+    finally:
+        await _reset_metrics_state()
+        _shutdown_event = None
+
+
+async def _close_cost_provider(provider: Any) -> None:
+    if provider is None:
+        return
+    try:
+        try:
+            await _reset_reconciliation_state()
+        finally:
+            await provider.close()
+    except BaseException as exc:
+        logger.warning("cost_provider_cleanup_failed", error_type=type(exc).__name__)
+
+
+def _build_cost_provider(settings: Any) -> Any:
+    if settings.reconciliation_provider != "azure_cost_management":
+        return None
+    from foundry_router.reconciliation.azure_cost import AzureCostManagementProvider
+
+    return AzureCostManagementProvider()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> Any:
     global _shutdown_event
+    owned_cost_provider: Any = None
     settings = load_settings()
     setup_logging(settings.log_level)
     logger.info(
@@ -362,8 +395,10 @@ async def lifespan(_app: FastAPI) -> Any:
         await _credit_store.sync_from_settings(settings)
         await _rate_limit_store.sync_from_settings(settings)
         global _reconciliation_loop
+        owned_cost_provider = _build_cost_provider(settings)
+        provider = owned_cost_provider or _reconciliation_provider
         _reconciliation_loop = ReconciliationLoop(
-            provider=_reconciliation_provider,
+            provider=provider,
             credit_store=_credit_store,
             settings=settings,
             logger=logger,
@@ -391,14 +426,8 @@ async def lifespan(_app: FastAPI) -> Any:
             if not original_failure:
                 raise
         finally:
-            try:
-                if hasattr(_metrics_store, "shutdown"):
-                    await _metrics_store.shutdown()
-            except BaseException as exc:
-                logger.warning("metrics_shutdown_failed", error_type=type(exc).__name__)
-            finally:
-                await _reset_metrics_state()
-                _shutdown_event = None
+            await _close_cost_provider(owned_cost_provider)
+            await _close_metrics_lifetime()
 
 
 app = FastAPI(

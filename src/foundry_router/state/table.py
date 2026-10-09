@@ -12,7 +12,7 @@ import asyncio
 import math
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -59,6 +59,8 @@ _logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from foundry_router.reconciliation.cost_types import CostCeilingBatch
 
 
 @dataclass(frozen=True)
@@ -1052,6 +1054,58 @@ class AzureTableCreditStore:
                 else:
                     raise TableEntityCreditStoreError("Credit reconciliation conflicts exhausted")
 
+        return updated
+
+    async def apply_cost_ceilings(
+        self, batch: CostCeilingBatch, *, now_utc: datetime | None = None
+    ) -> int:
+        """Fresh ETag-protected downward-only estimates; reservations stay unchanged."""
+        updated = 0
+        for ceiling in batch.ceilings:
+            group = ceiling.credit_group
+            if group not in self._configured_backend_ids:
+                continue
+            async with self._partition_lock(group):
+                for attempt in range(self._max_retries):
+                    balance = await self._get_balance_fresh_locked(
+                        group, now_utc or datetime.now(UTC)
+                    )
+                    if balance is None:
+                        break
+                    # A read can straddle UTC rollover even without an ETag conflict.
+                    self._rollover_if_needed(balance, now_utc or datetime.now(UTC))
+                    if not ceiling.matches(self._last_synced_settings, balance):
+                        break
+                    new_balance = replace(
+                        balance,
+                        estimated_remaining_usd=min(
+                            balance.estimated_remaining_usd, ceiling.remaining_usd
+                        ),
+                    )
+                    ops = [
+                        _TransactionEntity(
+                            partition_key=group,
+                            row_key=self._BALANCE_ROW_KEY,
+                            operation="Update",
+                            entity=self._balance_to_entity(new_balance),
+                            etag=balance.etag,
+                        )
+                    ]
+                    try:
+                        if await self._client.try_batch_transaction(ops):
+                            self._balance_cache[group] = (time.monotonic(), new_balance)
+                            updated += 1
+                            break
+                    except Exception as exc:
+                        self._invalidate_balance_locked(group)
+                        raise TableEntityCreditStoreError(
+                            "Cost ceiling transaction failed"
+                        ) from exc
+                    self._invalidate_balance_locked(group)
+                    if attempt < self._max_retries - 1:
+                        await asyncio.sleep(self._retry_backoff_ms * (2**attempt) / 1000.0)
+                else:
+                    raise TableEntityCreditStoreError("Cost ceiling conflicts exhausted")
         return updated
 
     async def live_snapshot(

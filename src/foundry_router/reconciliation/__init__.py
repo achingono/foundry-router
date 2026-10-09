@@ -9,12 +9,14 @@ from typing import Any, Protocol
 
 import structlog
 
+from foundry_router.reconciliation.cost_types import CostCeilingBatch
+
 
 class ReconciliationProvider(Protocol):
-    """Fetches authoritative remaining credit snapshots."""
+    """Fetches replacement snapshots or labeled billing-derived ceilings."""
 
-    async def fetch_remaining_credit(self, settings: Any) -> dict[str, float]:
-        """Return backend_id -> authoritative remaining credit in USD."""
+    async def fetch_remaining_credit(self, settings: Any) -> dict[str, float] | CostCeilingBatch:
+        """Return explicit replacement balances or a complete cost ceiling batch."""
 
 
 class StaticSettingsReconciliationProvider:
@@ -59,6 +61,7 @@ class ReconciliationLoop:
 
     def status_snapshot(self) -> dict[str, Any]:
         return {
+            "provider_kind": getattr(self._provider, "kind", "static"),
             "last_attempt_utc": self._status.last_attempt_utc,
             "last_success_utc": self._status.last_success_utc,
             "last_error": self._status.last_error,
@@ -97,20 +100,6 @@ class ReconciliationLoop:
                 self._logger.warning(
                     "credit_ownership_maintenance_failed", error_type=type(exc).__name__
                 )
-        try:
-            balances = await self._provider.fetch_remaining_credit(self._settings)
-            updated_count = await self._credit_store.apply_reconciled_remaining(balances)
-        except Exception as exc:  # pragma: no cover - defensive boundary
-            self._status.consecutive_failures += 1
-            self._status.last_error = type(exc).__name__
-            self._status.last_updated_backends = 0
-            self._logger.warning(
-                "credit_reconciliation_unavailable",
-                error_type=type(exc).__name__,
-                consecutive_failures=self._status.consecutive_failures,
-            )
-            return
-
         # N2: opportunistic reaping of expired reservations for stores that support it
         # (AzureTableCreditStore). In-memory store already piggybacks sweep on assess,
         # but explicit reap is safe and idempotent.
@@ -128,7 +117,24 @@ class ReconciliationLoop:
                     error_type=type(exc).__name__,
                 )
 
-        self._status.last_success_utc = now.isoformat()
+        try:
+            balances = await self._provider.fetch_remaining_credit(self._settings)
+            if isinstance(balances, CostCeilingBatch):
+                updated_count = await self._credit_store.apply_cost_ceilings(balances)
+            else:
+                updated_count = await self._credit_store.apply_reconciled_remaining(balances)
+        except Exception as exc:  # pragma: no cover - defensive boundary
+            self._status.consecutive_failures += 1
+            self._status.last_error = type(exc).__name__
+            self._status.last_updated_backends = 0
+            self._logger.warning(
+                "credit_reconciliation_unavailable",
+                error_type=type(exc).__name__,
+                consecutive_failures=self._status.consecutive_failures,
+            )
+            return
+
+        self._status.last_success_utc = datetime.now(UTC).isoformat()
         self._status.last_error = None
         self._status.last_updated_backends = updated_count
         self._status.consecutive_failures = 0

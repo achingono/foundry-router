@@ -96,3 +96,13 @@ TLS verification, no redirect following or ambient proxy/auth discovery. Export 
 expose categories/counts only; collector error messages, endpoints and auth values are not
 logged or included in admin diagnostics. Explicit resource identities and disabled exemplars
 exclude tracing/request IDs. Protobuf export and acknowledgement sizes are bounded.
+
+
+Azure Cost Management transport is opt-in and confined to public `management.azure.com`
+with explicit validated ARM scope/resource membership, verified TLS, no redirects/ambient
+proxies and identity token authentication. Pagination must retain the exact scope/path and
+2025-03-01 API contract; only bounded skip-token input is accepted. Responses have byte,
+row, page, depth and total refresh deadlines. Raw billing bodies, resource IDs, URLs and
+tokens never enter application logs/admin diagnostics. Client/identity closes are bounded,
+independent and cancellation-protected. Local implementation is verified; actual Azure
+permission/data acceptance remains a separate gate.

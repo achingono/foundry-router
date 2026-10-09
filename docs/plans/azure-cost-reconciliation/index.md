@@ -1,6 +1,6 @@
 # Azure Cost Management reconciliation
 
-**Planned**, independently reviewed 2026-10-08; see [review](plan-review.md).
+**Implemented** locally, independently reviewed 2026-10-08; see [review](plan-review.md).
 Independent workstream 4e of the
 [routing roadmap](../google-ai-routing-order/index.md). Production remains memory/one;
 this code phase neither grants Azure permissions nor authorizes deployment.
@@ -65,7 +65,10 @@ categories; no fallback to configured allowance as a fresh balance.
 
 Use existing async Azure identity selection: managed identity in Container Apps, developer
 identity chain locally. Acquire the public ARM token scope; own and close credential/client
-with the provider lifespan even after startup failure or cancellation. No API keys, SAS,
+with the provider lifespan even after startup failure or cancellation. Resource-group names support bounded documented Unicode letters/numbers and `_-.()`,
+without trailing dots; validated Unicode path segments are encoded before dispatch.
+JSON container depth is checked before decoding and bounded to 16.
+No API keys, SAS,
 connection strings, new infrastructure or hard-coded resource identifiers.
 
 Build POST URLs from validated subscription/resource-group scopes on fixed

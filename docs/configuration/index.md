@@ -304,3 +304,23 @@ insufficient baseline capacity. Additional status combinations consume the same 
 budget and are dropped at capacity, with safe local diagnostics. Request bodies, outputs,
 credentials and request IDs never enter exported metrics. SDK-disable environment settings
 fail enabled startup explicitly. Install the `telemetry` extra; the Docker image includes it.
+
+
+## Azure Cost Management ceilings (Implemented locally)
+
+`FOUNDRY_RECONCILIATION_PROVIDER=azure_cost_management` opts into public Azure USD cost
+queries; default `static` retains existing explicit replacement overrides. Configure
+`FOUNDRY_COST_MANAGEMENT_GROUPS_JSON` as an object whose canonical metered credit-group
+keys map to `{"scope": "<subscription-or-resource-group-ARM-path>",
+"resource_ids": ["<Cognitive-Services-account-ARM-path>"]}`. Supply actual identifiers
+externally, explicit cycle allowances/start days, and no static reconciliation overrides.
+Every resource belongs to one account and must lie within its query scope. Resource-group
+names support documented Unicode letters/numbers and `_-.()` with bounded segments.
+
+The background provider uses managed identity in Container Apps and the developer identity
+chain locally, with public ARM read access supplied by the operator. Refreshes are bounded
+to 30 seconds, 64 groups, 32 resources/group, 10 pages/group, 10,000 rows/group and 1 MiB/page;
+JSON depth is bounded to 16. Invalid/empty/partial/currency-mismatched responses preserve
+local estimates. No request-path billing I/O, automatic RBAC grants or infrastructure changes.
+See the [contract and evidence](../plans/azure-cost-reconciliation/index.md). Azure live
+acceptance remains unverified.

@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from foundry_router.config.cost_management import CostGroupConfig, parse_cost_groups
 from foundry_router.config.google_audio_output import validate_audio_output_pools
 from foundry_router.config.google_features import GoogleFeatureProfile
 from foundry_router.config.google_output import validate_image_output_pools
@@ -296,6 +297,18 @@ class Settings(BaseSettings):
     )
 
     # Cost reconciliation
+    reconciliation_provider: Literal["static", "azure_cost_management"] = Field(
+        default="static", validation_alias="FOUNDRY_RECONCILIATION_PROVIDER"
+    )
+    cost_management_groups_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_COST_MANAGEMENT_GROUPS_JSON",
+        exclude=True,
+        repr=False,
+    )
+    cost_management_groups: dict[str, CostGroupConfig] = Field(
+        default_factory=dict, exclude=True, repr=False
+    )
     reconciliation_interval_minutes: Annotated[int, Field(ge=1, le=60)] = Field(
         default=10,
         validation_alias="FOUNDRY_RECONCILIATION_INTERVAL_MINUTES",
@@ -981,6 +994,9 @@ class Settings(BaseSettings):
                     ord(char) < ASCII_CONTROL_LIMIT or ord(char) == ASCII_DELETE for char in auth
                 ):
                     raise ValueError("Telemetry authorization must be a nonempty header value")
+
+        if self.reconciliation_provider == "azure_cost_management":
+            self.cost_management_groups = parse_cost_groups(self)
 
         return self
 

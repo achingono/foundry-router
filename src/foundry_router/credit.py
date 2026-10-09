@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from foundry_router.api.adapters.google_audio_request import (
     audio_output_request,
@@ -23,6 +23,9 @@ from foundry_router.credit_groups import (
     normalize_reconciliation,
     resolve_credit_group,
 )
+
+if TYPE_CHECKING:
+    from foundry_router.reconciliation.cost_types import CostCeilingBatch
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 CHARS_PER_TOKEN_DIVISOR = 3
@@ -187,6 +190,10 @@ class CreditStore(Protocol):
         authoritative_remaining_usd: dict[str, float],
         *,
         now_utc: datetime | None = None,
+    ) -> int: ...
+
+    async def apply_cost_ceilings(
+        self, batch: CostCeilingBatch, *, now_utc: datetime | None = None
     ) -> int: ...
 
     async def live_snapshot(
@@ -954,6 +961,25 @@ class InMemoryCreditStore:
                     continue
                 self._rollover_if_needed(snapshot, now)
                 snapshot.estimated_remaining_usd = min(snapshot.cycle_allowance_usd, amount_float)
+                updated += 1
+        return updated
+
+    async def apply_cost_ceilings(
+        self, batch: CostCeilingBatch, *, now_utc: datetime | None = None
+    ) -> int:
+        """Atomically lower estimated credit without replacing concurrent spend."""
+        updated = 0
+        async with self._lock:
+            for ceiling in batch.ceilings:
+                snapshot = self._snapshots.get(ceiling.credit_group)
+                if snapshot is None:
+                    continue
+                self._rollover_if_needed(snapshot, now_utc or datetime.now(UTC))
+                if not ceiling.matches(self._last_synced_settings, snapshot):
+                    continue
+                snapshot.estimated_remaining_usd = min(
+                    snapshot.estimated_remaining_usd, ceiling.remaining_usd
+                )
                 updated += 1
         return updated
 
