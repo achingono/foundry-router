@@ -339,9 +339,10 @@ class ObservingTransport(httpx.AsyncBaseTransport):
         self.native_completed = False
         self.stream_bytes_seen = False
         self.sleep = asyncio.sleep
+        self.max_attempts = MAX_ATTEMPTS
 
     async def handle_async_request(self, request):
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, self.max_attempts + 1):
             self.ledger.start_physical(self.case)
             self.observation = {
                 "provider_http_status": None,
@@ -375,7 +376,7 @@ class ObservingTransport(httpx.AsyncBaseTransport):
                 and not self.observation["dimension_overrun"]
                 and not self.stream_bytes_seen
             )
-            if not retryable or attempt == MAX_ATTEMPTS or self.ledger.data["halted"]:
+            if not retryable or attempt == self.max_attempts or self.ledger.data["halted"]:
                 if caught is not None:
                     raise caught
                 return response

@@ -70,10 +70,12 @@ rejection and overruns still stop the run; streaming is withheld after nonstream
 
 Initial stage halted after two attempts on an observer/guard usage mismatch. Preserve
 its bytes and debit. One distinct supplemental project-1 compatible nonstream diagnostic
-(maximum three physical attempts under remaining original budget) records only allowlisted
+(maximum two physical attempts under the remaining project-1 nonstream slot allowance) records only allowlisted
 usage numeric values/type flags at observer and guard plus fixed-source accounting callbacks.
 Pin loaded source SHA-256 values, and same-wire SHA-256 equality only (do not persist body).
-No signatures, content, arbitrary keys or errors retained. Use original stage lock plus separate
+The diagnostic uses the remaining physical allowance of the original project-1 nonstream
+surface slot, not a sixteenth logical surface slot. Combined per-slot attempts across
+immutable ledgers never exceed three. No signatures, content, arbitrary keys or errors retained. Use original stage lock plus separate
 whole-run lock/ledger; refuse resume, count original two attempts against maximum45.
 After diagnosed correction and independent review, execute ONLY previously unattempted
 project-1 stream and projects2–5 native/nonstream/conditional-stream cases. Do not retry
