@@ -288,3 +288,19 @@ serialized UTF-16 storage bytes per group; capacity fails closed. Each dispatche
 including failover, consumes quota independently of monetary credit.
 See the [shared quota plan](../plans/distributed-quota-accounting/index.md) for lifecycle,
 policy fingerprints and drained rollout requirements. No production settings changed.
+
+## Opt-in central metrics
+
+**Implemented** locally. `FOUNDRY_TELEMETRY_ENABLED=true` enables cumulative OTLP metrics
+alongside authenticated local Prometheus output. Supply an exact HTTPS
+`FOUNDRY_TELEMETRY_ENDPOINT` ending `/v1/metrics`, optional secret
+`FOUNDRY_TELEMETRY_AUTHORIZATION`, and `FOUNDRY_TELEMETRY_SERVICE_NAME`. Optional
+`FOUNDRY_TELEMETRY_REPLICA_ID` and `FOUNDRY_TELEMETRY_REVISION_ID` identify topology;
+each worker generates its own process-lifetime instance ID. No collector is provisioned.
+
+Interval defaults to 15 seconds (5–60); timeout defaults to 3 seconds (1–10).
+`FOUNDRY_TELEMETRY_SERIES_BUDGET` defaults to 2,048 (maximum 16,384); startup rejects
+insufficient baseline capacity. Additional status combinations consume the same bounded
+budget and are dropped at capacity, with safe local diagnostics. Request bodies, outputs,
+credentials and request IDs never enter exported metrics. SDK-disable environment settings
+fail enabled startup explicitly. Install the `telemetry` extra; the Docker image includes it.

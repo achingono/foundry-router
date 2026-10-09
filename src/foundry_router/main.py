@@ -60,7 +60,7 @@ logger = get_logger(__name__)
 _health_store = InMemoryHealthStore()
 _exclusion_store = CombinationExclusionStore()
 _credit_store: CreditStore = InMemoryCreditStore()
-_metrics_store = InMemoryMetricsStore()
+_metrics_store: Any = InMemoryMetricsStore()
 _rate_limit_store: RateLimitStore = InMemoryRateLimitStore()
 _reconciliation_provider: ReconciliationProvider = StaticSettingsReconciliationProvider()
 _reconciliation_loop: ReconciliationLoop | None = None
@@ -327,6 +327,14 @@ def _reconciliation_status_snapshot() -> dict[str, Any]:
     )
 
 
+def _build_metrics_store(settings: Any) -> Any:
+    if settings.telemetry_enabled:
+        from foundry_router.metrics.otlp import OtlpMetricsStore
+
+        return OtlpMetricsStore(settings)
+    return InMemoryMetricsStore()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> Any:
     global _shutdown_event
@@ -338,43 +346,59 @@ async def lifespan(_app: FastAPI) -> Any:
         backends=list(settings.backends.keys()),
         models=list(settings.models.keys()),
     )
-    # Combination-exclusion counters are process-local by design (memory-backed
-    # single replica): every restart re-learns sick combinations, costing at most
-    # three user-visible failures per sick triple before re-exclusion.
-    await _exclusion_store.reset()
-    logger.info("combination_exclusion_reset", reason="process_start")
-    get_backend_client()
-    # Phase 11: build lifespan-owned stores (memory singletons or Table stores).
-    global _health_store, _credit_store, _rate_limit_store, _table_clients
-    _health_store, _credit_store, _rate_limit_store, _table_clients = build_stores(settings)
-    await _credit_store.sync_from_settings(settings)
-    await _rate_limit_store.sync_from_settings(settings)
-    global _reconciliation_loop
-    _reconciliation_loop = ReconciliationLoop(
-        provider=_reconciliation_provider,
-        credit_store=_credit_store,
-        settings=settings,
-        logger=logger,
-    )
-    await _reconciliation_loop.start()
-    # Phase 07: Initialize shutdown event for graceful draining
-    _shutdown_event = asyncio.Event()
-    yield
-    # Phase 07: Drain in-flight requests on shutdown
-    logger.info("foundry_router_shutting_down")
-    await _drain_active_requests(settings.graceful_shutdown_timeout_seconds)
-    await _reset_reconciliation_state()
-    await close_backend_client()
-    # Phase 11: close Table clients after streams have drained.
-    for table_client in _table_clients:
-        with suppress(Exception):
-            await table_client.close()
-    _table_clients = ()
-    await _reset_backend_health_state()
-    await _reset_credit_state()
-    await _reset_metrics_state()
-    await _reset_rate_limit_state()
-    _shutdown_event = None
+    global _metrics_store
+    if settings.telemetry_enabled or not isinstance(_metrics_store, InMemoryMetricsStore):
+        _metrics_store = _build_metrics_store(settings)
+    try:
+        # Combination-exclusion counters are process-local by design (memory-backed
+        # single replica): every restart re-learns sick combinations, costing at most
+        # three user-visible failures per sick triple before re-exclusion.
+        await _exclusion_store.reset()
+        logger.info("combination_exclusion_reset", reason="process_start")
+        get_backend_client()
+        # Phase 11: build lifespan-owned stores (memory singletons or Table stores).
+        global _health_store, _credit_store, _rate_limit_store, _table_clients
+        _health_store, _credit_store, _rate_limit_store, _table_clients = build_stores(settings)
+        await _credit_store.sync_from_settings(settings)
+        await _rate_limit_store.sync_from_settings(settings)
+        global _reconciliation_loop
+        _reconciliation_loop = ReconciliationLoop(
+            provider=_reconciliation_provider,
+            credit_store=_credit_store,
+            settings=settings,
+            logger=logger,
+        )
+        await _reconciliation_loop.start()
+        # Phase 07: Initialize shutdown event for graceful draining
+        _shutdown_event = asyncio.Event()
+        yield
+    finally:
+        original_failure = sys.exc_info()[0] is not None
+        try:
+            logger.info("foundry_router_shutting_down")
+            await _drain_active_requests(settings.graceful_shutdown_timeout_seconds)
+            await _reset_reconciliation_state()
+            await close_backend_client()
+            for table_client in _table_clients:
+                with suppress(Exception):
+                    await table_client.close()
+            _table_clients = ()
+            await _reset_backend_health_state()
+            await _reset_credit_state()
+            await _reset_rate_limit_state()
+        except BaseException as exc:
+            logger.warning("lifespan_cleanup_failed", error_type=type(exc).__name__)
+            if not original_failure:
+                raise
+        finally:
+            try:
+                if hasattr(_metrics_store, "shutdown"):
+                    await _metrics_store.shutdown()
+            except BaseException as exc:
+                logger.warning("metrics_shutdown_failed", error_type=type(exc).__name__)
+            finally:
+                await _reset_metrics_state()
+                _shutdown_event = None
 
 
 app = FastAPI(
@@ -512,7 +536,7 @@ app.include_router(
         load_settings_fn=_current_load_settings,
         health_store=_LiveStore("_health_store"),
         credit_store=_LiveStore("_credit_store"),
-        metrics_store=_metrics_store,
+        metrics_store=_LiveStore("_metrics_store"),
         rate_limit_store=_LiveStore("_rate_limit_store"),
         reconciliation_status_snapshot=_reconciliation_status_snapshot,
         exclusion_store=_exclusion_store,
@@ -525,7 +549,7 @@ app.include_router(
         sleep_fn=_current_sleep,
         health_store=_LiveStore("_health_store"),
         credit_store=_LiveStore("_credit_store"),
-        metrics_store=_metrics_store,
+        metrics_store=_LiveStore("_metrics_store"),
         logger=logger,
         rate_limit_store=_LiveStore("_rate_limit_store"),
         exclusion_store=_exclusion_store,

@@ -283,3 +283,11 @@ Signed enablement remains **Partially implemented** pending resource and live ga
 | Durable per-attempt failover and conservative cancellation settlement | Implemented locally | Routing/API/forwarding view | `test_table_quota_integration.py`, lifecycle regressions |
 | Fail-closed bounds, policy changes, clocks and identity-only startup | Implemented locally | Config/state/main | [Plan evidence](../plans/distributed-quota-accounting/evidence.md) |
 | Deployed multi-replica provider admission and clock guarantees | Planned | Rollout acceptance | Production remains memory/one |
+
+## Metrics aggregation
+
+| Requirement | Status | Boundary | Evidence |
+| --- | --- | --- | --- |
+| Central multi-worker/replica cumulative identities and histograms | Implemented locally | `metrics/otlp.py` | `test_otlp_metrics.py`, actual `test_otlp_processes.py` |
+| Endpoint/auth bounds, partial acknowledgements, failure isolation and teardown | Implemented locally | Config/metrics/main | [Metrics evidence](../plans/metrics-aggregation/evidence.md) |
+| Actual deployed collector and restart/rollout acceptance | Planned | Operations deployment | Production remains memory/one |

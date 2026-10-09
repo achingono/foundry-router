@@ -455,6 +455,27 @@ class Settings(BaseSettings):
     table_quota_name: str = Field(
         default="routerquota", validation_alias="FOUNDRY_TABLE_QUOTA_NAME"
     )
+    telemetry_enabled: bool = Field(default=False, validation_alias="FOUNDRY_TELEMETRY_ENABLED")
+    telemetry_endpoint: str = Field(
+        default="", validation_alias="FOUNDRY_TELEMETRY_ENDPOINT", repr=False
+    )
+    telemetry_authorization: SecretStr | None = Field(
+        default=None, validation_alias="FOUNDRY_TELEMETRY_AUTHORIZATION", exclude=True, repr=False
+    )
+    telemetry_service_name: str = Field(
+        default="foundry-router", validation_alias="FOUNDRY_TELEMETRY_SERVICE_NAME"
+    )
+    telemetry_replica_id: str = Field(default="", validation_alias="FOUNDRY_TELEMETRY_REPLICA_ID")
+    telemetry_revision_id: str = Field(default="", validation_alias="FOUNDRY_TELEMETRY_REVISION_ID")
+    telemetry_series_budget: Annotated[int, Field(ge=1, le=16384)] = Field(
+        default=2048, validation_alias="FOUNDRY_TELEMETRY_SERIES_BUDGET"
+    )
+    telemetry_interval_seconds: Annotated[float, Field(ge=5, le=60, allow_inf_nan=False)] = Field(
+        default=15, validation_alias="FOUNDRY_TELEMETRY_INTERVAL_SECONDS"
+    )
+    telemetry_timeout_seconds: Annotated[float, Field(ge=1, le=10, allow_inf_nan=False)] = Field(
+        default=3, validation_alias="FOUNDRY_TELEMETRY_TIMEOUT_SECONDS"
+    )
 
     # Backend local credit-cycle allowance estimates (JSON string)
     backend_cycle_allowance_usd_json: str = Field(
@@ -916,6 +937,50 @@ class Settings(BaseSettings):
                 for key, backend in self.backends.items()
             ):
                 raise ValueError("Table quota requires nonempty limits for every backend group")
+
+        if self.telemetry_enabled:
+            raw = self.telemetry_endpoint
+            parsed = urlsplit(raw)
+            if (
+                raw != raw.strip()
+                or parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+                or not parsed.path.endswith("/v1/metrics")
+                or "%" in parsed.path
+                or "\\" in raw
+                or "//" in parsed.path
+                or any(part in {".", ".."} for part in parsed.path.split("/"))
+                or any(ord(char) < ASCII_CONTROL_LIMIT for char in raw)
+            ):
+                raise ValueError("Telemetry requires an exact safe HTTPS /v1/metrics endpoint")
+            labels = [
+                *self.models,
+                *self.backends,
+                self.telemetry_service_name,
+                self.telemetry_replica_id,
+                self.telemetry_revision_id,
+            ]
+            if any(
+                len(value.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or any(ord(char) < ASCII_CONTROL_LIMIT for char in value)
+                for value in labels
+            ):
+                raise ValueError("Telemetry labels must be bounded plain configuration values")
+            # Reserve baseline request, latency, cost and exclusion streams; statuses are
+            # bounded dynamically within the same total series budget.
+            pairs = sum(len(pool.backends) + 1 for pool in self.models.values()) + 1
+            if pairs * 3 + len(self.backends) * 8 > self.telemetry_series_budget:
+                raise ValueError("Configured telemetry streams exceed the series budget")
+            if self.telemetry_authorization is not None:
+                auth = self.telemetry_authorization.get_secret_value()
+                if not auth.strip() or any(
+                    ord(char) < ASCII_CONTROL_LIMIT or ord(char) == ASCII_DELETE for char in auth
+                ):
+                    raise ValueError("Telemetry authorization must be a nonempty header value")
 
         return self
 

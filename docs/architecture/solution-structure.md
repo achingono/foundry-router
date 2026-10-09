@@ -94,3 +94,7 @@ Exact upstream/model live compatibility remains **Planned**.
 settlement. `ratelimit.py` retains the store protocol, memory implementation and immutable
 attempt-bound forwarding view. Routing owns candidate attempt identities; credit and
 telemetry continue to use logical request IDs.
+
+`metrics/otlp.py` owns bounded cumulative instruments, safe OTLP protobuf/transport checks
+and lifespan cleanup. API routes use the live metrics proxy so opt-in startup rebinding
+reaches existing route owners. Default process-local Prometheus store identity is preserved.

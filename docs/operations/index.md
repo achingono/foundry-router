@@ -88,3 +88,9 @@ local reset never clears shared quota. Storage outages and ambiguous acknowledge
 closed. Resolve retained uncertainty through same-attempt settlement or conservative expiry,
 without reusing an attempt ID or deleting the row. Capacity is 256 retained records and
 48 KiB UTF-16 state per group; this bounds correctness for small free-tier workloads.
+
+Opt-in OTLP central metrics is **Implemented** with local two-worker/restart evidence. Supply
+and verify the actual collector, auth, network route, retention and resource-based aggregation
+before deployment; it is not created by runtime enablement. See
+[observability aggregation guidance](observability.md#central-otlp-aggregation). Local
+verification does not clear production scale-out or real provider admission gates.

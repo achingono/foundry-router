@@ -1,6 +1,6 @@
 # Multi-worker and multi-replica metrics aggregation
 
-**Planned**, 2026-10-08. Workstream 5b of the
+**Implemented** locally, 2026-10-08. Deployed collector acceptance remains unverified. Workstream 5b of the
 [routing roadmap](../google-ai-routing-order/index.md). Production remains memory/one.
 
 ## Concrete contract

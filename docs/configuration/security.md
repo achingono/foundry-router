@@ -90,3 +90,9 @@ Shared quota Table access uses the existing identity-only client and a separate 
 Mandatory ETags and explicitly classified conflicts guard quota writes. State parsing,
 record count and actual UTF-16 property bytes are bounded; storage failures expose only a
 sanitized quota-state error. No keys, prompts or generated output enter quota state.
+
+Opt-in OTLP uses a configured HTTPS target and optional secret authorization header, with
+TLS verification, no redirect following or ambient proxy/auth discovery. Export failures
+expose categories/counts only; collector error messages, endpoints and auth values are not
+logged or included in admin diagnostics. Explicit resource identities and disabled exemplars
+exclude tracing/request IDs. Protobuf export and acknowledgement sizes are bounded.

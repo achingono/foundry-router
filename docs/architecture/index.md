@@ -19,7 +19,7 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 - **Health tracking (`health/`)**: Owns ephemeral health states (`ACTIVE`, `QUOTA_COOLDOWN`, `ERROR_COOLDOWN`, `DISABLED`), cooldown duration calculation, and snapshotting.
 - **Credit subsystem (`credit/` & `reconciliation/`)**: Owns cycle calculations, conservative token/cost estimation, atomic reservation lifecycle (`try...finally`), safe-capacity validation, and periodic billing reconciliation.
 - **State Store Abstraction (`state/`)**: Owns `CreditStore`/`HealthStore` protocols, in-memory stores, and injected-client Azure Table Storage adapters (`AzureTableHealthStore`, `AzureTableCreditStore`) with same-partition ETag transactions. Redis remains an optional later hot-state optimization, not the authoritative store.
-- **Telemetry (`logging/` & `metrics/`)**: Owns structured redacted logging, Prometheus `/metrics` (single-process; multi-process aggregation Planned), correlation IDs, and live admin diagnostics.
+- **Telemetry (`logging/` & `metrics/`)**: Owns structured redacted logging, Prometheus `/metrics` (single-process; opt-in OTLP aggregation implemented locally; deployed collection unverified), correlation IDs, and live admin diagnostics.
 - **Infrastructure (`infra/`)**: Owns Bicep templates (`infra/main.bicep`), Azure Container Apps, Key Vault secrets, managed identity RBAC, and deployment automation. **Implemented**.
 
 Keep these responsibilities separate. In particular, estimated local cost is not authoritative Azure cost, and model quota is not subscription credit.
@@ -54,7 +54,7 @@ The initial target is Azure Container Apps Consumption with 0.25 vCPU, 0.5 GiB m
 
 ## Technology Direction
 
-The preferred stack is Python 3.12+, FastAPI, asynchronous `httpx` (with HTTP/2 and connection limits), Pydantic settings, Docker, Azure Container Apps, Bicep IaC, GitHub Actions, pytest, Ruff, and mypy. All are **Implemented** except multi-worker metrics aggregation, which remains **Planned**.
+The preferred stack is Python 3.12+, FastAPI, asynchronous `httpx` (with HTTP/2 and connection limits), Pydantic settings, Docker, Azure Container Apps, Bicep IaC, GitHub Actions, pytest, Ruff, and mypy. All are **Implemented** with opt-in multi-worker OTLP aggregation locally verified; deployed collection remains unverified.
 
 Google feature helpers remain inside `api/adapters/`: bounded schema validation, ordered tool
 history and bounded inline image intake (PNG, opt-in baseline JPEG/static VP8L). Default-off configuration profiles own declared combinations;
@@ -67,3 +67,9 @@ storage. One bounded atomic group row admits full configured limits across worke
 per-attempt ownership prevents failover from erasing earlier provider consumption. Real
 Azurite concurrency/persistence passed; deployed provider admission and clock guarantees
 remain unverified. Production remains memory/one.
+
+The opt-in OTLP metrics wrapper preserves local Prometheus exposition and pushes cumulative
+counter/histogram streams per process lifetime. Central collectors combine deltas/rates by
+resource identity; shared financial/quota snapshots remain nonadditive. Lifespan owns the
+reader/exporter and always stops it on failed startup or shutdown. No collector provisioning
+or production metrics rollout is claimed.

@@ -1,6 +1,6 @@
 # Observability and Troubleshooting
 
-## Status: Implemented (single-process Prometheus + live diagnostics; multi-process aggregation Planned)
+## Status: Implemented (single-process Prometheus + live diagnostics; opt-in OTLP aggregation implemented locally; deployed collector unverified)
 
 Use structured JSON logs with correlation IDs (`x-request-id`). Record request ID, model, backend, endpoint type, status, latency, tokens, estimated cost, retry count, streaming flag, routing state, and routing score. Never record authorization headers, API keys, prompts, or model outputs.
 
@@ -47,7 +47,7 @@ the telemetry status is 502. See [operations](shared-resource-credit.md).
 
 `GET /health/ready` reports `backend_credit_config_complete` and `model_pricing_complete`, plus `state_store_reachable` in table mode. The storage check verifies each unique routable metered credit group has a balance row and checks health-table reachability; probes are cached for at most five seconds. `rate_limit_share_valid` and a `rate_limit_share_<group>_<dimension>_valid` check identify any per-replica RPM, input-TPM, or RPD share that floors to zero. Readiness returns `503` for any failed check; this is a readiness-level signal, not a configuration-load failure. Request-time credit and quota admission still fail closed independently of the cached readiness result.
 
-## Prometheus & OpenTelemetry Metrics (Implemented single-process; multi-process aggregation Planned)
+## Prometheus & OpenTelemetry Metrics (Implemented single-process; opt-in OTLP aggregation implemented locally; deployed collector unverified)
 
 The router exposes a Prometheus-compatible `/metrics` endpoint for in-process metrics:
 - `foundry_router_requests_total{model, backend, status}`: Request outcome counter.
@@ -64,10 +64,9 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `/metrics` uses admin authentication (`x-admin-key` or Bearer admin token).
 - Single-process in-memory collection via `InMemoryMetricsStore` (implemented in Phase 06).
 
-Multi-process metric aggregation (for `--workers > 1` deployments) requires either:
-- `prometheus_client` multiprocess mode (file-based metric storage in `PROMETHEUS_MULTIPROC_DIR`)
-- OpenTelemetry exporter integration
-- Both remain **Planned**; current implementation (`src/foundry_router/metrics/__init__.py:15` `InMemoryMetricsStore`) is single-process only.
+Opt-in OpenTelemetry push is implemented and verified with two local subprocess workers
+and a restarted worker. File-based Prometheus aggregation alone does not combine Container
+App replicas. Deployed collection and acceptance remain unverified.
 
 ## Operator Checks
 
@@ -80,3 +79,33 @@ When a request fails, inspect model configuration, candidate availability, backe
 ## Cost and Credit Warnings
 
 Estimated spend is not authoritative Azure cost. Stale reconciliation state or negative estimates must be visible. If all candidates are protected or a conservative request reservation cannot fit, return an explicit safe-capacity error (`503 insufficient_credit_capacity`) rather than silently routing unsafely.
+
+## Central OTLP aggregation
+
+**Implemented** locally with pinned OTel SDK/encoder 1.45.1. Every process exports request,
+latency, estimated-cost and exclusion instruments as cumulative streams with a unique
+`service.instance.id`. Aggregate rates/increases per resource lifetime before summing across
+workers/replicas. For cumulative collectors, the first sample contributes its full value;
+later samples contribute positive differences, keyed by resource, instrument, attributes
+and start/end timestamps. Ignore repeated/stale samples. Restart creates a new lifetime.
+Do not sum repeated cumulative snapshots as fresh events.
+
+Shared credit/quota gauges remain local authenticated snapshots and are nonadditive across
+replicas. Use canonical account/group views and appropriate latest/min grouping; backend
+health is instance-specific. The latency histogram measures existing completion/stream
+duration, not an independent TTFT signal. Local reset clears Prometheus counters while OTel
+instruments remain monotonic until the process lifetime ends.
+
+Exporter dispatch is single-shot HTTPS with no redirects or ambient proxies/auth, a total
+network deadline, 1 MiB protobuf request bound and 64 KiB acknowledgement bound. Complete
+HTTP200 protobuf acceptance, partial rejection, malformed acknowledgement and transport
+failure have separate safe health categories. `/admin/status.telemetry` exposes enablement,
+state, rejection count, series count and dropped observations without endpoint/auth values.
+Failures do not change inference outcomes or credit settlement. The next periodic cumulative
+snapshot can recover earlier delivery; shutdown stops the reader with its serialized final
+collection. Unsaved final exports remain lost/unknown, never claimed delivered.
+
+Actual local two-worker periodic collection, repeated/out-of-order snapshots and restart
+produced nine requests, $4.50 synthetic estimated cost and matching histogram/exclusion totals.
+This verifies local central aggregation semantics. Production remains memory/one until
+Table real-provider, admission, deployed collector and scale-out acceptance gates pass.

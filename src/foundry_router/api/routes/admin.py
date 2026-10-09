@@ -208,6 +208,9 @@ def build_router(
                 for name, pool in settings.models.items()
             },
             "model_aliases": dict(getattr(settings, "model_aliases", {}) or {}),
+            "telemetry": metrics_store.export_status()
+            if hasattr(metrics_store, "export_status")
+            else {"enabled": False},
             "combination_exclusions": exclusion_snapshot,
             "config": {
                 "reconciliation_interval_minutes": settings.reconciliation_interval_minutes,

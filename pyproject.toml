@@ -57,6 +57,10 @@ azure = [
     "azure-data-tables>=12.4.0,<13.0.0",
     "azure-identity>=1.17.0,<2.0.0",
 ]
+telemetry = [
+    "opentelemetry-sdk==1.45.1",
+    "opentelemetry-exporter-otlp-proto-http==1.45.1",
+]
 
 [tool.ruff]
 target-version = "py312"
