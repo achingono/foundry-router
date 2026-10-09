@@ -1274,6 +1274,55 @@ async def _forward_google_non_streaming_buffered(
     )
 
 
+async def _handle_zen_error_status(
+    upstream: Any,
+    *,
+    settings: Any,
+    backend_id: str,
+    set_backend_cooldown: Any,
+    api_error: Any,
+    fallback_cost: float | None,
+    fallback_input: int | None,
+) -> BackendRequestResult:
+    """Preserve Zen's upstream status while applying single-shot health policy."""
+    _ = api_error
+    status = int(upstream.status_code)
+    response = upstream_response(upstream, upstream.content[:MAX_UPSTREAM_ERROR_BYTES])
+    if status in GOOGLE_AUTH_STATUS_CODES:
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(response=response, retryable_failure=False)
+    if status == HTTP_TOO_MANY_REQUESTS:
+        retry_after = parse_retry_after(
+            _safe_header(upstream, "retry-after"), settings.retry_max_delay_seconds
+        )
+        cooldown_seconds = settings.retry_max_delay_seconds if retry_after is None else retry_after
+        await _set_quota_group_cooldown(
+            settings,
+            backend_id,
+            set_backend_cooldown=set_backend_cooldown,
+            cooldown_seconds=cooldown_seconds,
+        )
+        return BackendRequestResult(response=response, retryable_failure=True)
+    if 500 <= status < 600:
+        await set_backend_cooldown(
+            backend_id,
+            state=BackendHealthState.ERROR_COOLDOWN,
+            cooldown_seconds=settings.retry_max_delay_seconds,
+        )
+        return BackendRequestResult(
+            response=response,
+            retryable_failure=False,
+            settlement_cost_usd=fallback_cost,
+            settlement_input_tokens=fallback_input,
+            force_charge=True,
+        )
+    return BackendRequestResult(response=response, retryable_failure=False)
+
+
 async def _forward_zen_non_streaming(
     *,
     settings: Any,
@@ -1368,7 +1417,7 @@ async def _forward_zen_non_streaming(
             force_charge=True,
         )
     if not (HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT):
-        return await _handle_google_error_status(
+        return await _handle_zen_error_status(
             upstream,
             settings=settings,
             backend_id=backend_id,
@@ -1477,7 +1526,7 @@ async def _read_google_non_streaming_body(
     return {"read_failed": False, "body": raw_body, "breached": breached}
 
 
-async def _handle_google_error_status(
+async def _handle_zen_error_status(
     upstream: Any,
     *,
     settings: Any,
@@ -2006,7 +2055,7 @@ async def _forward_zen_streaming(
                 retryable_failure=False,
             )
         await context.__aexit__(None, None, None)
-        return await _handle_google_error_status(
+        return await _handle_zen_error_status(
             upstream,
             settings=settings,
             backend_id=backend_id,
