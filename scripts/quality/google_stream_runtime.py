@@ -55,9 +55,11 @@ class ObservedBytes(httpx.AsyncByteStream):
                 if self.guard.observer.overrun:
                     raise ValueError("Verification token overrun")
                 yield chunk
-            self.guard.observer.finish()
             self.guard.eof_time = time.monotonic()
-            self.guard.persist()
+            try:
+                self.guard.observer.finish()
+            finally:
+                self.guard.persist()
         finally:
             await self.aclose()
 
@@ -67,10 +69,12 @@ class ObservedBytes(httpx.AsyncByteStream):
 
 
 class IncrementalGuard(httpx.AsyncBaseTransport):
-    def __init__(self, transport, *, credential, case, reserve, progress, terminal_facts=False):  # noqa: PLR0913 -- owned verifier inputs
+    def __init__(  # noqa: PLR0913 -- owned verifier inputs
+        self, transport, *, credential, case, reserve, progress, terminal_facts=False, observer=None
+    ):
         self.transport, self.credential, self.case = transport, credential, case
         self.reserve, self.progress = reserve, progress
-        self.observer = IncrementalUsage()
+        self.observer = observer if observer is not None else IncrementalUsage()
         self.dispatches = 0
         self.provider_status = None
         self.first_chunk = None
@@ -92,6 +96,8 @@ class IncrementalGuard(httpx.AsyncBaseTransport):
         }
         if self.terminal_facts:
             value.update(terminal_metadata(self.observer))
+        if hasattr(self.observer, "evidence"):
+            value.update(self.observer.evidence())
         self.progress(value)
 
     async def handle_async_request(self, request):
@@ -179,7 +185,11 @@ class IncrementalGuard(httpx.AsyncBaseTransport):
 
     async def aclose(self):
         self.credential = ""
-        await self.transport.aclose()
+        try:
+            await self.transport.aclose()
+        finally:
+            if hasattr(self.observer, "clear"):
+                self.observer.clear()
 
 
 class PublicEvents:
@@ -276,7 +286,9 @@ def terminal_metadata(observer):
     }
 
 
-async def run_case(*, credential, case, transport, reserve, progress, terminal_facts=False):  # noqa: PLR0913 -- owned verifier inputs
+async def run_case(  # noqa: PLR0913 -- owned verifier inputs
+    *, credential, case, transport, reserve, progress, terminal_facts=False, observer=None
+):
     caller_key = secrets.token_urlsafe(32)
     settings = compatible_settings(credential, caller_key)
     guard = IncrementalGuard(
@@ -286,6 +298,7 @@ async def run_case(*, credential, case, transport, reserve, progress, terminal_f
         reserve=reserve,
         progress=progress,
         terminal_facts=terminal_facts,
+        observer=observer,
     )
     backend = AllowedBackendClient(settings=settings)
     try:
@@ -295,6 +308,8 @@ async def run_case(*, credential, case, transport, reserve, progress, terminal_f
             )
             if terminal_facts:
                 result.update(terminal_metadata(guard.observer))
+            if hasattr(guard.observer, "evidence"):
+                result.update(guard.observer.evidence())
             return result
     finally:
         await protected_cleanup([backend.aclose], timeout_seconds=1)
@@ -316,6 +331,7 @@ async def _run_owned_case(*, settings, guard, backend, caller_key, case):  # noq
     public = PublicEvents()
     status, error = None, None
     cancel_time = None
+    cancelled_before_terminal = False
     body = {"model": "m", "input": PROMPTS[case["prompt"]], "max_output_tokens": 1024}
     estimate = estimate_request_cost(
         model="m", operation="responses", body=body, pricing=settings.pricing, settings=settings
@@ -340,6 +356,13 @@ async def _run_owned_case(*, settings, guard, backend, caller_key, case):  # noq
                                         public.feed(chunk)
                                         if case["cancel"] and public.first_text is not None:
                                             cancel_time = time.monotonic()
+                                            cancelled_before_terminal = (
+                                                not guard.observer.done
+                                                and not guard.observer.eof
+                                                and not getattr(
+                                                    guard.observer, "mirror_terminal", False
+                                                )
+                                            )
                                             break
                                     if not case["cancel"]:
                                         public.finish()
@@ -409,8 +432,10 @@ async def _run_owned_case(*, settings, guard, backend, caller_key, case):  # noq
     early = public.first_text is not None and (
         guard.eof_time is None or public.first_text < guard.eof_time
     )
-    cancelled_early = cancel_time is not None and (
-        guard.eof_time is None or cancel_time < guard.eof_time
+    cancelled_early = (
+        cancel_time is not None
+        and (guard.eof_time is None or cancel_time < guard.eof_time)
+        and cancelled_before_terminal
     )
     usage_matches = (
         isinstance(public.usage, dict)

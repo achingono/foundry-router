@@ -234,8 +234,11 @@ def execute(  # noqa: PLR0913, PLR0912, PLR0915 -- one serialized immutable stag
     result_validator=validate_result,
     prerequisite=None,
     initial_progress=None,
+    preflight=None,
 ):
     with locked(STAGE_DIR / "stage"):
+        if preflight is not None:
+            preflight()
         phase_cases = cases() if phase_cases is None else phase_cases
         baseline = read_file(directory / "ledger-baseline.json")
         bindings = [(case["project"], case["stream"], case["case_id"]) for case in phase_cases]

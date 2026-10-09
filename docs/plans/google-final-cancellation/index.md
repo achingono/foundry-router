@@ -1,6 +1,6 @@
 # Final Google stateless cancellation acceptance
 
-**Planned**,2026-10-09UTC. Latest three recorded normal streams produced actual public
+**Implemented locally**,2026-10-09UTC; final live acceptance pending. Latest three recorded normal streams produced actual public
 completed events, matching independently observed input/output counts/debits, early text
 before provider EOF and natural cleanup, but failed an additional verifier-only inertstop
 predicate. Those failed outcomes remain immutable; their raw stop shapes are unknown.
