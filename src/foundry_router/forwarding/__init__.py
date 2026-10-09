@@ -1938,11 +1938,23 @@ async def _forward_zen_streaming(
     through the shared bounded-usage inspector, which settles known usage or
     the reserved estimate on completion, failure, or cancellation.
     """
-    _ = reservation_deadline_monotonic
     logical_model = str(body.get("model", ""))
     fallback_cost, fallback_input = _fallback_estimate_cost(
         settings, body, logical_model, "responses"
     )
+    if (
+        reservation_deadline_monotonic is not None
+        and time.monotonic() >= reservation_deadline_monotonic
+    ):
+        return BackendRequestResult(
+            response=api_error(
+                503,
+                "Request deadline exceeded before backend dispatch",
+                "deadline_exceeded",
+            ),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
     context = backend_client.stream_backend(
         backend_id,
         "responses",
