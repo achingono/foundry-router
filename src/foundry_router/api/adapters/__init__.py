@@ -21,6 +21,11 @@ from foundry_router.api.adapters.google_ai_studio import (
 )
 from foundry_router.api.adapters.google_audio_output import GoogleAudioOutputAdapter
 from foundry_router.api.adapters.google_native import GoogleNativeAdapter
+from foundry_router.api.adapters.openai_compatible import (
+    ChatRequestContext,
+    OpenAICompatibleAdapter,
+    OpenAICompatibleStreamDecoder,
+)
 from foundry_router.config.google_features import GoogleFeatureProfile
 
 _ADAPTERS: dict[str, ProviderAdapter] = {
@@ -81,8 +86,11 @@ def get_adapter(
 __all__ = [
     "AdapterRejection",
     "AzureAdapter",
+    "ChatRequestContext",
     "GoogleAiStudioAdapter",
     "GoogleStreamDecoder",
+    "OpenAICompatibleAdapter",
+    "OpenAICompatibleStreamDecoder",
     "ProviderAdapter",
     "TranslatedError",
     "TranslatedSuccess",

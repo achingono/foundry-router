@@ -11,7 +11,8 @@
 
 ## Status
 
-**Planned** (2026-10-08). Behavior-preserving refactor of the
+**Implemented** (2026-10-08), with local verification recorded in [evidence](evidence.md).
+Behavior-preserving refactor of the
 [Google AI Studio adapter](../google-ai-studio-adapter/index.md); no new provider is enabled.
 
 ## Objective

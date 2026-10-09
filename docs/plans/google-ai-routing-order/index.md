@@ -10,11 +10,12 @@ does not authorize them.
 
 ## 1. OpenAI-compatible adapter extraction
 
-- **Status:** **Planned**. The [extraction plan](../openai-compatible-adapter/index.md) has
-  independent review, with conditions incorporated in its activities and exit criteria.
+- **Status:** **Implemented**. The [extraction plan](../openai-compatible-adapter/index.md)
+  passed local verification after independent plan review; see its [evidence](../openai-compatible-adapter/evidence.md).
 - **Purpose:** A refactor intended to preserve behavior. Pre-extraction characterization
-  fixtures and regression checks must establish compatibility; implementation and
-  byte-identical verification remain pending. Refactoring is not risk-free.
+  fixtures passed unchanged after extraction, alongside the full suite, strict typing and
+  Docker checks. This establishes local compatibility for the recorded cases; live provider
+  enablement remains separately gated.
 - **Dependency:** Enables workstream 7 and can simplify later adapter changes. Existing
   Google live verification does not require extraction.
 
@@ -210,7 +211,7 @@ graph TD
 
 ## Next actions
 
-Proceed with the reviewed adapter extraction and reconcile the text verification matrix
+Adapter extraction is locally complete. Next reconcile the text verification matrix
 against existing evidence. Capacity investigation, Table test planning, distributed quota,
 metrics and cost-integration planning can proceed independently. Each implementation still
 follows the repository's template, independent review and verification workflow. Preserve

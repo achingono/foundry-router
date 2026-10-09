@@ -12,7 +12,7 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 
 ## Boundaries
 
-- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation (`api/adapters/`: typed provider protocol, Azure pass-through, Google Chat Completions/embeddings translation with per-request stream decoders), and streaming response packaging.
+- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation (`api/adapters/`: typed provider protocol, Azure pass-through, shared OpenAI-compatible Responses/embeddings translation with per-request stream decoders and Google validation hooks), and streaming response packaging. The generic translation classes are **Implemented**; a configurable generic provider remains **Planned**.
 - **Forwarding (`forwarding/`)**: Owns outbound HTTP transport, retry loops, bounded pre-output waiting, Azure streaming chunk pass-through and Google Responses SSE translation with prefetch-validated commit, incremental bounded reads, absolute reservation deadlines, and billable-failure settlement with bounded buffers.
 - **Backend client (`backends/`)**: Owns outbound connection pool lifecycle (`httpx.Limits`), keep-alive tuning, HTTP/2 multiplexing, provider URL/header enforcement (Google `Authorization: Bearer`, double-suffix-tolerant compat paths, credential query rejection), and safe header allow-listing.
 - **Routing & Scheduling (`routing/`)**: Owns candidate selection, composite scoring (ADR-006), deterministic tie-breaking, failover coordination, and explainable decision logging.

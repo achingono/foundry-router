@@ -53,7 +53,7 @@ The modular implementation decomposes `src/foundry_router/` and adds infrastruct
 ```text
 foundry-router/
 ├── src/foundry_router/
-│   ├── api/                  # FastAPI routers (openai, admin, health) + adapters/ (provider protocol, azure, google_ai_studio)
+│   ├── api/                  # FastAPI routers + adapters/ (protocol, Azure, shared compatibility translation, Google hooks)
 │   ├── auth/                 # API key verification & constant-time HMAC
 │   ├── backends/             # Restricted HTTP client, limits, HTTP/2
 │   ├── config/               # Pydantic settings & validation (incl. supported_operations)
@@ -78,3 +78,11 @@ foundry-router/
 ```
 
 Feature behavior remains strictly local to its owning boundary.
+
+The API adapter boundary includes **Implemented** provider-neutral Responses/embeddings
+and Chat Completions SSE translation in `api/adapters/openai_compatible.py`.
+`GoogleAiStudioAdapter` and `GoogleStreamDecoder` supply Google feature-profile, message
+and call validation hooks while native, signed and generated-audio adapters retain their
+existing subclass surface. Generic bases require explicit provider hooks and a typed
+request context; they perform no routing, HTTP, credential handling or state-store work.
+A configurable `openai_compatible` provider remains **Planned** under a separate contract.
