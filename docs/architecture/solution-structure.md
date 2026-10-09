@@ -85,4 +85,7 @@ and Chat Completions SSE translation in `api/adapters/openai_compatible.py`.
 and call validation hooks while native, signed and generated-audio adapters retain their
 existing subclass surface. Generic bases require explicit provider hooks and a typed
 request context; they perform no routing, HTTP, credential handling or state-store work.
-A configurable `openai_compatible` provider remains **Planned** under a separate contract.
+A configurable `openai_compatible` provider is **Implemented with mocked verification** under
+the [provider contract](../plans/openai-compatible-provider/index.md), with independent bounded
+text hooks in `compatible_text.py`, exact-root Bearer transport and shared translated lifecycle.
+Exact upstream/model live compatibility remains **Planned**.

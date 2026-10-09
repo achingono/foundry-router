@@ -7,7 +7,7 @@ import math
 import re
 from functools import lru_cache
 from typing import Annotated, Literal
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from pydantic import BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,11 +24,15 @@ from foundry_router.config.google_state import (
 from foundry_router.config.model_aliases import parse_model_aliases
 from foundry_router.credit_groups import credit_membership, validate_credit_group
 
+MAX_COMPATIBLE_MODEL_BYTES = 512
+ASCII_CONTROL_LIMIT = 32
+ASCII_DELETE = 127
+
 
 class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
-    provider: Literal["azure_foundry", "google_ai_studio"] = "azure_foundry"
+    provider: Literal["azure_foundry", "google_ai_studio", "openai_compatible"] = "azure_foundry"
     api_surface: Literal["openai_compat", "native"] = "openai_compat"
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
@@ -40,6 +44,32 @@ class BackendConfig(BaseModel):
     credit_group: str | None = None
     supported_operations: list[str] | None = None
     google_features: GoogleFeatureProfile = Field(default_factory=GoogleFeatureProfile)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_compatible_endpoint_input(cls, value: object) -> object:
+        """Reject unsafe raw roots before URL coercion can erase dot segments."""
+        if not isinstance(value, dict) or value.get("provider") != "openai_compatible":
+            return value
+        endpoint = value.get("endpoint")
+        if endpoint is None:
+            return value
+        raw = str(endpoint)
+        if (
+            raw != raw.strip()
+            or any(ord(char) < ASCII_CONTROL_LIMIT for char in raw)
+            or "\\" in raw
+        ):
+            raise ValueError("Compatible endpoint must be a safe HTTPS API root")
+        path = urlsplit(raw).path
+        # This baseline accepts literal root segments, not encoded routing syntax.
+        if "%" in path or any(segment in {".", ".."} for segment in path.split("/")):
+            raise ValueError("Compatible endpoint cannot contain encoded or dot path segments")
+        if "//" in path or unquote(path) != path:
+            raise ValueError("Compatible endpoint must be a safe API root")
+        if path.rstrip("/").endswith(("/chat/completions", "/embeddings", "/responses")):
+            raise ValueError("Compatible endpoint must be an API root, not an operation path")
+        return value
 
     @field_validator("credit_group")
     @classmethod
@@ -65,7 +95,7 @@ class BackendConfig(BaseModel):
     def validate_deployment(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        if not v.strip() or "/" in v or "\\" in v:
+        if not v.strip():
             raise ValueError("Backend deployment must be a single non-empty path segment")
         return v
 
@@ -102,6 +132,30 @@ class BackendConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
+        if (
+            self.provider != "openai_compatible"
+            and self.deployment is not None
+            and ("/" in self.deployment or "\\" in self.deployment)
+        ):
+            raise ValueError("Backend deployment must be a single non-empty path segment")
+        if self.provider == "openai_compatible":
+            if (
+                self.api_surface != "openai_compat"
+                or self.google_features != GoogleFeatureProfile()
+            ):
+                raise ValueError("Compatible backends cannot use native or Google feature profiles")
+            if (
+                self.deployment is None
+                or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or any(
+                    ord(char) < ASCII_CONTROL_LIMIT or ord(char) == ASCII_DELETE
+                    for char in self.deployment
+                )
+            ):
+                raise ValueError("Compatible backend requires a bounded physical model identifier")
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
+            return self
         if self.provider == "azure_foundry":
             if self.api_surface != "openai_compat":
                 raise ValueError("Native API surface requires a Google backend")

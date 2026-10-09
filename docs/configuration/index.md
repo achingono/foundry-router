@@ -8,6 +8,23 @@ Configuration is externalized through validated environment variables and dotenv
 
 The configuration must support an arbitrary number of backends and an independent backend pool per model. A backend should identify subscription, project, region, endpoint, and deployment even if the first release uses only two subscriptions. Forwarding-capable backends require a deployment identifier.
 
+`provider: openai_compatible` is **Implemented with mocked verification** for configured
+Chat Completions/embedding upstreams. Supply the exact HTTPS API root in `endpoint`
+(for example `https://compatible.example.test/v1`), an external `credential`, and the
+physical model ID in `deployment`; namespaced body values such as `organization/model`
+are allowed up to 512 UTF-8 bytes. Responses appends `/chat/completions`, and explicitly
+declared embeddings appends `/embeddings`. No Azure/Google suffix or API-version query is
+added. Encoded/dot/duplicate path segments, operation URLs, userinfo, queries and fragments
+are rejected. Default operations are `["responses"]`; use `supported_operations` for
+embeddings. Native surface and Google feature profiles are invalid for this provider.
+
+The fixed dialect sends `max_completion_tokens` and `stream_options.include_usage`.
+Text-only histories allow at most 128 messages, 128 text parts per message and 256 KiB
+aggregate text including instructions. Tools, structured-output profiles, media, stored
+continuation and provider state are rejected before admission. Configure quota groups,
+credit metering and model prices independently; exact upstream/model live compatibility
+remains unverified. See [provider contract](../plans/openai-compatible-provider/index.md).
+
 ```yaml
 backends:
   sub_a:

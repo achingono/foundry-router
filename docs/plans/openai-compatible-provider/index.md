@@ -1,6 +1,6 @@
 # Configurable OpenAI-compatible provider
 
-**Planned**, 2026-10-08. Workstream-7 contract following the completed
+**Implemented** locally, 2026-10-08. Live upstream compatibility remains unverified. Workstream-7 contract following the completed
 [adapter extraction](../openai-compatible-adapter/index.md).
 
 ## Companion documents
@@ -51,6 +51,6 @@ Reuse bounded translation and accounting with explicit capability and trust boun
    Azure/Google/generic text pools and operation filtering. No infrastructure or production
    change, and no live upstream availability claim in this implementation phase.
 
-Independent model/session review of this concrete plan is required before runtime changes.
+Independent model/session review cleared this concrete plan before runtime changes; a separate contextual implementation review found no Critical/Major issues.
 Local tests, strict typing, coverage, Docker and contextual review establish implemented
 code. Actual upstream/model/client compatibility remains a separate live gate.

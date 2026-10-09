@@ -12,7 +12,7 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 
 ## Boundaries
 
-- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation (`api/adapters/`: typed provider protocol, Azure pass-through, shared OpenAI-compatible Responses/embeddings translation with per-request stream decoders and Google validation hooks), and streaming response packaging. The generic translation classes are **Implemented**; a configurable generic provider remains **Planned**.
+- **API adapter (`api/`)**: Owns endpoint routing (`/openai/v1/*`, `/health/*`, `/admin/*`), request validation, authentication, protocol translation (`api/adapters/`: typed provider protocol, Azure pass-through, shared OpenAI-compatible Responses/embeddings translation with per-request stream decoders and Google validation hooks), and streaming response packaging. The generic translation classes are **Implemented**; the configurable text/embedding provider is **Implemented** with mocked upstream verification. Live compatibility remains unverified.
 - **Forwarding (`forwarding/`)**: Owns outbound HTTP transport, retry loops, bounded pre-output waiting, Azure streaming chunk pass-through and Google Responses SSE translation with prefetch-validated commit, incremental bounded reads, absolute reservation deadlines, and billable-failure settlement with bounded buffers.
 - **Backend client (`backends/`)**: Owns outbound connection pool lifecycle (`httpx.Limits`), keep-alive tuning, HTTP/2 multiplexing, provider URL/header enforcement (Google `Authorization: Bearer`, double-suffix-tolerant compat paths, credential query rejection), and safe header allow-listing.
 - **Routing & Scheduling (`routing/`)**: Owns candidate selection, composite scoring (ADR-006), deterministic tie-breaking, failover coordination, and explainable decision logging.
@@ -23,6 +23,12 @@ Client -> OpenAI-compatible API -> Foundry Router -> configured Foundry backends
 - **Infrastructure (`infra/`)**: Owns Bicep templates (`infra/main.bicep`), Azure Container Apps, Key Vault secrets, managed identity RBAC, and deployment automation. **Implemented**.
 
 Keep these responsibilities separate. In particular, estimated local cost is not authoritative Azure cost, and model quota is not subscription credit.
+
+The configurable `openai_compatible` provider is **Implemented with mocked verification**:
+`compatible_text.py` owns independent bounded text capability hooks, the backend client owns
+exact-root/Bearer egress, and forwarding shares the bounded translated attempt/SSE lifecycle
+with Google while selecting the actual configured provider. Google native/media logic remains
+profile-bound. No additional infrastructure or universal upstream capability is implied.
 
 Shared-resource credit is **Implemented**: `credit_groups.py` owns the validated canonical account
 namespace and one-pass backend alias resolution used by settings and credit stores. Memory/Table

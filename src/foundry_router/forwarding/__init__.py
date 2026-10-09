@@ -84,8 +84,8 @@ def _provider_of(settings: Any, backend_id: str) -> str:
     return str(getattr(config, "provider", "azure_foundry") or "azure_foundry")
 
 
-def _is_google(settings: Any, backend_id: str) -> bool:
-    return _provider_of(settings, backend_id) == "google_ai_studio"
+def _uses_translated_forwarding(settings: Any, backend_id: str) -> bool:
+    return _provider_of(settings, backend_id) in {"google_ai_studio", "openai_compatible"}
 
 
 def _default_output_tokens(body: dict[str, Any]) -> int:
@@ -133,8 +133,10 @@ def _build_upstream_body(
     )
 
 
-def _sanitized_google_error_response(status_code: int, api_error: Any, provider_status: int) -> Any:
-    adapter = get_adapter("google_ai_studio")
+def _sanitized_google_error_response(
+    status_code: int, api_error: Any, provider_status: int, *, provider: str = "google_ai_studio"
+) -> Any:
+    adapter = get_adapter(provider)
     translated = adapter.translate_error(provider_status, None)
     return api_error(translated.status_code or status_code, translated.message, translated.code)
 
@@ -492,7 +494,7 @@ async def forward_non_streaming_with_retries(
             response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
             retryable_failure=False,
         )
-    if _is_google(settings, backend_id):
+    if _uses_translated_forwarding(settings, backend_id):
         return await _forward_google_non_streaming(
             output_lease=output_lease,
             seal_context=seal_context,
@@ -799,7 +801,7 @@ async def _google_non_streaming_attempt(
     non-generation.
     """
     adapter = get_adapter(
-        "google_ai_studio",
+        _provider_of(settings, backend_id),
         google_features=settings.backends[backend_id].google_features,
         api_surface=settings.backends[backend_id].api_surface,
         seal_context=seal_context,
@@ -1087,7 +1089,7 @@ async def _forward_google_non_streaming_buffered(
     with fresh quota admission.
     """
     adapter = get_adapter(
-        "google_ai_studio",
+        _provider_of(settings, backend_id),
         google_features=settings.backends[backend_id].google_features,
         api_surface=settings.backends[backend_id].api_surface,
         seal_context=seal_context,
@@ -1325,7 +1327,9 @@ async def _handle_google_error_status(
             cooldown_seconds=settings.retry_max_delay_seconds,
         )
         return BackendRequestResult(
-            response=_sanitized_google_error_response(502, api_error, upstream.status_code),
+            response=_sanitized_google_error_response(
+                502, api_error, upstream.status_code, provider=_provider_of(settings, backend_id)
+            ),
             retryable_failure=False,
         )
     if upstream.status_code == HTTP_TOO_MANY_REQUESTS:
@@ -1339,7 +1343,9 @@ async def _handle_google_error_status(
             cooldown_seconds=cooldown_seconds,
         )
         return BackendRequestResult(
-            response=_sanitized_google_error_response(429, api_error, 429),
+            response=_sanitized_google_error_response(
+                429, api_error, 429, provider=_provider_of(settings, backend_id)
+            ),
             retryable_failure=True,
         )
     if 500 <= upstream.status_code < 600:
@@ -1350,7 +1356,10 @@ async def _handle_google_error_status(
         )
         return BackendRequestResult(
             response=_sanitized_google_error_response(
-                upstream.status_code, api_error, upstream.status_code
+                upstream.status_code,
+                api_error,
+                upstream.status_code,
+                provider=_provider_of(settings, backend_id),
             ),
             retryable_failure=False,
             settlement_cost_usd=fallback_cost,
@@ -1359,7 +1368,10 @@ async def _handle_google_error_status(
         )
     return BackendRequestResult(
         response=_sanitized_google_error_response(
-            upstream.status_code, api_error, upstream.status_code
+            upstream.status_code,
+            api_error,
+            upstream.status_code,
+            provider=_provider_of(settings, backend_id),
         ),
         retryable_failure=False,
     )
@@ -1493,7 +1505,7 @@ async def forward_streaming_with_retries(
             response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
             retryable_failure=False,
         )
-    if _is_google(settings, backend_id):
+    if _uses_translated_forwarding(settings, backend_id):
         return await _forward_google_streaming(
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
@@ -1801,7 +1813,7 @@ async def _google_streaming_attempt(
         )
     deadline = reservation_deadline_monotonic
     adapter = get_adapter(
-        "google_ai_studio",
+        _provider_of(settings, backend_id),
         google_features=settings.backends[backend_id].google_features,
         api_surface=settings.backends[backend_id].api_surface,
         seal_context=seal_context,
@@ -1886,7 +1898,12 @@ async def _google_streaming_attempt(
                 cooldown_seconds=settings.retry_max_delay_seconds,
             )
             return BackendRequestResult(
-                response=_sanitized_google_error_response(502, api_error, upstream.status_code),
+                response=_sanitized_google_error_response(
+                    502,
+                    api_error,
+                    upstream.status_code,
+                    provider=_provider_of(settings, backend_id),
+                ),
                 retryable_failure=False,
             )
         if upstream.status_code == HTTP_TOO_MANY_REQUESTS:
@@ -1900,7 +1917,9 @@ async def _google_streaming_attempt(
                 cooldown_seconds=cooldown_seconds,
             )
             return BackendRequestResult(
-                response=_sanitized_google_error_response(429, api_error, 429),
+                response=_sanitized_google_error_response(
+                    429, api_error, 429, provider=_provider_of(settings, backend_id)
+                ),
                 retryable_failure=True,
             )
         if 500 <= upstream.status_code < 600:
@@ -1911,7 +1930,10 @@ async def _google_streaming_attempt(
             )
             return BackendRequestResult(
                 response=_sanitized_google_error_response(
-                    upstream.status_code, api_error, upstream.status_code
+                    upstream.status_code,
+                    api_error,
+                    upstream.status_code,
+                    provider=_provider_of(settings, backend_id),
                 ),
                 retryable_failure=False,
                 settlement_cost_usd=fallback_cost,
@@ -1920,7 +1942,10 @@ async def _google_streaming_attempt(
             )
         return BackendRequestResult(
             response=_sanitized_google_error_response(
-                upstream.status_code, api_error, upstream.status_code
+                upstream.status_code,
+                api_error,
+                upstream.status_code,
+                provider=_provider_of(settings, backend_id),
             ),
             retryable_failure=False,
         )

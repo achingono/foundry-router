@@ -61,7 +61,7 @@ Remaining work includes:
 
 - Five missing RPD values within those 24 buckets and other unknown quotas, including the
   historically tested 3.5 Flash-Lite and 3.8 Flash combinations.
-- Actual project IDs and current tier confirmation, projects 3–5 access investigation for
+- Actual project IDs and independent tier evidence (the operator reconfirmed all five free-tier), projects 3–5 access investigation for
   2.5 Flash/Lite, and cross-model/alias shared-limit confirmation.
 
 Unknown values are neither zero nor unlimited. This work runs independently of extraction
@@ -190,9 +190,11 @@ alone does not clear this gate.
 
 ## 7. Future OpenAI-compatible providers
 
-**Planned**, explicitly separate from extraction. A new configurable `openai_compatible`
-provider has a [concrete endpoint, credential and capability plan](../openai-compatible-provider/index.md)
-awaiting independent review before runtime implementation.
+**Implemented** locally, explicitly separate from extraction. The configurable
+`openai_compatible` provider passed independent plan and implementation review, mocked
+Responses/streaming/embeddings and mixed-pool lifecycle verification; see its
+[contract and evidence](../openai-compatible-provider/index.md). Exact upstream/model live
+compatibility remains unverified.
 It depends on the validated generic adapter from workstream 1, not on completion of media,
 production cut-over or scale-out.
 
@@ -233,5 +235,6 @@ the text-first priority and all production/startup gates while that work proceed
 | Pre-extraction characterization | Committed `06a6b80` | 21 immutable synthetic wire scenarios, verified before extraction |
 | Adapter extraction | Committed `3001929` | [Evidence](../openai-compatible-adapter/evidence.md): full suite, coverage, typing, local Azurite, Python 3.12 Docker smoke and implementation review |
 | Text evidence reconciliation | Complete locally; live verification **Partially implemented** | [Exact-combination matrix](text-verification-matrix.md); no provider traffic or production configuration change |
-
 | Native text follow-up | Committed `66175af`; live verification **Partially implemented** | Fifteen dispatches, ten 3.5 passes/five 3.8 failures; [retained ledger](ledger-native-text-2026-10-08.json), no overrun or production change |
+
+| Compatible provider implementation | Complete locally; live compatibility unverified | [Evidence](../openai-compatible-provider/evidence.md); exact-root Bearer transport, independent bounded text, mixed pools and conservative stream settlement |

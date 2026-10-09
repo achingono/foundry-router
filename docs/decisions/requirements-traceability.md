@@ -25,6 +25,17 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 ## Shared Resource Credit Traceability (Implemented runtime)
 
+### Configurable compatible upstreams
+
+**Implemented with mocked verification**; live upstream support remains **Planned**.
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Arbitrary model pools with exact HTTPS roots and server Bearer credentials | `config/`, `backends/` | `tests/unit/test_compatible_provider.py`: raw unsafe-path rejection, namespace body IDs, origin/port/path confinement and auth stripping |
+| Independent bounded text capability and Responses/embedding translation | `api/adapters/compatible_text.py`, shared translator | Unit and real ASGI mocked integration suites; unsupported features rejected before dispatch |
+| Usage/cancellation settlement, 429-only failover, no retry after downstream output | `forwarding/`, existing routing/accounting stores | `tests/integration/test_compatible_provider_integration.py`: known/missing/malformed usage, 5xx, cancellation, mixed Google pool, failed terminal and zero retained reservations |
+| Preserved Google behavior and exact local/live scope | Existing Google adapters and oracle | Immutable characterization fixtures; [provider evidence](../plans/openai-compatible-provider/evidence.md) |
+
 ### Process-local combination exclusion
 
 Repeated-failure routing exclusion is **Implemented with synthetic verification** in

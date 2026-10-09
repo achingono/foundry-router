@@ -15,6 +15,7 @@ from foundry_router.api.adapters.base import (
     TranslatedError,
     TranslatedSuccess,
 )
+from foundry_router.api.adapters.compatible_text import CompatibleTextAdapter
 from foundry_router.api.adapters.google_ai_studio import (
     GoogleAiStudioAdapter,
     GoogleStreamDecoder,
@@ -31,6 +32,7 @@ from foundry_router.config.google_features import GoogleFeatureProfile
 _ADAPTERS: dict[str, ProviderAdapter] = {
     "azure_foundry": AzureAdapter(),
     "google_ai_studio": GoogleAiStudioAdapter(),
+    "openai_compatible": CompatibleTextAdapter(),
 }
 
 
@@ -87,6 +89,7 @@ __all__ = [
     "AdapterRejection",
     "AzureAdapter",
     "ChatRequestContext",
+    "CompatibleTextAdapter",
     "GoogleAiStudioAdapter",
     "GoogleStreamDecoder",
     "OpenAICompatibleAdapter",

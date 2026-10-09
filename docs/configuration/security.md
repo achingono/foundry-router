@@ -35,6 +35,15 @@ keeping them confidential; see [API key security guidance](https://docs.cloud.go
 
 ## Identity and Deployment
 
+Configured `openai_compatible` backends use server-owned Bearer credentials, with caller
+auth/cookies/forwarding headers stripped. Raw endpoint validation precedes URL normalization;
+outbound requests remain confined to the configured HTTPS origin, port and API root.
+Physical model IDs are JSON body values, never URL path segments. The text adapter imports
+no Google capability/media/schema helpers, executes no tools and fetches no content URLs.
+Only pre-output 429 permits failover; ambiguous dispatched failures retain known usage or
+the reservation estimate. Local mocked verification is **Implemented**; actual upstream
+compatibility requires separate live evidence.
+
 Infrastructure should define only the RBAC and identity permissions needed for Foundry access, cost reconciliation, registry access, and deployment. GitHub Actions should prefer OIDC over long-lived credentials. Subscription IDs and resource IDs belong in deployment parameters, not source defaults.
 
 The template creates a user-assigned runtime identity before the container app. `AcrPull` (ACR only), `Key Vault Secrets User`, and, in table mode, `Storage Table Data Contributor` are granted to it before app provisioning; storage data access is scoped to each router table. Key Vault references select this identity, and the application selects it through `FOUNDRY_AZURE_CLIENT_ID`. External registries use secret-mode pull with an out-of-band `@secure()` credential. No storage key, SAS token, connection string, or registry credential is committed. Role assignments for pre-existing resources in another resource group deploy through modules scoped to that group. Azure rollout and RBAC propagation still require environment verification.
