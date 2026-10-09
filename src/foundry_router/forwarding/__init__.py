@@ -685,7 +685,11 @@ class GoogleAttemptSettlement:
         input_tokens, output_tokens = self.decoder.usage
         if input_tokens is not None:
             self.input_tokens = input_tokens
-        if input_tokens is not None and output_tokens is not None:
+        if (
+            getattr(self.decoder, "prefetch_finished", False) is True
+            and input_tokens is not None
+            and output_tokens is not None
+        ):
             cost = _estimate_cost_for_tokens(settings, model, input_tokens, output_tokens)
             if cost is not None:
                 self.cost = cost
@@ -2134,6 +2138,7 @@ async def _google_stream_response(
     charged_cost: float | None = None
     actual_input_tokens: int | None = fallback_input_tokens
     metric_status_code = status_code
+    stream_complete = getattr(decoder, "prefetch_finished", False) is True
 
     def _settle_from_decoder() -> None:
         nonlocal charged_cost, actual_input_tokens
@@ -2144,9 +2149,9 @@ async def _google_stream_response(
         usage = decoder.usage
         if usage[0] is not None:
             actual_input_tokens = usage[0]
-        # Precise usage settlement requires both dimensions; an unknown output
-        # falls back to the conservative reservation estimate instead of zero.
-        if usage[0] is not None and usage[1] is not None:
+        # Counts received before a clean validated end may be cumulative partial usage.
+        # Preserve the request estimate until completion, independently of input quota.
+        if stream_complete and usage[0] is not None and usage[1] is not None:
             try:
                 model_pricing = (pricing or {}).get(model)
                 if model_pricing is not None:
@@ -2192,6 +2197,7 @@ async def _google_stream_response(
                 _ensure_stream_deadline(deadline_monotonic)
                 yield event
         terminal = [] if getattr(decoder, "prefetch_finished", False) else decoder.finish()
+        stream_complete = True
         for event in terminal:
             _ensure_stream_deadline(deadline_monotonic)
             mark_delivered = getattr(decoder, "mark_delivered", None)

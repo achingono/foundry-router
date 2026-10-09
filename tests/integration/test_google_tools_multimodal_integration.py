@@ -418,7 +418,7 @@ def test_duplicate_outer_schema_keys_rejected_before_egress(monkeypatch):
 
 
 @respx.mock
-def test_invalid_first_stream_chunk_charges_known_usage(monkeypatch):
+def test_invalid_first_stream_chunk_retains_reservation_estimate(monkeypatch):
     settings = _settings(
         {
             "g": backend(
@@ -456,15 +456,21 @@ def test_invalid_first_stream_chunk_charges_known_usage(monkeypatch):
             headers={"content-type": "text/event-stream"},
         )
     )
+    body = {"model": "m", "input": "x", "tools": [TOOL], "stream": True}
+    from foundry_router.credit import estimate_request_cost
+
+    estimate = estimate_request_cost(
+        model="m", operation="responses", body=body, pricing=settings.pricing, settings=settings
+    )
     response = client.post(
         "/openai/v1/responses",
         headers=HEADERS,
-        json={"model": "m", "input": "x", "tools": [TOOL], "stream": True},
+        json=body,
     )
     assert response.status_code == 502
     assert route.call_count == 1
     status = client.get("/admin/status", headers={"x-admin-key": "admin-key"}).json()["backends"][
         "g"
     ]["live"]
-    assert status["estimated_remaining_usd"] == pytest.approx(200 - (17 * 10 + 8 * 30) / 1_000_000)
+    assert status["estimated_remaining_usd"] == pytest.approx(200 - estimate.estimated_cost_usd)
     assert status["reserved_inflight_usd"] == 0

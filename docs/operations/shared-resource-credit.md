@@ -70,6 +70,13 @@ usage wins (including zero actual cost), otherwise settle the full reserved esti
 is persisted solely because the upstream stream failed. Confirmed pre-egress/rejected requests still
 release without charging. The earlier opposite midstream-failure test expectation was incorrect.
 
+Google and compatible translated streams distinguish available cumulative counts from verified
+completion. Until clean upstream EOF and successful decoder finish, cancellation/error/unstarted
+cleanup keeps the full request estimate, even with both numeric dimensions present. Observed
+valid input usage still reconciles quota. Fully validated signed complete-body prefetch is
+already complete. See the [local correction plan](../plans/google-stream-settlement-integrity/index.md);
+the retained live cancellation failed settlement validation and is not reclassified.
+
 Table finalization raises `TableEntityCreditStoreError` when reads/transactions fail, bounded
 conflicts exhaust, or pending reservation/balance data is invalid. Confirmed absent or finalized
 reservations are idempotent. Failed release prevents second selection and upstream egress; routing

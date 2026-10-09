@@ -1,6 +1,6 @@
 # Google stream completion and settlement integrity
 
-**Planned**. The [final cancellation result](../google-final-cancellation/evidence.md)
+**Implemented locally**; live acceptance remains unverified. The [final cancellation result](../google-final-cancellation/evidence.md)
 observed complete numeric counts before terminal completion and a debit reduced to those
 counts. Cancellation/transport/protocol failures must retain the original reservation cost
 until the owned stream has cleanly ended and decoder completion validation succeeds.

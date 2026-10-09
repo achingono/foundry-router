@@ -116,6 +116,8 @@ async def test_audio_blocked_downstream_settles_and_closes(block_start, media_ki
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(result.response.stream_response(send), 0.5)
     assert context.closed and fake.calls == [("g", "responses")]
-    assert await _credit_remaining(stores.credit, "g") == pytest.approx(200 - 0.00055)
+    assert await _credit_remaining(stores.credit, "g") == pytest.approx(
+        200 - estimate.estimated_cost_usd
+    )
     quota = (await stores.rate.snapshot_quota_groups(["p"]))["p"]
     assert quota.rpm_used_60s == 1 and quota.input_tpm_used_60s == 40

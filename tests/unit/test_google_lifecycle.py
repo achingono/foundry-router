@@ -282,7 +282,7 @@ class TestCancellationPreservesConsumption:
         assert response.status_code == 502
         assert context.closed
         assert fake.calls == [("gm-a", "responses")]
-        expected_cost = (4 * 10.0 + 2 * 30.0) / 1_000_000 if exit_at == "active" else TEXT_ESTIMATE
+        expected_cost = TEXT_ESTIMATE
         assert await _credit_remaining(stores.credit, "gm-a") == pytest.approx(200 - expected_cost)
         quota = await stores.rate.snapshot_quota_groups(["pa"])
         assert quota["pa"].rpm_used_60s == 1

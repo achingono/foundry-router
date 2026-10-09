@@ -23,7 +23,7 @@ Deferred/conditional features keep their existing gates; they are not silently m
 | 5b metrics aggregation | [OTLP evidence](../metrics-aggregation/evidence.md), actual two-worker/restart receiver test | Implemented locally; deployed collector and per-replica aggregation acceptance remain incomplete |
 | 6 scale-out | Prior gates above, production configuration invariant | Planned; no scale-out go decision or deployed quota/metrics proof |
 | 7 configurable compatible providers | [Provider evidence](../openai-compatible-provider/evidence.md) | Implemented locally; exact additional upstream/model live compatibility remains unverified |
-| Workflow and phase commits | Roadmap phase table, git history, latest verification evidence | Independent reviews and phase commits recorded; latest full suite 2,035 passed/89.76%, 88 focused checks passed, Ruff/mypy clean; earlier amd64 Docker build/import smoke remains scoped to runtime changes; conditional Sonar script absent |
+| Workflow and phase commits | Roadmap phase table, git history, latest verification evidence | Independent reviews and phase commits recorded; latest full suite 2,046 passed/89.76%, partial-stream settlement checks passed, Ruff/mypy clean; amd64 Docker build/import smoke passed for forwarding correction; conditional Sonar script absent |
 
 The next dependent action is the prepared isolated Table deployment, awaiting the already
 presented concrete approval. Independent cost conversion now has a reviewed configurable

@@ -101,6 +101,12 @@ independently of context close. See [recovery policy](../operations/shared-resou
 Post-output streaming failure settles known usage or the full reserved estimate; failure status is
 not evidence that provider work was free. Periodic complete ownership discovery frees confirmed
 absent/finalized tracking slots even when balance reconciliation is unavailable.
+For Google and compatible translated streams, numeric counts may be cumulative partial usage.
+Precise cost requires clean upstream EOF and successful decoder completion; preterminal
+cancellation, transport/protocol failure and unstarted response cleanup retain the request
+estimate. Valid observed input counts still reconcile quota independently. Fully validated
+signed complete-body prefetch retains its complete usage. This correction is verified locally;
+the [live cancellation failure](../plans/google-final-cancellation/evidence.md) remains open.
 1. **Failure-aware Cleanup**: Dispatch/failover cleanup handles normal return, secondary failures and client cancellation. Failed release hard-stops second selection/egress. Failed settlement preserves the pending reservation and is never converted to a free release; quota/telemetry cleanup runs independently. Streaming never fails over after output.
 2. **Non-2xx Upstream Zero Charge**: When an upstream backend rejects a request with a non-2xx status code (e.g. 400 Bad Request, 422 Unprocessable Entity, or failed 5xx), the reserved in-flight credit is released without debiting the backend balance.
 3. **Streaming Terminal Usage Extraction**: During streaming SSE pass-through, the generator parses terminal `usage` events (e.g. `stream_options: {"include_usage": true}`) with a bounded accumulation buffer (`MAX_SSE_EVENT_BUFFER_BYTES`) to settle the final charge against exact actual token usage rather than conservative defaults.
