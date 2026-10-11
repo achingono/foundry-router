@@ -14,7 +14,7 @@ import math
 import secrets
 import time
 from http import HTTPStatus
-from typing import Any, ClassVar
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
@@ -924,10 +924,31 @@ def _accept_embeddings(public: dict[str, Any], guard: Any, result: dict[str, Any
 class OpenRouterEmbeddingsGuard(ObservationGuard):
     expected_host = "openrouter.ai"
     expected_path = "/api/v1/embeddings"
-    vector_count = 0
-    dimensions = 0
-    order_ok = False
-    upstream_vectors: ClassVar[list[list[float]]] = []
+
+    def __init__(
+        self,
+        transport: httpx.AsyncBaseTransport,
+        *,
+        ledger: Any,
+        case_id: str,
+        credential: str,
+        deployment: str,
+        stream: bool = False,
+    ) -> None:
+        super().__init__(
+            transport,
+            ledger=ledger,
+            case_id=case_id,
+            credential=credential,
+            deployment=deployment,
+            stream=stream,
+        )
+        # Evidence belongs to one dispatch only; never inherit class-level
+        # state or share the mutable vector list between guard instances.
+        self.vector_count = 0
+        self.dimensions = 0
+        self.order_ok = False
+        self.upstream_vectors: list[list[float]] = []
 
     def _expected_body(self) -> dict[str, Any]:
         return {
