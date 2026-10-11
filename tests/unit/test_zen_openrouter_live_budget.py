@@ -70,7 +70,7 @@ def test_reserve_then_outcome_lifecycle(tmp_path):
 
 
 def test_failed_outcome_halts_remaining_cases(tmp_path):
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     ledger.reserve("zen-nonstream")
     ledger.record_outcome("zen-nonstream", None, failed=True)
     assert ledger.runnable("zen-stream") is False
@@ -79,9 +79,9 @@ def test_failed_outcome_halts_remaining_cases(tmp_path):
 
 
 def test_reserved_without_outcome_blocks_reread(tmp_path):
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     ledger.reserve("zen-nonstream")
-    reopened = budget.RunLedger(tmp_path / "ledger.json")
+    reopened = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     assert reopened.runnable("zen-nonstream") is False
     assert reopened.runnable("zen-stream") is True
     with pytest.raises(ValueError):
@@ -89,7 +89,7 @@ def test_reserved_without_outcome_blocks_reread(tmp_path):
 
 
 def test_unknown_case_rejected(tmp_path):
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     with pytest.raises(ValueError):
         ledger.reserve("nope")
     with pytest.raises(ValueError):
@@ -113,34 +113,34 @@ def test_corrupt_ledger_rejected(tmp_path, mutation):
     data.update(mutation)
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
-        budget.RunLedger(path)
+        budget.RunLedger(path, initialize=True)
 
 
 def test_tampered_reserved_count_rejected(tmp_path):
     path = tmp_path / "ledger.json"
-    ledger = budget.RunLedger(path)
+    ledger = budget.RunLedger(path, initialize=True)
     ledger.reserve("zen-nonstream")
     data = json.loads(path.read_text())
     data["dispatches"] = 0
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
-        budget.RunLedger(path)
+        budget.RunLedger(path, initialize=True)
 
 
 def test_unhalt_rejected(tmp_path):
     path = tmp_path / "ledger.json"
-    ledger = budget.RunLedger(path)
+    ledger = budget.RunLedger(path, initialize=True)
     ledger.reserve("zen-nonstream")
     ledger.record_outcome("zen-nonstream", None, failed=True)
     data = json.loads(path.read_text())
     data["halted"] = False
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
-        budget.RunLedger(path)
+        budget.RunLedger(path, initialize=True)
 
 
 def test_five_case_budget_is_final(tmp_path):
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     for case_id in budget.CASE_IDS:
         ledger.reserve(case_id)
         ledger.record_outcome(case_id, 10, failed=False)
