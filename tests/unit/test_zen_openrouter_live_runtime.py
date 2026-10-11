@@ -570,4 +570,3 @@ def test_embedding_guard_evidence_is_isolated_per_instance(tmp_path):
     assert second.order_ok is False
     assert second.upstream_vectors == []
     assert second.upstream_vectors is not first.upstream_vectors
-
