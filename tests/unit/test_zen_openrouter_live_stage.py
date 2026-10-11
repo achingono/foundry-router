@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/quality"))
 import zen_openrouter_live_budget as budget
+import zen_openrouter_live_runtime as runtime
 import zen_openrouter_live_stage as stage
 
 
@@ -240,6 +241,40 @@ def test_result_mutations_rejected(tmp_path, mutation):
         stage.load_results(tmp_path / "missing.json", manifest_data, data=results)
 
 
+def test_over_cap_passed_result_rejected(tmp_path):
+    manifest_data = manifest()
+    results = {
+        "run": budget.RUN_ID,
+        "manifest": stage.manifest_fingerprint(manifest_data),
+        "attempts": [
+            {
+                "case_id": "zen-nonstream",
+                "kind": "zen-nonstream",
+                "stream": False,
+                "status": "passed",
+                "http_status": 200,
+                "provider_http_status": 200,
+                "dispatched": True,
+                "input_tokens": 10,
+                "output_tokens": 129,
+                "usage_matches": True,
+                "terminated_ok": True,
+                "settlement_matches": True,
+                "reservations_cleared": True,
+                "synthetic_debit_usd": 0.139,
+                "vector_count": 0,
+                "dimensions": 0,
+                "order_matches": False,
+                "vector_values_match": False,
+                "error_category": None,
+                "elapsed_seconds": 0.1,
+            }
+        ],
+    }
+    with pytest.raises(ValueError):
+        stage.load_results(tmp_path / "missing.json", manifest_data, data=results)
+
+
 def test_results_write_failure_blocks_without_replay(tmp_path):
     board = Switchboard()
     ro_dir = tmp_path / "ro"
@@ -280,6 +315,23 @@ def test_cli_refuses_without_execute(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["status"] == "refused"
 
 
+def test_cli_reports_ledger_dispatches_not_zero(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    ledger.reserve("zen-nonstream")
+    monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
+    assert stage.main() == 2
+    assert json.loads(capsys.readouterr().out)["provider_requests"] == 1
+
+
+def test_cli_reports_unknown_for_unreadable_ledger(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    (tmp_path / "ledger.json").write_text("corrupt")
+    monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
+    assert stage.main() == 2
+    assert json.loads(capsys.readouterr().out)["provider_requests"] == "unknown"
+
+
 def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest()))
@@ -291,16 +343,39 @@ def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
             "--execute",
             "--manifest",
             str(manifest_path),
-            "--ledger",
-            str(tmp_path / "ledger.json"),
-            "--results",
-            str(tmp_path / "results.json"),
         ],
     )
     monkeypatch.delenv("ZEN_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert stage.main() == 2
     assert json.loads(capsys.readouterr().out)["status"] == "refused_or_interrupted"
+
+
+def test_cli_rejects_path_overrides_and_binds_canonical_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys, "argv", ["zen_openrouter_live_stage.py", "--execute", "--ledger", "other.json"]
+    )
+    with pytest.raises(SystemExit):
+        stage.main()
+    captured = {}
+
+    def fake_execute(_manifest_data, **kwargs):
+        captured.update(kwargs)
+        return {"run": budget.RUN_ID, "attempts": []}
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest()))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["zen_openrouter_live_stage.py", "--execute", "--manifest", str(manifest_path)],
+    )
+    monkeypatch.setenv("ZEN_API_KEY", "synthetic-zen-credential")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-or-credential")
+    monkeypatch.setattr(stage, "execute_stage", fake_execute)
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    assert stage.main() == 0
+    assert "ledger_path" not in captured and "results_path" not in captured
 
 
 def test_deleted_ledger_after_pass_blocks_without_dispatch(tmp_path):
@@ -335,3 +410,18 @@ def test_ledger_outcome_without_matching_result_blocks_restart(tmp_path):
     with pytest.raises(ValueError):
         run_stage(tmp_path, board)
     assert board.calls == 5
+
+
+def test_setup_failure_blocks_without_ledger_outcome(tmp_path, monkeypatch):
+    board = Switchboard()
+
+    async def boom(**_kwargs):
+        raise runtime.VerificationSetupError("not ready")
+
+    monkeypatch.setattr(stage, "run_live_case", boom)
+    with pytest.raises(ValueError, match="setup failed before dispatch"):
+        run_stage(tmp_path, board)
+    assert board.calls == 0
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    assert ledger.dispatch_count() == 0
+    assert ledger.runnable("zen-nonstream") is True

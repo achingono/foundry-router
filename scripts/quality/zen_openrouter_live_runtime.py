@@ -14,10 +14,10 @@ import math
 import secrets
 import time
 from http import HTTPStatus
-from typing import Any, ClassVar
+from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from zen_openrouter_live_budget import (
     CASE_TIMEOUT_SECONDS,
     MAX_FRAME_BYTES,
@@ -26,9 +26,13 @@ from zen_openrouter_live_budget import (
     MAX_OUTPUT_TOKENS,
 )
 
+import foundry_router.auth as auth_module
+import foundry_router.backends as backends_module
+import foundry_router.config as config_module
 from foundry_router.api.adapters.google_schema import load_bounded_json
-from foundry_router.api.routes.openai import build_router
-from foundry_router.auth import verify_client_auth
+from foundry_router.api.routes.admin import build_router as build_admin_router
+from foundry_router.api.routes.health import build_router as build_health_router
+from foundry_router.api.routes.openai import build_router as build_openai_router
 from foundry_router.backends import AllowedBackendClient
 from foundry_router.config import Settings
 from foundry_router.credit import InMemoryCreditStore
@@ -177,6 +181,7 @@ class ObservationGuard(httpx.AsyncBaseTransport):
         self.provider_http_status: int | None = None
         self.usage: tuple[int, int] | None = None
         self.terminated_ok = False
+        self.truncated = False
         self.observed_bytes = 0
 
     def _expected_body(self) -> dict[str, Any]:
@@ -240,27 +245,32 @@ class ObservationGuard(httpx.AsyncBaseTransport):
         guard = self
 
         async def observed() -> Any:
-            buffer = bytearray()
-            frame = bytearray()
+            # Forward original bytes unchanged while observing a separate copy:
+            # the router must see exactly what the provider sent, including any
+            # truncated trailing frame, so acceptance can reject it.
+            pending = bytearray()
             try:
                 async for chunk in response.aiter_bytes():
                     guard.observed_bytes += len(chunk)
                     if guard.observed_bytes > MAX_OBSERVED_BYTES:
                         raise ValueError("Verification response bound exceeded")
-                    buffer.extend(chunk)
+                    pending.extend(chunk)
                     while True:
-                        event, rest = _split_frame(bytes(buffer))
+                        event, rest = _split_frame(bytes(pending))
                         if event is None:
                             break
-                        buffer = bytearray(rest)
-                        frame.extend(event)
-                        if len(frame) > MAX_FRAME_BYTES:
+                        pending = bytearray(rest)
+                        if len(event) > MAX_FRAME_BYTES:
                             raise ValueError("Verification frame bound exceeded")
-                        guard._capture_usage(frame, stream=True)
-                        frame = bytearray()
-                        yield event
-                if buffer.strip():
-                    guard._capture_usage(bytes(buffer), stream=True, final=True)
+                        guard._capture_usage(event, stream=True)
+                    # Bound only the incomplete remainder. A transport chunk may
+                    # contain many complete, individually bounded SSE frames.
+                    if len(pending) > MAX_FRAME_BYTES:
+                        raise ValueError("Verification frame bound exceeded")
+                    yield chunk
+                if pending.strip():
+                    guard.truncated = True
+                    guard.terminated_ok = False
             finally:
                 await response.aclose()
 
@@ -477,17 +487,109 @@ def _public_completed(public: dict[str, Any]) -> bool:
     )
 
 
-async def _poll_cleanup(credit: Any, backend_id: str = "v") -> bool:
+ADMIN_TIMEOUT_SECONDS = 5
+
+
+class VerificationSetupError(ValueError):
+    """Local readiness/auth/admin checks failed before any provider dispatch."""
+
+
+def _reconciliation_snapshot() -> dict[str, Any]:
+    return {
+        "last_attempt_utc": None,
+        "last_success_utc": None,
+        "last_error": None,
+        "last_updated_backends": 0,
+        "consecutive_failures": 0,
+        "stale": False,
+    }
+
+
+def _parse_admin_live(payload: Any) -> tuple[float, int, float] | None:
+    """Extract canonical credit-group evidence; strict shape, numerics only."""
+    try:
+        live = payload["credit_groups"]["v"]["live"]
+        remaining = live["estimated_remaining_usd"]
+        active = live["active_reservations"]
+        inflight = live["reserved_inflight_usd"]
+    except (KeyError, TypeError):
+        return None
+    if (
+        isinstance(remaining, bool)
+        or not isinstance(remaining, (int, float))
+        or not math.isfinite(float(remaining))
+        or float(remaining) < 0
+        or isinstance(active, bool)
+        or not isinstance(active, int)
+        or active < 0
+        or isinstance(inflight, bool)
+        or not isinstance(inflight, (int, float))
+        or not math.isfinite(float(inflight))
+        or float(inflight) < 0
+    ):
+        return None
+    return float(remaining), active, float(inflight)
+
+
+async def _get_admin_live(
+    client: httpx.AsyncClient, admin_key: str
+) -> tuple[float, int, float] | None:
+    try:
+        async with asyncio.timeout(ADMIN_TIMEOUT_SECONDS):
+            response = await client.get("/admin/status", headers={"x-admin-key": admin_key})
+    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError):
+        return None
+    if response.status_code != HTTPStatus.OK:
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    return _parse_admin_live(payload) if isinstance(payload, dict) else None
+
+
+async def _verify_ready_and_quiet(client: httpx.AsyncClient, admin_key: str) -> float:
+    """Exercise real liveness/readiness/auth/admin routes before any dispatch.
+
+    Returns the canonical opening balance. Raises VerificationSetupError when
+    the isolated configuration is not ready, authentication fails, the admin
+    evidence shape is wrong, or the account is not quiet.
+    """
+    try:
+        async with asyncio.timeout(ADMIN_TIMEOUT_SECONDS):
+            live = await client.get("/health/live")
+            ready = await client.get("/health/ready")
+    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError) as exc:
+        raise VerificationSetupError("Verification health checks failed") from exc
+    if live.status_code != HTTPStatus.OK:
+        raise VerificationSetupError("Verification liveness failed")
+    if ready.status_code != HTTPStatus.OK:
+        raise VerificationSetupError("Verification readiness failed")
+    try:
+        body = ready.json()
+    except ValueError as exc:
+        raise VerificationSetupError("Verification readiness failed") from exc
+    if not isinstance(body, dict) or body.get("ready") is not True:
+        raise VerificationSetupError("Verification readiness failed")
+    observed = await _get_admin_live(client, admin_key)
+    if observed is None:
+        raise VerificationSetupError("Verification admin evidence unavailable")
+    remaining, active, inflight = observed
+    if active != 0 or inflight != 0:
+        raise VerificationSetupError("Verification account is not quiet")
+    return remaining
+
+
+async def _poll_cleanup_admin(
+    client: httpx.AsyncClient, admin_key: str
+) -> tuple[bool, float | None]:
     for _ in range(CLEANUP_POLLS):
-        live = (
-            await credit.live_snapshot(
-                [backend_id], min_credit_reserve_usd=0, min_credit_reserve_percent=0
-            )
-        )[backend_id]
-        if live.active_reservations == 0 and live.reserved_inflight_usd == 0:
-            return True
+        observed = await _get_admin_live(client, admin_key)
+        if observed is not None and observed[1] == 0 and observed[2] == 0:
+            return True, observed[0]
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-    return False
+    closing = await _get_admin_live(client, admin_key)
+    return False, closing[0] if closing is not None else None
 
 
 async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed verification contract
@@ -532,6 +634,16 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         result["error_category"] = category
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         return result
+
+    def harvest() -> None:
+        # Copy known observer facts on every exit path: a transport exception
+        # after dispatch must never report an undispatched request.
+        result["dispatched"] = guard.dispatched
+        if guard.provider_http_status is not None:
+            result["provider_http_status"] = guard.provider_http_status
+        if guard.usage is not None:
+            result["input_tokens"], result["output_tokens"] = guard.usage
+        result["terminated_ok"] = guard.terminated_ok or result["terminated_ok"]
 
     if kind.startswith("zen-"):
         provider, endpoint, deployment = (
@@ -593,53 +705,83 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
     await credit.sync_from_settings(settings)
     quota = InMemoryRateLimitStore()
     await quota.sync_from_settings(settings)
+    health = InMemoryHealthStore()
+    metrics = InMemoryMetricsStore()
+    admin_key = settings.admin_api_keys[0]
     app = FastAPI()
 
-    async def authenticate(request: Request) -> str:
-        if request.headers.get("api-key") != caller_key:
-            raise HTTPException(status_code=401, detail="Invalid verification caller")
+    @app.middleware("http")
+    async def add_correlation_id(request: Any, call_next: Any) -> Any:
+        # Tracing state only, mirroring main.py; authentication stays real.
         request.state.correlation_id = case_id
         request.state.request_key = case_id
-        return caller_key
+        response = await call_next(request)
+        response.headers["x-request-id"] = case_id
+        return response
 
-    app.dependency_overrides[verify_client_auth] = authenticate
     app.include_router(
-        build_router(
+        build_openai_router(
             load_settings_fn=lambda: settings,
             get_backend_client_fn=lambda: backend,
             sleep_fn=asyncio.sleep,
-            health_store=InMemoryHealthStore(),
+            health_store=health,
             credit_store=credit,
-            metrics_store=InMemoryMetricsStore(),
+            metrics_store=metrics,
             rate_limit_store=quota,
             logger=QuietLogger(),
         )
     )
+    app.include_router(build_health_router(load_settings_fn=lambda: settings))
+    app.include_router(
+        build_admin_router(
+            load_settings_fn=lambda: settings,
+            health_store=health,
+            credit_store=credit,
+            metrics_store=metrics,
+            rate_limit_store=quota,
+            reconciliation_status_snapshot=_reconciliation_snapshot,
+        )
+    )
+    # Real routes with real authentication: point the global settings source
+    # at the isolated configuration (as integration tests do) without
+    # replacing any authentication logic. A passing run exercises client
+    # auth, readiness, and canonical admin evidence end to end.
+    patched = (
+        auth_module.load_settings,
+        backends_module.load_settings,
+        config_module.load_settings,
+    )
+    auth_module.load_settings = lambda: settings
+    backends_module.load_settings = lambda: settings
+    config_module.load_settings = lambda: settings
     try:
         try:
-            before = (
-                await credit.live_snapshot(
-                    ["v"], min_credit_reserve_usd=0, min_credit_reserve_percent=0
-                )
-            )["v"].estimated_remaining_usd
             async with asyncio.timeout(CASE_TIMEOUT_SECONDS):
                 async with httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=app), base_url="http://isolated.test"
                 ) as client:
+                    before = await _verify_ready_and_quiet(client, admin_key)
                     if kind == "openrouter-embeddings":
                         status, public = await _read_public_embeddings(client, caller_key)
                     else:
                         status, public = await _read_public_terminal(
                             client, caller_key=caller_key, stream=stream
                         )
+        except VerificationSetupError:
+            # No provider dispatch occurred; propagate so the stage blocks
+            # without recording a dispatch outcome.
+            raise
         except TimeoutError:
+            harvest()
             return finish(ERROR_UPSTREAM)
         except ValueError as exc:
+            harvest()
             # Guard rejections and bound breaches carry no secret content.
             if "bound exceeded" in str(exc):
                 return finish(ERROR_BOUND)
             return finish(ERROR_TRANSPORT)
         except (OSError, RuntimeError, httpx.HTTPError):
+            harvest()
             return finish(ERROR_UPSTREAM)
         result["http_status"] = int(status)
         result["provider_http_status"] = guard.provider_http_status
@@ -647,6 +789,15 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         if guard.usage is not None:
             result["input_tokens"], result["output_tokens"] = guard.usage
         result["terminated_ok"] = guard.terminated_ok or not stream
+        if (
+            guard.dispatched
+            and guard.provider_http_status is None
+            and guard.usage is None
+            and not public
+        ):
+            # Dispatched but nothing was observed: an ambiguous transport-level
+            # failure, not a completed comparison. Halt without claiming more.
+            return finish(ERROR_UPSTREAM)
         if kind == "openrouter-embeddings":
             accepted = _accept_embeddings(public, guard, result)
         else:
@@ -655,17 +806,15 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
             return finish(ERROR_ACCEPTANCE)
         try:
             async with asyncio.timeout(CLEANUP_POLLS * CLEANUP_INTERVAL_SECONDS + 5):
-                cleared = await _poll_cleanup(credit)
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://isolated.test"
+                ) as admin_client:
+                    cleared, after = await _poll_cleanup_admin(admin_client, admin_key)
         except TimeoutError:
             return finish(ERROR_CLEANUP)
         result["reservations_cleared"] = cleared
-        if not cleared:
+        if not cleared or after is None:
             return finish(ERROR_CLEANUP)
-        after = (
-            await credit.live_snapshot(
-                ["v"], min_credit_reserve_usd=0, min_credit_reserve_percent=0
-            )
-        )["v"].estimated_remaining_usd
         debit = before - after
         expected = (
             result["input_tokens"] * input_per_million
@@ -678,8 +827,12 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         result["status"] = "passed"
         return finish(None)
     finally:
+        (
+            auth_module.load_settings,
+            backends_module.load_settings,
+            config_module.load_settings,
+        ) = patched
         await backend.aclose()
-        app.dependency_overrides.clear()
 
 
 async def _read_public_embeddings(
@@ -708,6 +861,8 @@ def _accept_responses(
     if not _public_text_present(public):
         return False
     if guard.usage is None:
+        return False
+    if guard.usage[1] > MAX_OUTPUT_TOKENS:
         return False
     public_usage = public.get("usage")
     if not isinstance(public_usage, dict):
@@ -769,10 +924,31 @@ def _accept_embeddings(public: dict[str, Any], guard: Any, result: dict[str, Any
 class OpenRouterEmbeddingsGuard(ObservationGuard):
     expected_host = "openrouter.ai"
     expected_path = "/api/v1/embeddings"
-    vector_count = 0
-    dimensions = 0
-    order_ok = False
-    upstream_vectors: ClassVar[list[list[float]]] = []
+
+    def __init__(  # noqa: PLR0913 -- explicit owned verification inputs
+        self,
+        transport: httpx.AsyncBaseTransport,
+        *,
+        ledger: Any,
+        case_id: str,
+        credential: str,
+        deployment: str,
+        stream: bool = False,
+    ) -> None:
+        super().__init__(
+            transport,
+            ledger=ledger,
+            case_id=case_id,
+            credential=credential,
+            deployment=deployment,
+            stream=stream,
+        )
+        # Evidence belongs to one dispatch only; never inherit class-level
+        # state or share the mutable vector list between guard instances.
+        self.vector_count = 0
+        self.dimensions = 0
+        self.order_ok = False
+        self.upstream_vectors: list[list[float]] = []
 
     def _expected_body(self) -> dict[str, Any]:
         return {

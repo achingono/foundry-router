@@ -199,6 +199,14 @@ async def test_mismapped_usage_rejected(tmp_path):
     assert result["usage_matches"] is False
 
 
+async def test_over_cap_output_rejected(tmp_path):
+    body = zen_body()
+    body["usage"] = {"input_tokens": 10, "output_tokens": 129, "total_tokens": 139}
+    transport = ok_transport(json.dumps(body).encode())
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+
+
 async def test_missing_usage_rejected(tmp_path):
     transport = ok_transport(json.dumps(zen_body(usage=False)).encode())
     result = await run_case("zen-nonstream", transport, tmp_path)
@@ -211,6 +219,104 @@ async def test_truncated_stream_rejected(tmp_path):
     result = await run_case("zen-stream", transport, tmp_path)
     assert result["status"] == "failed"
     assert result["terminated_ok"] is False
+
+
+async def test_truncated_trailing_failure_rejected(tmp_path):
+    payload = (
+        b'data: {"type":"response.created"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+        b'data: {"type":"response.failed","response":{"status":"incompl'
+    )
+    transport = ok_transport(payload)
+    result = await run_case("zen-stream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["terminated_ok"] is False
+
+
+async def test_multiple_bounded_frames_in_one_chunk_are_accepted(tmp_path):
+    # The combined chunk exceeds MAX_FRAME_BYTES, but each SSE frame does not.
+    padding = b"x" * 140_000
+    frame = b'data: {"type":"response.created","padding":"' + padding + b'"}\n\n'
+    completed = (
+        b'data: {"type":"response.completed","response":{"status":"completed",'
+        b'"output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+    )
+    upstream = frame + frame + completed
+    assert len(frame) < runtime.MAX_FRAME_BYTES
+    assert len(frame + frame) > runtime.MAX_FRAME_BYTES
+
+    async def handler(_request):
+        async def chunks():
+            yield upstream
+
+        return httpx.Response(200, content=chunks())
+
+    guard = runtime.ZenGuard(
+        FakeUpstream(handler),
+        ledger=ledger(tmp_path),
+        case_id="zen-stream",
+        credential=SECRET,
+        deployment="gpt-5.4",
+        stream=True,
+    )
+    body = json.dumps(
+        {"model": "gpt-5.4", "input": runtime.PROMPT, "max_output_tokens": 128, "stream": True}
+    ).encode()
+    request = httpx.Request(
+        "POST",
+        "https://opencode.ai/zen/v1/responses",
+        content=body,
+        headers={"authorization": f"Bearer {SECRET}", "accept-encoding": "identity"},
+    )
+    response = await guard.handle_async_request(request)
+    forwarded = b""
+    async for chunk in response.aiter_bytes():
+        forwarded += chunk
+    assert forwarded == upstream
+    assert guard.terminated_ok is True
+    assert guard.truncated is False
+
+
+async def test_stream_bytes_forwarded_unchanged(tmp_path):
+    upstream = (
+        b'data: {"type":"response.created"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+    )
+    seen = []
+
+    async def handler(_request):
+        async def chunks():
+            for index in range(0, len(upstream), 7):
+                seen.append(upstream[index : index + 7])
+                yield upstream[index : index + 7]
+
+        return httpx.Response(200, content=chunks())
+
+    led = ledger(tmp_path)
+    guard = runtime.ZenGuard(
+        FakeUpstream(handler),
+        ledger=led,
+        case_id="zen-stream",
+        credential=SECRET,
+        deployment="gpt-5.4",
+        stream=True,
+    )
+    body = json.dumps(
+        {"model": "gpt-5.4", "input": runtime.PROMPT, "max_output_tokens": 128, "stream": True}
+    ).encode()
+    request = httpx.Request(
+        "POST",
+        "https://opencode.ai/zen/v1/responses",
+        content=body,
+        headers={"authorization": f"Bearer {SECRET}", "accept-encoding": "identity"},
+    )
+    response = await guard.handle_async_request(request)
+    forwarded = b""
+    async for chunk in response.aiter_bytes():
+        forwarded += chunk
+    assert forwarded == upstream
+    assert guard.terminated_ok is True
+    assert guard.truncated is False
 
 
 async def test_embeddings_order_error_rejected(tmp_path):
@@ -232,6 +338,22 @@ async def test_bound_breach_rejected(tmp_path):
     result = await run_case("zen-nonstream", transport, tmp_path)
     assert result["status"] == "failed"
     assert result["error_category"] == runtime.ERROR_BOUND
+    assert result["dispatched"] is True
+
+
+async def test_timeout_after_dispatch_reports_facts(tmp_path, monkeypatch):
+    async def slow(_request):
+        import asyncio as aio
+
+        await aio.sleep(5)
+        return httpx.Response(200, content=json.dumps(zen_body()).encode())
+
+    transport = FakeUpstream(slow)
+    monkeypatch.setattr(runtime, "CASE_TIMEOUT_SECONDS", 0.05)
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["error_category"] == runtime.ERROR_UPSTREAM
+    assert result["dispatched"] is True
 
 
 async def test_secret_bearing_errors_redacted(tmp_path):
@@ -294,3 +416,157 @@ async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
     assert runtime._accept_embeddings(public, guard, acceptance) is False
     assert acceptance["order_matches"] is True
     assert acceptance["vector_values_match"] is False
+
+
+class StubResponse:
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+class StubClient:
+    def __init__(self, routes):
+        self.routes = routes
+
+    async def get(self, path, headers=None):
+        _ = headers
+        status, payload = self.routes[path]
+        return StubResponse(status, payload)
+
+
+def admin_payload(remaining=1000.0, active=0, inflight=0.0):
+    return {
+        "credit_groups": {
+            "v": {
+                "live": {
+                    "estimated_remaining_usd": remaining,
+                    "active_reservations": active,
+                    "reserved_inflight_usd": inflight,
+                }
+            }
+        }
+    }
+
+
+def ready_payload(ready=True):
+    return {"ready": ready, "checks": {}}
+
+
+async def test_ready_and_quiet_returns_canonical_balance():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, admin_payload(999.5)),
+        }
+    )
+    assert await runtime._verify_ready_and_quiet(client, "admin-key") == 999.5
+
+
+async def test_readiness_failure_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (503, ready_payload(False)),
+            "/admin/status": (200, admin_payload()),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_busy_account_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, admin_payload(active=1)),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_malformed_admin_evidence_blocks():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, {"credit_groups": {}}),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_admin_auth_failure_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (401, {"detail": "Invalid admin API key"}),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "wrong-key")
+
+
+async def test_readiness_failure_blocks_live_dispatch_end_to_end(tmp_path, monkeypatch):
+    transport = ok_transport(b"{}")
+    real_settings = runtime.verification_settings
+
+    def unready_settings(**kwargs):
+        return real_settings(**kwargs).model_copy(update={"pricing": {}})
+
+    monkeypatch.setattr(runtime, "verification_settings", unready_settings)
+    led = ledger(tmp_path)
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime.run_live_case(
+            kind="zen-nonstream",
+            credential=SECRET,
+            ledger=led,
+            case_id="zen-nonstream",
+            transport=transport,
+            zen_model="gpt-5.4",
+            openrouter_model="organization/model",
+            embedding_model="organization/embed",
+            input_per_million=1000.0,
+            output_per_million=1000.0,
+        )
+    assert transport.calls == 0
+    assert led.runnable("zen-nonstream") is True
+
+
+def test_embedding_guard_evidence_is_isolated_per_instance(tmp_path):
+    transport = ok_transport(b"{}")
+    run_ledger = ledger(tmp_path)
+    first = runtime.OpenRouterEmbeddingsGuard(
+        transport,
+        ledger=run_ledger,
+        case_id="first",
+        credential=SECRET,
+        deployment="organization/embed",
+    )
+    second = runtime.OpenRouterEmbeddingsGuard(
+        transport,
+        ledger=run_ledger,
+        case_id="second",
+        credential=SECRET,
+        deployment="organization/embed",
+    )
+
+    first.vector_count = runtime.EMBEDDING_VECTOR_COUNT
+    first.dimensions = 3
+    first.order_ok = True
+    first.upstream_vectors.append([0.1, 0.2, 0.3])
+
+    assert second.vector_count == 0
+    assert second.dimensions == 0
+    assert second.order_ok is False
+    assert second.upstream_vectors == []
+    assert second.upstream_vectors is not first.upstream_vectors

@@ -148,6 +148,11 @@ class RunLedger:
                 case["outcome"] = "passed"
             write_atomic(self.path, data)
 
+    def dispatch_count(self) -> int:
+        """Conservatively reserved dispatches, including ambiguous attempts."""
+        with locked(self.path):
+            return int(self._read()["dispatches"])
+
     def runnable(self, case_id: str) -> bool:
         """A case may dispatch only when unreserved and the run is unhalted."""
         with locked(self.path):

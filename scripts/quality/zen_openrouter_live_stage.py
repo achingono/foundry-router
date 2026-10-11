@@ -20,6 +20,7 @@ from zen_openrouter_live_budget import (
     CASE_IDS,
     CASE_TIMEOUT_SECONDS,
     MAX_LEDGER_BYTES,
+    MAX_OUTPUT_TOKENS,
     RUN_ID,
     RunLedger,
     locked,
@@ -32,6 +33,7 @@ from zen_openrouter_live_runtime import (
     ERROR_CLEANUP,
     ERROR_TRANSPORT,
     ERROR_UPSTREAM,
+    VerificationSetupError,
     run_live_case,
 )
 
@@ -169,9 +171,22 @@ def validate_result(result: Any) -> None:
         or result["error_category"] is not None
         or result["input_tokens"] is None
         or result["output_tokens"] is None
+        or result["output_tokens"] > MAX_OUTPUT_TOKENS
         or (result["case_id"] == "openrouter-embeddings" and not result["vector_values_match"])
     ):
         raise ValueError("Invalid stage success evidence")
+
+
+def _dispatch_report() -> Any:
+    """Conservatively reserved dispatches, or "unknown" when unreadable."""
+    try:
+        return RunLedger(STAGE_DIR / "ledger.json").dispatch_count()
+    except (OSError, ValueError):
+        return "unknown"
+
+
+def _interrupted_report() -> str:
+    return json.dumps({"status": "refused_or_interrupted", "provider_requests": _dispatch_report()})
 
 
 def _credential_from_env(name: str) -> str:
@@ -181,7 +196,7 @@ def _credential_from_env(name: str) -> str:
     return value
 
 
-def execute_stage(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract and fixture injection
+def execute_stage(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase contract
     manifest: dict[str, Any],
     *,
     stage_dir: Path = STAGE_DIR,
@@ -241,6 +256,10 @@ def execute_stage(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract and f
                     ledger,
                     factory(),
                 )
+            except VerificationSetupError as exc:
+                # No provider dispatch occurred; block without recording a
+                # dispatch outcome so a later run may proceed after setup repair.
+                raise ValueError("Verification setup failed before dispatch") from exc
             except Exception:
                 ledger.record_outcome(case_id, None, failed=True)
                 raise
@@ -284,34 +303,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--manifest", type=Path, default=None)
-    parser.add_argument("--ledger", type=Path, default=None)
-    parser.add_argument("--results", type=Path, default=None)
     parser.add_argument("--zen-key-env", default="ZEN_API_KEY")
     parser.add_argument("--openrouter-key-env", default="OPENROUTER_API_KEY")
     args = parser.parse_args()
     if not args.execute or args.manifest is None:
-        print(json.dumps({"status": "refused", "provider_requests": 0}))
+        print(json.dumps({"status": "refused", "provider_requests": _dispatch_report()}))
         return 2
     logging.disable(logging.CRITICAL)
     try:
         raw_manifest = args.manifest.read_text()
     except OSError:
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     if len(raw_manifest.encode("utf-8")) > MAX_LEDGER_BYTES:
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     try:
         manifest = load_bounded_json(raw_manifest, max_bytes=MAX_LEDGER_BYTES)
+        # Live execution is bound to the canonical run ledger and results file;
+        # path overrides exist only as execute_stage parameters for offline tests.
         results = execute_stage(
             manifest,
-            ledger_path=args.ledger,
-            results_path=args.results,
             zen_credential=_credential_from_env(args.zen_key_env),
             openrouter_credential=_credential_from_env(args.openrouter_key_env),
         )
     except (OSError, ValueError, RuntimeError):
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     summary = {
         case: {
