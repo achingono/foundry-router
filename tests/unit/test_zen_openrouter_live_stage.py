@@ -689,3 +689,60 @@ def test_paid_runs_pass_on_canonical_files(tmp_path, filename, ledger_name, resu
     )
     assert len(rerun["attempts"]) == 2
     assert board.calls == 2
+
+
+@pytest.mark.parametrize(
+    "filename,model_field,model_override",
+    [
+        ("manifest.zen-paid.json", "zen_model", "unapproved-model"),
+        ("manifest.or-openai.json", "openrouter_model", "unapproved/model"),
+        ("manifest.or-anthropic.json", "openrouter_model", "unapproved/model"),
+    ],
+)
+def test_substituted_model_refused_without_dispatch(tmp_path, filename, model_field, model_override):
+    manifest_path = (
+        Path(__file__).resolve().parents[2]
+        / f"docs/plans/zen-openrouter-live-verification/{filename}"
+    )
+    manifest_data = json.loads(manifest_path.read_text())
+    manifest_data[model_field] = model_override
+    board = Switchboard()
+    with pytest.raises(ValueError):
+        stage.execute_stage(
+            manifest_data,
+            stage_dir=tmp_path,
+            ledger_path=tmp_path / "ledger.json",
+            results_path=tmp_path / "results.json",
+            zen_credential="synthetic-zen-credential",
+            openrouter_credential="synthetic-or-credential",
+            transport_factory=lambda: board,
+        )
+    assert board.calls == 0
+    assert not (tmp_path / "ledger.json").exists()
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["manifest.zen-paid.json", "manifest.or-openai.json", "manifest.or-anthropic.json"],
+)
+def test_substituted_prices_refused_without_dispatch(tmp_path, filename):
+    manifest_path = (
+        Path(__file__).resolve().parents[2]
+        / f"docs/plans/zen-openrouter-live-verification/{filename}"
+    )
+    manifest_data = json.loads(manifest_path.read_text())
+    manifest_data["input_per_million"] = 2.0
+    manifest_data["output_per_million"] = 3.0
+    board = Switchboard()
+    with pytest.raises(ValueError):
+        stage.execute_stage(
+            manifest_data,
+            stage_dir=tmp_path,
+            ledger_path=tmp_path / "ledger.json",
+            results_path=tmp_path / "results.json",
+            zen_credential="synthetic-zen-credential",
+            openrouter_credential="synthetic-or-credential",
+            transport_factory=lambda: board,
+        )
+    assert board.calls == 0
+    assert not (tmp_path / "ledger.json").exists()

@@ -54,6 +54,38 @@ RUN_CASES: dict[str, tuple[str, ...]] = {
     RUN_ID_OR_ANTHROPIC: ("openrouter-nonstream", "openrouter-stream"),
 }
 
+# Immutable reviewed model/price authorization for paid runs. Paid manifests
+# must match their run's spec exactly before ledger initialization or egress;
+# substitution is refused even when the replacement shape is otherwise valid.
+# Free runs keep shape validation (named-iff-listed models, positive finite
+# prices); see the amendment for the residual smuggling limitation.
+RUN_SPECS: dict[str, dict[str, Any]] = {
+    RUN_ID_ZEN_PAID: {
+        "cases": ["zen-nonstream", "zen-stream"],
+        "zen_model": "gpt-5.4-mini",
+        "openrouter_model": "",
+        "openrouter_embedding_model": "",
+        "input_per_million": 0.75,
+        "output_per_million": 4.5,
+    },
+    RUN_ID_OR_OPENAI: {
+        "cases": ["openrouter-nonstream", "openrouter-stream"],
+        "zen_model": "",
+        "openrouter_model": "openai/gpt-4o-mini",
+        "openrouter_embedding_model": "",
+        "input_per_million": 0.15,
+        "output_per_million": 0.6,
+    },
+    RUN_ID_OR_ANTHROPIC: {
+        "cases": ["openrouter-nonstream", "openrouter-stream"],
+        "zen_model": "",
+        "openrouter_model": "anthropic/claude-haiku-4.5",
+        "openrouter_embedding_model": "",
+        "input_per_million": 1.0,
+        "output_per_million": 5.0,
+    },
+}
+
 
 def _initial_ledger(run: str) -> dict[str, Any]:
     return {
@@ -202,19 +234,41 @@ def _model_field(manifest: Any, cases: list[str], case_id: str, field: str) -> b
     return value == ""
 
 
+def _shapes_free_models(manifest: Any, cases: list[str]) -> bool:
+    """Free runs name a model exactly when its case is listed, never otherwise."""
+    return (
+        _model_field(manifest, cases, "zen-nonstream", "zen_model")
+        and _model_field(manifest, cases, "openrouter-nonstream", "openrouter_model")
+        and _model_field(manifest, cases, "openrouter-embeddings", "openrouter_embedding_model")
+    )
+
+
+def _binds_paid_spec(manifest: Any, run: str) -> bool:
+    """Paid runs match their immutable reviewed spec exactly."""
+    spec = RUN_SPECS.get(run)
+    if spec is None:
+        return False
+    return (
+        manifest.get("zen_model") == spec["zen_model"]
+        and manifest.get("openrouter_model") == spec["openrouter_model"]
+        and manifest.get("openrouter_embedding_model") == spec["openrouter_embedding_model"]
+        and manifest.get("input_per_million") == spec["input_per_million"]
+        and manifest.get("output_per_million") == spec["output_per_million"]
+    )
+
+
 def validate_manifest(manifest: Any) -> dict[str, Any]:
     """Bind exact models, prices, bounds and listed cases to an authorized run."""
     run = manifest.get("run") if isinstance(manifest, dict) else None
     cases = manifest.get("cases") if isinstance(manifest, dict) else None
+    paid = run in RUN_SPECS
     if (
         not isinstance(manifest, dict)
         or manifest.get("version") != 1
         or run not in RUN_CASES
         or not _valid_case_prefix(run, cases)
-        or not _model_field(manifest, cases, "zen-nonstream", "zen_model")
-        or not _model_field(manifest, cases, "openrouter-nonstream", "openrouter_model")
-        or not _model_field(manifest, cases, "openrouter-embeddings", "openrouter_embedding_model")
-        or not isinstance(manifest.get("input_per_million"), (int, float))
+        or (paid and not _binds_paid_spec(manifest, run))
+        or (not paid and not _shapes_free_models(manifest, cases))
         or not isinstance(manifest.get("output_per_million"), (int, float))
         or isinstance(manifest.get("input_per_million"), bool)
         or isinstance(manifest.get("output_per_million"), bool)

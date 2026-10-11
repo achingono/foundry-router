@@ -1,22 +1,31 @@
 # Amendment: standard paid-model runs
 
-Date: 2026-10-11. Status: proposed, pending independent review. No live
-dispatches under this amendment yet.
+Date: 2026-10-11. Status: **Planned**; independent review complete, changes
+required before live execution. No live dispatches under this amendment yet.
+
+[Commit review](review-paid-models-6d5a799.md) found one Major authorization-binding
+gap and one pricing-evidence Suggestion. Both remain open; the review does not
+clear this amendment for live execution.
 
 ## Background
 
 Run A halted on Zen 403 (account/entitlement-scoped, no spend). Run B halted
 on a free-model envelope failing strict translation (provider 200, public 502).
 The operator directed standard paid models next: Zen GPT plus OpenRouter
-OpenAI and Anthropic chat models, with real list prices for local settlement
-accounting.
+OpenAI and Anthropic chat models, with configured list-price estimates for
+local settlement accounting.
 
 ## Change
 
 Three authorized runs, each a nonstream/streaming pair on one exact paid model
-with its real per-million list prices:
+with configured per-million list-price estimates for local settlement
+accounting. Price sources checked October 2026: Zen pricing table at
+`https://opencode.ai/docs/zen/` (fetched 2026-10-09) and the OpenRouter model
+catalog at `https://openrouter.ai/api/v1/models` (fetched 2026-10-11). These
+are estimates for reconciling local credit deltas, not measured provider
+spend; provider billing remains explicitly unverified.
 
-| Run | Manifest | Model | Prices in/out per M |
+| Run | Manifest | Model | Configured $/M in/out (estimates) |
 | --- | --- | --- | --- |
 | `...-zen-paid` | [manifest.zen-paid.json](manifest.zen-paid.json) | `gpt-5.4-mini` (Zen) | $0.75 / $4.50 |
 | `...-openrouter-openai` | [manifest.or-openai.json](manifest.or-openai.json) | `openai/gpt-4o-mini` | $0.15 / $0.60 |
@@ -25,8 +34,9 @@ with its real per-million list prices:
 Each run owns separate canonical durable files and reuses every guarantee
 unchanged (reserve-before-egress, halt on failure, reconciliation, independent
 observation, redacted evidence, out-of-band credentials). Unlisted models stay
-off record. Total real spend across six dispatches is a fraction of a cent at
-verification token counts.
+off record. Estimated local cost across six dispatches is a fraction of a cent
+at verification token counts; actual provider billing is unverified and no
+spend ceiling is claimed here.
 
 ## Rationale
 
@@ -35,9 +45,23 @@ Standard paid models with textbook envelope shapes isolate provider-shape risk
 translation path live, while Gemma/Muse diagnosis proceeds separately without
 blocking standard-model evidence.
 
+## Known limitation
+
+Exact model/price binding applies to paid runs, where substitution could spend
+a run's budget on an unapproved model. Free runs keep shape validation
+(named-iff-listed models, positive finite prices) because no operator-approved
+embedding model exists to complete an exact free specification, and
+stage-level embeddings machinery tests require an executable embeddings case.
+A hand-edited free manifest could therefore name a paid model. Mitigations:
+run manifests are committed and pinned by offline tests, the CLI binds live
+execution to canonical files, every dispatch is ledger-reserved with halt on
+failure, and live execution always requires explicit operator credential export
+per invocation. Accepting this residual is the reviewer's call.
+
 ## Exit criteria delta
 
-- [ ] Independent review of this amendment and its implementation.
+- [x] Independent review of this amendment and its implementation recorded in the [commit review](review-paid-models-6d5a799.md).
+- [ ] PM-1 model/price binding fixed and independently re-reviewed before live execution.
 - [ ] All three manifests bound to operator-approved models/prices (committed).
 - [ ] Each run passes both cases with usage/settlement evidence and zero
       retained reservations, or its halt is recorded with no further egress.
