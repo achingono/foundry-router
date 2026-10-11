@@ -1,7 +1,11 @@
 # Amendment: bounded OpenRouter direct probes
 
-Date: 2026-10-11. Status: proposed, pending independent review. No live
-dispatches under this amendment yet.
+Date: 2026-10-11. Status: **Planned**; independent review complete with changes
+required before live execution. No live dispatches under this amendment yet.
+
+[Independent commit review](review-direct-probe-607da09.md) identified three open
+Major findings: interruption-safe dispatch accounting, response bounds before
+buffering, and validation/redaction of structural metadata.
 
 ## Background
 
@@ -41,7 +45,8 @@ touching halted router runs.
 
 ## Exit criteria delta
 
-- [ ] Independent review of this amendment and the probe script.
+- [x] Independent review of this amendment and the probe script recorded in the [review](review-direct-probe-607da09.md).
+- [ ] DP-1, DP-2 and DP-3 resolved and independently re-reviewed before any live probe.
 - [ ] Each model probed at most once with structural evidence and no content,
       secret, or credential bytes recorded.
 - [ ] Diagnosis recorded: adapter strictness vs provider contract, with any

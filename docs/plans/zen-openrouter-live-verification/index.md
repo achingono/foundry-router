@@ -16,7 +16,8 @@ Live upstream compatibility is not established by the mocked implementation in [
 - [Evidence](evidence.md)
 - [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
-- [Direct-probe amendment (proposed, pending review)](amendment-direct-probe.md)
+- [Direct-probe amendment (Planned; review requires changes)](amendment-direct-probe.md)
+- [Independent direct-probe commit review](review-direct-probe-607da09.md)
 - [Independent paid-models commit review](review-paid-models-6d5a799.md)
 - [Independent plan review](review.md)
 
