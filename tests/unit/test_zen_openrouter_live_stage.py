@@ -169,7 +169,7 @@ def test_stream_requires_passed_nonstream_within_stage(tmp_path):
 
 def test_reserved_without_outcome_blocks_execution(tmp_path):
     board = Switchboard()
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     ledger.reserve("zen-nonstream")
     with pytest.raises(ValueError):
         run_stage(tmp_path, board)
@@ -261,7 +261,7 @@ def test_results_write_failure_blocks_without_replay(tmp_path):
         ro_dir.chmod(0o700)
     # The first case may have dispatched once; terminal completion cannot reset
     # the run, and the failed write must not permit a replay.
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     assert ledger._read()["dispatches"] == 1
     with pytest.raises(ValueError):
         run_stage(tmp_path, board)
