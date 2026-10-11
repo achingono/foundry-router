@@ -286,6 +286,22 @@ async def test_bound_breach_rejected(tmp_path):
     result = await run_case("zen-nonstream", transport, tmp_path)
     assert result["status"] == "failed"
     assert result["error_category"] == runtime.ERROR_BOUND
+    assert result["dispatched"] is True
+
+
+async def test_timeout_after_dispatch_reports_facts(tmp_path, monkeypatch):
+    async def slow(_request):
+        import asyncio as aio
+
+        await aio.sleep(5)
+        return httpx.Response(200, content=json.dumps(zen_body()).encode())
+
+    transport = FakeUpstream(slow)
+    monkeypatch.setattr(runtime, "CASE_TIMEOUT_SECONDS", 0.05)
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["error_category"] == runtime.ERROR_UPSTREAM
+    assert result["dispatched"] is True
 
 
 async def test_secret_bearing_errors_redacted(tmp_path):

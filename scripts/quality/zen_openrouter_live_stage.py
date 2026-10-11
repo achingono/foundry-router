@@ -174,6 +174,18 @@ def validate_result(result: Any) -> None:
         raise ValueError("Invalid stage success evidence")
 
 
+def _dispatch_report() -> Any:
+    """Conservatively reserved dispatches, or "unknown" when unreadable."""
+    try:
+        return RunLedger(STAGE_DIR / "ledger.json").dispatch_count()
+    except (OSError, ValueError):
+        return "unknown"
+
+
+def _interrupted_report() -> str:
+    return json.dumps({"status": "refused_or_interrupted", "provider_requests": _dispatch_report()})
+
+
 def _credential_from_env(name: str) -> str:
     value = os.environ.get(name, "")
     if not value.strip():
@@ -288,16 +300,16 @@ def main() -> int:
     parser.add_argument("--openrouter-key-env", default="OPENROUTER_API_KEY")
     args = parser.parse_args()
     if not args.execute or args.manifest is None:
-        print(json.dumps({"status": "refused", "provider_requests": 0}))
+        print(json.dumps({"status": "refused", "provider_requests": _dispatch_report()}))
         return 2
     logging.disable(logging.CRITICAL)
     try:
         raw_manifest = args.manifest.read_text()
     except OSError:
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     if len(raw_manifest.encode("utf-8")) > MAX_LEDGER_BYTES:
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     try:
         manifest = load_bounded_json(raw_manifest, max_bytes=MAX_LEDGER_BYTES)
@@ -309,7 +321,7 @@ def main() -> int:
             openrouter_credential=_credential_from_env(args.openrouter_key_env),
         )
     except (OSError, ValueError, RuntimeError):
-        print(json.dumps({"status": "refused_or_interrupted", "provider_requests": 0}))
+        print(_interrupted_report())
         return 2
     summary = {
         case: {

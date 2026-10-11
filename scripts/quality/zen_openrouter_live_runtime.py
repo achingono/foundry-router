@@ -537,6 +537,16 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         result["elapsed_seconds"] = round(time.monotonic() - started, 3)
         return result
 
+    def harvest() -> None:
+        # Copy known observer facts on every exit path: a transport exception
+        # after dispatch must never report an undispatched request.
+        result["dispatched"] = guard.dispatched
+        if guard.provider_http_status is not None:
+            result["provider_http_status"] = guard.provider_http_status
+        if guard.usage is not None:
+            result["input_tokens"], result["output_tokens"] = guard.usage
+        result["terminated_ok"] = guard.terminated_ok or result["terminated_ok"]
+
     if kind.startswith("zen-"):
         provider, endpoint, deployment = (
             "opencode_zen",
@@ -637,13 +647,16 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
                             client, caller_key=caller_key, stream=stream
                         )
         except TimeoutError:
+            harvest()
             return finish(ERROR_UPSTREAM)
         except ValueError as exc:
+            harvest()
             # Guard rejections and bound breaches carry no secret content.
             if "bound exceeded" in str(exc):
                 return finish(ERROR_BOUND)
             return finish(ERROR_TRANSPORT)
         except (OSError, RuntimeError, httpx.HTTPError):
+            harvest()
             return finish(ERROR_UPSTREAM)
         result["http_status"] = int(status)
         result["provider_http_status"] = guard.provider_http_status
@@ -651,6 +664,15 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         if guard.usage is not None:
             result["input_tokens"], result["output_tokens"] = guard.usage
         result["terminated_ok"] = guard.terminated_ok or not stream
+        if (
+            guard.dispatched
+            and guard.provider_http_status is None
+            and guard.usage is None
+            and not public
+        ):
+            # Dispatched but nothing was observed: an ambiguous transport-level
+            # failure, not a completed comparison. Halt without claiming more.
+            return finish(ERROR_UPSTREAM)
         if kind == "openrouter-embeddings":
             accepted = _accept_embeddings(public, guard, result)
         else:

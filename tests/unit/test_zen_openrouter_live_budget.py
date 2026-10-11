@@ -139,6 +139,13 @@ def test_unhalt_rejected(tmp_path):
         budget.RunLedger(path, initialize=True)
 
 
+def test_dispatch_count_reports_reserved_attempts(tmp_path):
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    assert ledger.dispatch_count() == 0
+    ledger.reserve("zen-nonstream")
+    assert ledger.dispatch_count() == 1
+
+
 def test_five_case_budget_is_final(tmp_path):
     ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     for case_id in budget.CASE_IDS:

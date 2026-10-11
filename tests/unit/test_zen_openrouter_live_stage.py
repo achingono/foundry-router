@@ -280,6 +280,23 @@ def test_cli_refuses_without_execute(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["status"] == "refused"
 
 
+def test_cli_reports_ledger_dispatches_not_zero(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    ledger.reserve("zen-nonstream")
+    monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
+    assert stage.main() == 2
+    assert json.loads(capsys.readouterr().out)["provider_requests"] == 1
+
+
+def test_cli_reports_unknown_for_unreadable_ledger(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    (tmp_path / "ledger.json").write_text("corrupt")
+    monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
+    assert stage.main() == 2
+    assert json.loads(capsys.readouterr().out)["provider_requests"] == "unknown"
+
+
 def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest()))
