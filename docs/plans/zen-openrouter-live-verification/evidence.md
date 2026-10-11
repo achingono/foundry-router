@@ -24,6 +24,9 @@ pending. This record does not establish live compatibility.
 | Follow-up verification | Reviewer report, no files changed | Both follow-up Majors verified fixed; all previously reported blocking findings resolved; 85 harness tests passed; tree and whitespace clean; full suite not rerun; no live requests sent |
 | Live execution Stages 1–2 (2026-10-11) | Local-only ledger/results; numeric summary below | 1 dispatch, then persistent halt. No spend, no usage observed, no further egress |
 | `zen-nonstream` | muse-spark-1.3-contributor-free | Public 403 / provider 403 in 0.329s; no usage; $0.00 debit; run halted per contract |
-| Remaining cases | All unreserved | `zen-stream`, `openrouter-nonstream`, `openrouter-stream` never dispatched |
-| Pending scope | Operator decision required | Key reaches `/models` (41-model authed catalog) but `/responses` refuses with 403: likely workspace billing/enablement or key scope. No retry, probe, or model substitution without a reviewed amendment |
+| Remaining Run A cases | All unreserved | `zen-stream`, `openrouter-nonstream`, `openrouter-stream` never dispatched |
+| Live execution Run B (2026-10-11) | Local-only ledger/results; numeric summary below | 1 dispatch, then persistent halt. Free model, no real spend |
+| `openrouter-nonstream` | google/gemma-4-26b-a4b-it:free | Public 502 / provider 200 in 1.257s; independently observed usage 7 in / 1 out, public usage absent; $0.00 debit; run halted per contract |
+| `openrouter-stream` | Unreserved | Never dispatched |
+| Pending scope | Operator decision required | Zen: key reaches `/models` (41-model authed catalog) but `/responses` refuses with 403: likely workspace billing/enablement or key scope. OpenRouter: provider-200 envelope carries valid usage but fails strict translation (likely output-shape mismatch on this free model); public usage/settlement unverified. No retry, probe, or model substitution without a reviewed amendment |
 | Live stages | None | No requests sent; no credentials retrieved; no production changes |
