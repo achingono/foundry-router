@@ -10,13 +10,20 @@ review was performed in the current session after implementation; the reviewer
 made only the review/status documentation edits. Previous paid-run clearance
 does not cover this new direct-provider execution path.
 
-## Disposition
+## Current disposition
 
-**Changes required before direct live probes.** Three Major findings remain
-open; no Critical findings were identified. All fourteen existing tests pass,
-but the additional offline reproductions below demonstrate that the no-replay,
-response-memory-bound and structural-redaction guarantees are incomplete.
-No live request or credential retrieval was performed in this review.
+**Changes still required before direct live probes.** Follow-up review of
+`7f0c207e4418b6998401c27405bfa111b2d9e9e0` closes DP-2. DP-1 and DP-3 are
+partially addressed and remain open for the specific gaps below. No Critical
+findings were identified. All 22 focused tests pass. No live request or credential
+retrieval was performed by this reviewer.
+
+## Initial disposition at 607da09
+
+Three Major findings were open. All fourteen original tests passed, but the
+additional offline reproductions demonstrated incomplete no-replay,
+response-memory-bound and structural-redaction guarantees. The original
+findings below are retained as history; follow-up statuses supersede them.
 
 ### DP-1 — Major: Persist dispatch intent before network execution
 
@@ -46,7 +53,7 @@ No live request or credential retrieval was performed in this review.
   and rerunning the same temporary directory dispatched all three requests:
   four total calls, with the first model sent twice. A separate fake transport
   timeout made one call but returned `dispatched: false`.
-- **Status:** Open; no implementation changes made by the reviewer.
+- **Follow-up status:** Partially addressed in `7f0c207`; DP-1 remains open for lost initialized state and pre-header timeout accounting.
 
 ### DP-2 — Major: Enforce response bounds while reading from transport
 
@@ -71,7 +78,7 @@ No live request or credential retrieval was performed in this review.
   a fake response generator produced all ten 16-byte chunks (160 bytes) before
   `response_bound_exceeded` was returned. The configured bound was not enforced
   during transport consumption.
-- **Status:** Open; no implementation changes made by the reviewer.
+- **Follow-up status:** Closed by independent review of `7f0c207`; streaming bounds and encoding rejection verified.
 
 ### DP-3 — Major: Bound and validate structural metadata before persistence/display
 
@@ -99,7 +106,7 @@ No live request or credential retrieval was performed in this review.
 - **Offline reproduction:** Setting `finish_reason` to a synthetic sensitive
   marker caused `classify_envelope` to return that exact marker, which survived
   JSON serialization. The CLI reads and prints that field without sanitization.
-- **Status:** Open; no implementation changes made by the reviewer.
+- **Follow-up status:** Partially addressed in `7f0c207`; DP-3 remains open for outer-envelope schema and total serialized-size validation.
 
 ## Verification and review limits
 
@@ -120,3 +127,74 @@ No live request or credential retrieval was performed in this review.
   documentation-only review.
 - Plan relative links, whitespace and the final documentation diff were checked.
   No runtime code, tests, credentials or production configuration changed.
+
+## Follow-up review of 7f0c207
+
+Date: 2026-10-11. Reviewed commit:
+`7f0c207e4418b6998401c27405bfa111b2d9e9e0`. The same independent reviewer
+checked the fixes and new tests; no probe implementation changes were made.
+
+### DP-1 — Major remains open: lost state and pre-header timeouts
+
+The new pre-egress reservation correctly blocks replay after an outcome write
+failure while the results file remains present. That part is verified by the
+new tests. Two previously requested lifecycle checks are still missing:
+
+- `load_probe_results` treats every missing file as a fresh run. There is no
+  durable initialization identity separate from `results-probe.json`. In a
+  temporary directory, completing three fake probes, deleting that file and
+  rerunning sent all three again: six dispatches for the same fixed probe set.
+  Require explicit one-time initialization with a separate durable identity (or
+  equivalent existing-state guard); a missing initialized record must refuse.
+- `run_probe` still assigns `dispatched = True` only after response headers
+  arrive. An upstream can accept the POST and then fail or time out before
+  headers. A fake transport that was entered once and raised `ReadTimeout`
+  returned `dispatched: false`. The new timeout test covers a stalled body after
+  headers, not this case. Preserve conservative dispatch intent before the send,
+  or report uncertain dispatch explicitly; lack of headers does not prove zero
+  egress. The reserved slot must remain consumed either way.
+
+The stage lock and atomic writes alone do not resolve either condition.
+
+### DP-2 — Closed: bounds enforced during response consumption
+
+The request now uses `client.stream` inside the timeout/client contexts, rejects
+non-identity encoding at headers, and checks chunk lengths during consumption.
+The response context closes on each exit. Offline tests verify that oversized
+streams terminate before all chunks are read and encoded bodies are not read.
+For accepted identity encoding, HTTPX's `aiter_bytes` has no content decoding to
+perform; the original eager-buffering defect is resolved.
+
+### DP-3 — Major remains open: validate the complete results envelope
+
+The finish-reason enum/unknown-length representation prevents the original
+marker leak, and per-attempt keys, binding and structure validation now reject
+many corrupt values. However, `load_probe_results` does not require the exact
+outer keys `{probe, reserved, attempts}` or check the total serialized-size limit
+when called with `data=`. The stage writes that returned object directly.
+
+An offline fixture containing empty valid lists, an unexpected root field with
+a synthetic marker, and padding was 65,151 bytes (below 65,536). The loader
+accepted it. Running the three fake probes retained both unexpected fields and
+wrote 67,889 bytes; the next load refused the file as oversized. Thus unchecked
+outer content can be repersisted and normal additions can create a record the
+same harness cannot resume.
+
+Require exact outer keys and validate the whole serialized envelope before
+both intent and outcome writes, not only the individual outcome. Validate
+reservation/result consistency in both directions as part of that envelope.
+Add regressions for unknown root fields, near-limit records and write-time size
+checks; preserve a safely reserved uncertain slot if recording an outcome fails.
+
+### Follow-up verification and limits
+
+- All 22 direct-probe tests passed with the repository virtual environment.
+- Additional offline probes confirmed six calls after deleting initialized state,
+  a pre-header timeout incorrectly reported as undispatched, and acceptance of
+  unchecked outer fields leading to an oversized rewritten result file.
+- All probes used temporary directories and fake transports. No existing live
+  results, ledgers, credentials, router configuration or provider resources were
+  read or modified; no live traffic was sent.
+- Updated review/status documentation only. Relative plan links and whitespace
+  checks passed. Full-suite, lint/type, coverage and Docker checks were not rerun
+  for this scoped review; no new claims are made about those gates.

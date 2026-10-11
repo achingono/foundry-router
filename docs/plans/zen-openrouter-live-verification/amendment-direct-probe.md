@@ -3,9 +3,10 @@
 Date: 2026-10-11. Status: **Planned**; independent review complete with changes
 required before live execution. No live dispatches under this amendment yet.
 
-[Independent commit review](review-direct-probe-607da09.md) identified three open
-Major findings: interruption-safe dispatch accounting, response bounds before
-buffering, and validation/redaction of structural metadata.
+[Independent commit review](review-direct-probe-607da09.md) initially identified three Major findings. Follow-up review of `7f0c207`
+closes DP-2 (streaming response bounds). DP-1 remains open for lost initialized
+state and pre-header dispatch accounting; DP-3 remains open for complete results
+envelope/size validation. The amendment is not cleared for live probes.
 
 ## Background
 
@@ -46,7 +47,8 @@ touching halted router runs.
 ## Exit criteria delta
 
 - [x] Independent review of this amendment and the probe script recorded in the [review](review-direct-probe-607da09.md).
-- [ ] DP-1, DP-2 and DP-3 resolved and independently re-reviewed before any live probe.
+- [x] DP-2 streaming bounds fixed and independently verified in `7f0c207`.
+- [ ] Remaining DP-1 and DP-3 gaps resolved and independently re-reviewed before any live probe.
 - [ ] Each model probed at most once with structural evidence and no content,
       secret, or credential bytes recorded.
 - [ ] Diagnosis recorded: adapter strictness vs provider contract, with any
