@@ -752,8 +752,7 @@ def _accept_embeddings(public: dict[str, Any], guard: Any, result: dict[str, Any
     # Policy: exact element-by-element equality after JSON numeric values are
     # normalized to Python floats. Vectors remain transient and are never persisted.
     result["vector_values_match"] = bool(
-        guard.upstream_vectors
-        and vectors == guard.upstream_vectors
+        guard.upstream_vectors and vectors == guard.upstream_vectors
     )
     if guard.usage is None:
         return False
