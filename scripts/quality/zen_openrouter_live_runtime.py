@@ -14,7 +14,7 @@ import math
 import secrets
 import time
 from http import HTTPStatus
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -773,7 +773,7 @@ class OpenRouterEmbeddingsGuard(ObservationGuard):
     vector_count = 0
     dimensions = 0
     order_ok = False
-    upstream_vectors: list[list[float]] = []
+    upstream_vectors: ClassVar[list[list[float]]] = []
 
     def _expected_body(self) -> dict[str, Any]:
         return {
