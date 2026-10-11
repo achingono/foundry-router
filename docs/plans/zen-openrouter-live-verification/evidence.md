@@ -21,4 +21,5 @@ pending. This record does not establish live compatibility.
 | Finding dispositions | Harness commits on main | Canonical CLI ledger binding; unchanged byte forwarding with truncation rejection; fact harvesting on all exits plus ledger-count CLI reporting; output-cap enforcement in acceptance and result validation; real routes/auth with canonical admin evidence and setup-error propagation |
 | Follow-up review (2 Majors) | Reviewer report, no files changed | Contradictory persisted success accepted on resume; SSE acceptance dependent on transport chunk boundaries |
 | Follow-up dispositions | Harness commits on main | Earliest-boundary SSE split with chunking/line-ending regressions; strict resume success evidence (HTTP 200 pair, stream-mode agreement, case-specific embeddings/vector checks) |
+| Follow-up verification | Reviewer report, no files changed | Both follow-up Majors verified fixed; all previously reported blocking findings resolved; 85 harness tests passed; tree and whitespace clean; full suite not rerun; no live requests sent |
 | Live stages | None | No requests sent; no credentials retrieved; no production changes |
