@@ -184,7 +184,7 @@ def _credential_from_env(name: str) -> str:
     return value
 
 
-def execute_stage(  # noqa: PLR0913 -- fixed phase contract and fixture injection
+def execute_stage(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract and fixture injection
     manifest: dict[str, Any],
     *,
     stage_dir: Path = STAGE_DIR,
