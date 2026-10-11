@@ -38,7 +38,9 @@ ASCII_DELETE = 127
 class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
-    provider: Literal["azure_foundry", "google_ai_studio", "openai_compatible"] = "azure_foundry"
+    provider: Literal[
+        "azure_foundry", "google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"
+    ] = "azure_foundry"
     api_surface: Literal["openai_compat", "native"] = "openai_compat"
     endpoint: HttpUrl
     credential: str = Field(min_length=1)
@@ -56,8 +58,18 @@ class BackendConfig(BaseModel):
     @classmethod
     def validate_compatible_endpoint_input(cls, value: object) -> object:
         """Reject unsafe raw roots before URL coercion can erase dot segments."""
-        if not isinstance(value, dict) or value.get("provider") != "openai_compatible":
+        if not isinstance(value, dict) or value.get("provider") not in {
+            "openai_compatible",
+            "opencode_zen",
+            "openrouter",
+        }:
             return value
+        provider = str(value.get("provider"))
+        label = (
+            "Zen"
+            if provider == "opencode_zen"
+            else ("OpenRouter" if provider == "openrouter" else "Compatible")
+        )
         endpoint = value.get("endpoint")
         if endpoint is None:
             return value
@@ -67,15 +79,18 @@ class BackendConfig(BaseModel):
             or any(ord(char) < ASCII_CONTROL_LIMIT for char in raw)
             or "\\" in raw
         ):
-            raise ValueError("Compatible endpoint must be a safe HTTPS API root")
+            raise ValueError(f"{label} endpoint must be a safe HTTPS API root")
         path = urlsplit(raw).path
         # This baseline accepts literal root segments, not encoded routing syntax.
         if "%" in path or any(segment in {".", ".."} for segment in path.split("/")):
-            raise ValueError("Compatible endpoint cannot contain encoded or dot path segments")
+            raise ValueError(f"{label} endpoint cannot contain encoded or dot path segments")
         if "//" in path or unquote(path) != path:
-            raise ValueError("Compatible endpoint must be a safe API root")
-        if path.rstrip("/").endswith(("/chat/completions", "/embeddings", "/responses")):
-            raise ValueError("Compatible endpoint must be an API root, not an operation path")
+            raise ValueError(f"{label} endpoint must be a safe API root")
+        operation_suffixes: tuple[str, ...] = ("/chat/completions", "/embeddings", "/responses")
+        if provider == "opencode_zen":
+            operation_suffixes += ("/messages", "/systemone")
+        if path.rstrip("/").endswith(operation_suffixes):
+            raise ValueError(f"{label} endpoint must be an API root, not an operation path")
         return value
 
     @field_validator("credit_group")
@@ -144,17 +159,20 @@ class BackendConfig(BaseModel):
         ):
             raise ValueError("Google pre-output failover requires an unmetered Google backend")
         if (
-            self.provider != "openai_compatible"
+            self.provider not in {"openai_compatible", "openrouter"}
             and self.deployment is not None
             and ("/" in self.deployment or "\\" in self.deployment)
         ):
             raise ValueError("Backend deployment must be a single non-empty path segment")
-        if self.provider == "openai_compatible":
+        if self.provider in {"openai_compatible", "openrouter"}:
             if (
                 self.api_surface != "openai_compat"
                 or self.google_features != GoogleFeatureProfile()
             ):
-                raise ValueError("Compatible backends cannot use native or Google feature profiles")
+                raise ValueError(
+                    "Compatible and OpenRouter backends cannot use native "
+                    "or Google feature profiles"
+                )
             if (
                 self.deployment is None
                 or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
@@ -163,9 +181,31 @@ class BackendConfig(BaseModel):
                     for char in self.deployment
                 )
             ):
-                raise ValueError("Compatible backend requires a bounded physical model identifier")
+                raise ValueError(
+                    "Compatible and OpenRouter backends require a bounded physical model identifier"
+                )
             if self.supported_operations is None:
                 self.supported_operations = ["responses"]
+            return self
+        if self.provider == "opencode_zen":
+            if (
+                self.api_surface != "openai_compat"
+                or self.google_features != GoogleFeatureProfile()
+            ):
+                raise ValueError("Zen backends cannot use native or Google feature profiles")
+            if (
+                self.deployment is None
+                or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or any(
+                    ord(char) < ASCII_CONTROL_LIMIT or ord(char) == ASCII_DELETE
+                    for char in self.deployment
+                )
+            ):
+                raise ValueError("Zen backends require a bounded physical model identifier")
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
+            elif "embeddings" in self.supported_operations:
+                raise ValueError("Zen backends support only the Responses operation")
             return self
         if self.provider == "azure_foundry":
             if self.api_surface != "openai_compat":

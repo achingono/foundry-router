@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,azure,telemetry]"
 
       - name: Run Ruff check
         run: ruff check .
@@ -50,7 +50,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,azure,telemetry]"
 
       - name: Run Mypy
         run: mypy src/
@@ -71,7 +71,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev,azure]"
+          pip install -e ".[dev,azure,telemetry]"
 
       - name: Run unit tests
         run: pytest tests/unit/ tests/integration/ -v -m "not docker and not azurite" --cov=src/foundry_router --cov-report=term-missing --cov-report=xml --cov-fail-under=80
@@ -105,7 +105,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev,azure]"
+          pip install -e ".[dev,azure,telemetry]"
 
       - name: Run integration tests
         run: pytest tests/integration/ -v -m "not docker and not azurite"
@@ -144,7 +144,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev,azure]"
+          pip install -e ".[dev,azure,telemetry]"
 
       - name: Run Azurite-marked integration tests
         run: pytest tests/integration/test_azurite_distributed_state.py -v -m "azurite" --cov=src/foundry_router --cov-report= --cov-append
@@ -231,7 +231,11 @@ jobs:
       - name: Enforce combined coverage
         if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
         run: |
-          coverage combine coverage-unit coverage-azurite
+          # Artifacts contain standalone .coverage files; coverage combine discovers
+          # parallel data files named .coverage.* rather than bare files in directories.
+          cp coverage-unit/.coverage .coverage.unit
+          cp coverage-azurite/.coverage .coverage.azurite
+          coverage combine
           coverage report --fail-under=80
 
       - name: Check all jobs passed

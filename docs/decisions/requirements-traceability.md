@@ -37,6 +37,17 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Translated-stream partial counts preserve reservation cost until verified completion; input quota remains independent | `forwarding/` attempt ownership and stream finalization | `tests/unit/test_google_stream_settlement_integrity.py`: cancellation, unstarted response, protocol/transport failure, clean completion, zero price and signed complete-prefetch; live correction acceptance unverified |
 | Preserved Google behavior and exact local/live scope | Existing Google adapters and oracle | Immutable characterization fixtures; [provider evidence](../plans/openai-compatible-provider/evidence.md) |
 
+### OpenCode Zen and OpenRouter backends
+
+**Implemented with mocked verification**; live upstream support remains **Planned**.
+
+| Requirement | Implementation | Evidence |
+| --- | --- | --- |
+| Explicit Zen/OpenRouter providers with exact HTTPS roots and server Bearer credentials | `config/`, `backends/` | `tests/unit/test_zen_openrouter_config.py`, `tests/unit/test_zen_openrouter_transport.py`: operation-path/raw-path rejection, bounded deployment IDs, URL/auth confinement |
+| Zen bounded stateless-text validation with Responses wire pass-through | `api/adapters/zen.py` | `tests/unit/test_zen_adapter.py`: allow-list, foreign-field, bounds, model-only substitution, usage/error mapping |
+| OpenRouter fixed-dialect translation via shared text hooks | Adapter registry, `compatible_text.py` | `tests/integration/test_zen_openrouter_integration.py`: translated Responses/streaming/embeddings, routing-extra rejection |
+| Single-shot dispatch, 429-only failover, conservative ambiguous-failure/cancellation settlement | `forwarding/` Zen paths, existing routing/accounting stores | `tests/unit/test_zen_forwarding.py`, integration 5xx/429/cancellation cases; [plan evidence](../plans/opencode-zen-openrouter/evidence.md) |
+
 ### Process-local combination exclusion
 
 Repeated-failure routing exclusion is **Implemented with synthetic verification** in

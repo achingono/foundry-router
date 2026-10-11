@@ -25,6 +25,27 @@ continuation and provider state are rejected before admission. Configure quota g
 credit metering and model prices independently; exact upstream/model live compatibility
 remains unverified. See [provider contract](../plans/openai-compatible-provider/index.md).
 
+`provider: openrouter` is **Implemented with mocked verification** for the same fixed
+Chat Completions/embedding dialect against the exact HTTPS API root (for example
+`https://openrouter.ai/api/v1`). Namespaced body values such as `organization/model`
+are allowed up to 512 UTF-8 bytes. OpenRouter-only caller fields (provider
+preferences, model lists, routes, plugins) and attribution headers are never accepted
+or forwarded; the router selects the configured backend deterministically. Live
+upstream/model compatibility remains unverified.
+
+`provider: opencode_zen` is **Implemented with mocked verification** for Zen's
+Responses-model rows as a native Responses pass-through upstream. Supply the exact
+HTTPS API root (for example `https://opencode.ai/zen/v1`); Responses appends
+`/responses` with server-owned Bearer authentication and model-only substitution.
+No Chat dialect is sent. Requests are validated against a bounded stateless-text
+allow-list (string/history input, instructions, metadata, generation parameters,
+false-only `store`/`background`); tools, structured output, media, stored
+continuation, provider state and foreign wire fields are rejected before
+quota/credit admission. Embeddings is not offered. Selecting Zen declares
+operator-verified Responses-model compatibility; the router does not consult the
+upstream catalog. Zen `/messages`, Google-model and `systemone` wires are out of
+scope. See [Zen/OpenRouter contract](../plans/opencode-zen-openrouter/index.md).
+
 ```yaml
 backends:
   sub_a:

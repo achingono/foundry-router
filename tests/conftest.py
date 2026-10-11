@@ -11,8 +11,19 @@ without changing production semantics.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 import pytest
+
+
+def pytest_make_parametrize_id(config, val):
+    """Keep large string/byte parameters from flooding verbose pytest output."""
+    del config
+    if isinstance(val, (str, bytes)) and len(val) > 80:
+        raw = val.encode("utf-8") if isinstance(val, str) else val
+        digest = hashlib.sha256(raw).hexdigest()[:12]
+        return f"{type(val).__name__}-len-{len(val)}-{digest}"
+    return None
 
 
 @pytest.fixture(autouse=True)

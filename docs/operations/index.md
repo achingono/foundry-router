@@ -72,7 +72,11 @@ Generic compatible upstreams are **Implemented with mocked verification** throug
 `provider: openai_compatible`. Validate the exact API root, physical model, operation support,
 fixed Chat wire dialect and separate quota/credit inputs before rollout. Their live
 compatibility remains unverified; production currently has no generic-provider enablement.
-Use the normal validated configuration/drain/restart procedure and bounded exact-model
+OpenRouter upstreams (`provider: openrouter`) reuse the same translated dialect and
+rollout gates against their exact API root. Zen Responses upstreams
+(`provider: opencode_zen`) use pass-through against their exact API root with the
+bounded stateless-text request gate and operator-selected Responses models. Use the
+normal validated configuration/drain/restart procedure and bounded exact-model
 inference/usage checks. Do not infer Google quota/reset semantics for another provider.
 
 All new infrastructure resource families now have typed module owners; the root preserves existing-resource lookups and the flat deployment interface. Registry/vault combinations are template-validated, with the synthetic existing/existing memory path redeployed and smoke-tested. New-resource runtime convergence, real inference and Table runtime remain separate verification gates; see [registry/vault evidence](../plans/bicep-registry-vault/evidence.md).

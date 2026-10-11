@@ -27,12 +27,15 @@ from foundry_router.api.adapters.openai_compatible import (
     OpenAICompatibleAdapter,
     OpenAICompatibleStreamDecoder,
 )
+from foundry_router.api.adapters.zen import ZenAdapter
 from foundry_router.config.google_features import GoogleFeatureProfile
 
 _ADAPTERS: dict[str, ProviderAdapter] = {
     "azure_foundry": AzureAdapter(),
     "google_ai_studio": GoogleAiStudioAdapter(),
     "openai_compatible": CompatibleTextAdapter(),
+    "opencode_zen": ZenAdapter(),
+    "openrouter": CompatibleTextAdapter(),
 }
 
 
@@ -97,5 +100,6 @@ __all__ = [
     "ProviderAdapter",
     "TranslatedError",
     "TranslatedSuccess",
+    "ZenAdapter",
     "get_adapter",
 ]
