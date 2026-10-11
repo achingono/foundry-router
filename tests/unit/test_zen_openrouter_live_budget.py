@@ -149,7 +149,6 @@ def test_five_case_budget_is_final(tmp_path):
         ledger.reserve("zen-nonstream")
 
 
-
 def test_missing_initialized_ledger_fails_closed(tmp_path):
     path = tmp_path / "ledger.json"
     ledger = budget.RunLedger(path, initialize=True)
