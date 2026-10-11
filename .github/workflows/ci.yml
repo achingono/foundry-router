@@ -231,7 +231,11 @@ jobs:
       - name: Enforce combined coverage
         if: needs.unit-tests.result == 'success' && needs.azurite-tests.result == 'success'
         run: |
-          coverage combine coverage-unit coverage-azurite
+          # Artifacts contain standalone .coverage files; coverage combine discovers
+          # parallel data files named .coverage.* rather than bare files in directories.
+          cp coverage-unit/.coverage .coverage.unit
+          cp coverage-azurite/.coverage .coverage.azurite
+          coverage combine
           coverage report --fail-under=80
 
       - name: Check all jobs passed
