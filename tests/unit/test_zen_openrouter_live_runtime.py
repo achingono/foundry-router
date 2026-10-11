@@ -264,13 +264,6 @@ async def test_unexpected_url_rejected_without_reserve(tmp_path):
 
 
 async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
-    upstream = {
-        "data": [
-            {"index": 0, "embedding": [0.5, 1.0]},
-            {"index": 1, "embedding": [1.5, 2.0]},
-        ],
-        "usage": {"prompt_tokens": 6, "total_tokens": 6},
-    }
     public = {
         "data": [
             {"index": 0, "embedding": [0.5, 1.0]},
@@ -278,17 +271,9 @@ async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
         ],
         "usage": {"prompt_tokens": 6, "total_tokens": 6},
     }
-
-    class PublicMutationTransport(FakeUpstream):
-        pass
-
-    # Run the standard request and make only the router's public result differ
-    # from the independently observed upstream vector; no network is involved.
-    transport = ok_transport(json.dumps(upstream).encode())
-    result = await run_case("openrouter-embeddings", transport, tmp_path)
     guard = runtime.OpenRouterEmbeddingsGuard(
-        ok_transport(json.dumps(upstream).encode()),
-        ledger=ledger(tmp_path / "other-ledger.json"),
+        ok_transport(b"{}"),
+        ledger=budget.RunLedger(tmp_path / "ledger.json", initialize=True),
         case_id="openrouter-embeddings",
         credential=SECRET,
         deployment="organization/embed",
