@@ -291,16 +291,39 @@ def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
             "--execute",
             "--manifest",
             str(manifest_path),
-            "--ledger",
-            str(tmp_path / "ledger.json"),
-            "--results",
-            str(tmp_path / "results.json"),
         ],
     )
     monkeypatch.delenv("ZEN_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert stage.main() == 2
     assert json.loads(capsys.readouterr().out)["status"] == "refused_or_interrupted"
+
+
+def test_cli_rejects_path_overrides_and_binds_canonical_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys, "argv", ["zen_openrouter_live_stage.py", "--execute", "--ledger", "other.json"]
+    )
+    with pytest.raises(SystemExit):
+        stage.main()
+    captured = {}
+
+    def fake_execute(_manifest_data, **kwargs):
+        captured.update(kwargs)
+        return {"run": budget.RUN_ID, "attempts": []}
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest()))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["zen_openrouter_live_stage.py", "--execute", "--manifest", str(manifest_path)],
+    )
+    monkeypatch.setenv("ZEN_API_KEY", "synthetic-zen-credential")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-or-credential")
+    monkeypatch.setattr(stage, "execute_stage", fake_execute)
+    monkeypatch.setattr(stage, "STAGE_DIR", tmp_path)
+    assert stage.main() == 0
+    assert "ledger_path" not in captured and "results_path" not in captured
 
 
 def test_deleted_ledger_after_pass_blocks_without_dispatch(tmp_path):

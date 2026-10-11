@@ -284,8 +284,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--manifest", type=Path, default=None)
-    parser.add_argument("--ledger", type=Path, default=None)
-    parser.add_argument("--results", type=Path, default=None)
     parser.add_argument("--zen-key-env", default="ZEN_API_KEY")
     parser.add_argument("--openrouter-key-env", default="OPENROUTER_API_KEY")
     args = parser.parse_args()
@@ -303,10 +301,10 @@ def main() -> int:
         return 2
     try:
         manifest = load_bounded_json(raw_manifest, max_bytes=MAX_LEDGER_BYTES)
+        # Live execution is bound to the canonical run ledger and results file;
+        # path overrides exist only as execute_stage parameters for offline tests.
         results = execute_stage(
             manifest,
-            ledger_path=args.ledger,
-            results_path=args.results,
             zen_credential=_credential_from_env(args.zen_key_env),
             openrouter_credential=_credential_from_env(args.openrouter_key_env),
         )
