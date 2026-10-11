@@ -119,3 +119,5 @@ screenshots/
 !/docs/plans/google-compatible-envelope/ledger-baseline.json
 !/docs/plans/google-compatible-envelope/ledger-baseline-followup.json
 !/docs/plans/google-compatible-signature-text/ledger-baseline.json
+!/docs/plans/zen-openrouter-live-verification/manifest.json
+!/docs/plans/zen-openrouter-live-verification/manifest.openrouter.json
