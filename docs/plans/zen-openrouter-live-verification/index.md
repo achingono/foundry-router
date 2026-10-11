@@ -1,9 +1,10 @@
 # Zen and OpenRouter live verification
 
 **Planned.** No live dispatches have been made; no runtime code changes are
-proposed in this phase. Independent plan review is required before any live
-request. Live upstream compatibility is not established by the mocked
-implementation in [the backends plan](../opencode-zen-openrouter/index.md).
+proposed in this phase. [Independent plan review](review.md) is complete; its
+findings are addressed at the planning level. Harness implementation, offline
+validation and implementation review remain required before any live request.
+Live upstream compatibility is not established by the mocked implementation in [the backends plan](../opencode-zen-openrouter/index.md).
 
 ## Companion documents
 
@@ -13,6 +14,7 @@ implementation in [the backends plan](../opencode-zen-openrouter/index.md).
 - [Exit criteria](exit-criteria.md)
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
+- [Independent plan review](review.md)
 
 ## Objective and contract
 
@@ -28,23 +30,35 @@ Local estimates remain estimates; nothing here measures provider billing.
    (one non-streaming + one streaming request, one operator-selected exact
    namespaced model, same text bounds). Stage 3 runs only after Stage 2
    success: OpenRouter embeddings (one call, one operator-selected exact
-   embedding model, short input). At most six live dispatches plus bounded
+   embedding model, short input). At most five live dispatches plus bounded
    read-only diagnostics; no retries, no alternative models, no production
    changes.
 2. Credentials are operator-supplied out of band and live only in the executing
    environment (environment variables or token-authenticated vault reads).
    They are never committed, logged, displayed, or recorded in evidence. Client
-   and router keys follow the same rule. A wrong or missing credential refuses
-   before dispatch.
+   and router keys follow the same rule. Missing/blank credentials, failed vault
+   resolution and locally detectable client/admin authentication failures refuse
+   before provider dispatch. Readiness cannot establish upstream key validity.
+   Upstream 401/403 responses count as dispatched attempts and halt the run with
+   sanitized public/provider statuses; no credential cycling or retry.
 3. Requests use short nonsensitive text. Record only numeric/metadata outcomes:
    public and provider HTTP status, completion/output presence, input/output
    usage counts, local estimated debit at configured test prices, and
    admin-diagnostic reservation/inflight snapshots. Never record prompts,
-   outputs, error bodies, or credential values.
+   outputs, error bodies, or credential values. A bounded test-only transport
+   observer captures provider status and usage before translation. Independently
+   parsed upstream usage must match public usage and per-request admin credit
+   deltas; public usage and settlement alone cannot prove correct mapping.
 4. Streaming is verified with terminal usage and preserved SSE frame boundaries;
    there is no retry after meaningful stream output. Any ambiguous dispatched
-   failure halts its stage persistently pending review; the halt is recorded
-   before any further dispatch.
+   failure halts the entire run persistently pending review. All other failed
+   acceptance checks also block subsequent cases. Use five fixed case IDs, an
+   exclusive run lock and a durable ledger separate from router memory. Reserve
+   each case before egress, then persist and validate its result before the next
+   case, including within a stage. Missing outcomes, corrupt/mismatched state
+   and write failures refuse further dispatch. Restart never resets the budget
+   or replays a reserved case; there is no sixth probe or retry allowance.
+   See the [execution and observation contract](activities.md).
 5. Local estimated debits are computed at operator-approved test prices and are
    explicitly unrelated to provider billing. Success on one exact model says
    nothing about other models, tools/media, quota ceilings, provider admission
@@ -55,8 +69,10 @@ Local estimates remain estimates; nothing here measures provider billing.
 
 ### In scope
 
-- Six bounded live dispatches across three gated stages plus read-only
+- Five bounded live dispatches across three gated stages plus read-only
   readiness/admin diagnostics against a dedicated test configuration.
+- An isolated verification harness, durable ledger and redacted transport
+  observer, with offline tests and implementation review before live use.
 - Numeric-only evidence and an independent review record.
 
 ### Out of scope
