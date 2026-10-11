@@ -23,6 +23,7 @@ from zen_openrouter_live_budget import (
     MAX_LEDGER_BYTES,
     MAX_OUTPUT_TOKENS,
     RUN_ID,
+    RUN_ID_OPENROUTER,
     RunLedger,
     locked,
     validate_manifest,
@@ -43,6 +44,13 @@ from foundry_router.api.adapters.google_schema import load_bounded_json
 ROOT = Path(__file__).resolve().parents[2]
 STAGE_DIR = ROOT / "docs/plans/zen-openrouter-live-verification"
 MAX_RESULTS_BYTES = 65536
+
+# Canonical durable files per authorized run. Live execution never accepts
+# path overrides, so no run can reset another run's budget.
+RUN_FILES = {
+    RUN_ID: ("ledger.json", "results.json"),
+    RUN_ID_OPENROUTER: ("ledger-openrouter.json", "results-openrouter.json"),
+}
 MAX_DEBIT_USD = 1000
 
 ERROR_CATEGORIES = {
@@ -79,19 +87,18 @@ RESULT_KEYS = {
 
 
 def empty_results(manifest: dict[str, Any]) -> dict[str, Any]:
-    return {"run": RUN_ID, "manifest": manifest_fingerprint(manifest), "attempts": []}
+    return {"run": manifest["run"], "manifest": manifest_fingerprint(manifest), "attempts": []}
 
 
 def manifest_fingerprint(manifest: dict[str, Any]) -> dict[str, Any]:
     return {
-        name: manifest[name]
-        for name in (
-            "zen_model",
-            "openrouter_model",
-            "openrouter_embedding_model",
-            "input_per_million",
-            "output_per_million",
-        )
+        "run": manifest["run"],
+        "cases": list(manifest["cases"]),
+        "zen_model": manifest["zen_model"],
+        "openrouter_model": manifest["openrouter_model"],
+        "openrouter_embedding_model": manifest["openrouter_embedding_model"],
+        "input_per_million": manifest["input_per_million"],
+        "output_per_million": manifest["output_per_million"],
     }
 
 
@@ -105,7 +112,7 @@ def load_results(path: Path, manifest: dict[str, Any], *, data: Any = None) -> d
     if (
         not isinstance(data, dict)
         or set(data) != {"run", "manifest", "attempts"}
-        or data.get("run") != RUN_ID
+        or data.get("run") != manifest["run"]
         or data.get("manifest") != manifest_fingerprint(manifest)
         or not isinstance(data.get("attempts"), list)
     ):
@@ -196,11 +203,14 @@ def validate_result(result: Any) -> None:
 
 
 def _dispatch_report() -> Any:
-    """Conservatively reserved dispatches, or "unknown" when unreadable."""
-    try:
-        return RunLedger(STAGE_DIR / "ledger.json").dispatch_count()
-    except (OSError, ValueError):
-        return "unknown"
+    """Conservatively reserved dispatches per authorized run, or "unknown"."""
+    report: dict[str, Any] = {}
+    for run, (ledger_name, _results_name) in RUN_FILES.items():
+        try:
+            report[run] = RunLedger(STAGE_DIR / ledger_name, run=run).dispatch_count()
+        except (OSError, ValueError):
+            report[run] = "unknown"
+    return report
 
 
 def _interrupted_report() -> str:
@@ -227,11 +237,13 @@ def execute_stage(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase contr
     """Run fixed cases sequentially; any failure blocks the remainder."""
     summary = validate_manifest(manifest)
     _ = summary
-    ledger_file = ledger_path or (stage_dir / "ledger.json")
-    results_file = results_path or (stage_dir / "results.json")
+    run = manifest["run"]
+    ledger_name, results_name = RUN_FILES[run]
+    ledger_file = ledger_path or (stage_dir / ledger_name)
+    results_file = results_path or (stage_dir / results_name)
     with locked(stage_dir / "stage"):
         first_initialization = not ledger_file.exists() and not results_file.exists()
-        ledger = RunLedger(ledger_file, initialize=first_initialization)
+        ledger = RunLedger(ledger_file, initialize=first_initialization, run=run)
         results = load_results(results_file, manifest)
         # Reconcile both durable records before any provider egress. A reservation
         # without an outcome, or an outcome without a matching result, is terminal.
@@ -360,7 +372,7 @@ def main() -> int:
         }
         for case, item in ((item["case_id"], item) for item in results["attempts"])
     }
-    print(json.dumps({"run": RUN_ID, "results": summary}, indent=2, sort_keys=True))
+    print(json.dumps({"run": manifest["run"], "results": summary}, indent=2, sort_keys=True))
     return int(any(item["status"] != "passed" for item in results["attempts"]))
 
 

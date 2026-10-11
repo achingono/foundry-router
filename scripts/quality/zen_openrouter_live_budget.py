@@ -20,6 +20,7 @@ from google_live_budget import locked, write_atomic
 from foundry_router.api.adapters.google_schema import load_bounded_json
 
 RUN_ID = "zen-openrouter-live-2026-10-11"
+RUN_ID_OPENROUTER = "zen-openrouter-live-2026-10-11-openrouter"
 MAX_LEDGER_BYTES = 65536
 MAX_MANIFEST_BYTES = 65536
 MAX_DISPATCHES = 5
@@ -40,24 +41,34 @@ CASE_IDS = (
 
 CASE_ID_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,80}")
 
+# Authorized runs and their fixed case orders. No other run identity or case
+# combination is admissible; a further run needs a reviewed amendment.
+RUN_CASES: dict[str, tuple[str, ...]] = {
+    RUN_ID: CASE_IDS,
+    RUN_ID_OPENROUTER: ("openrouter-nonstream", "openrouter-stream"),
+}
 
-def _initial_ledger() -> dict[str, Any]:
+
+def _initial_ledger(run: str) -> dict[str, Any]:
     return {
-        "run": RUN_ID,
+        "run": run,
         "dispatches": 0,
         "halted": False,
         "cases": {
             case_id: {"reserved": False, "actual_tokens": None, "outcome": None}
-            for case_id in CASE_IDS
+            for case_id in RUN_CASES[run]
         },
     }
 
 
 class RunLedger:
-    """Fixed five-case ledger with durable reserve-before-egress semantics."""
+    """Fixed-case ledger with durable reserve-before-egress semantics."""
 
-    def __init__(self, path: Path, *, initialize: bool = False):
+    def __init__(self, path: Path, *, initialize: bool = False, run: str = RUN_ID):
+        if run not in RUN_CASES:
+            raise ValueError("Unknown verification run")
         self.path = path
+        self.run = run
         self.identity_path = path.with_name(path.name + ".identity")
         with locked(path):
             if not path.exists():
@@ -65,15 +76,15 @@ class RunLedger:
                 # survives ledger loss and prevents a missing ledger resetting budget.
                 if not initialize or self.identity_path.exists():
                     raise ValueError("Initialized run ledger is missing")
-                write_atomic(path, _initial_ledger())
-                write_atomic(self.identity_path, {"run": RUN_ID})
+                write_atomic(path, _initial_ledger(run))
+                write_atomic(self.identity_path, {"run": run})
             if not self.identity_path.exists():
                 raise ValueError("Run ledger identity is missing")
             identity = load_bounded_json(
                 self.identity_path.read_bytes().decode(),
                 max_bytes=1024,
             )
-            if identity != {"run": RUN_ID}:
+            if identity != {"run": run}:
                 raise ValueError("Invalid run ledger identity")
             self._read()
 
@@ -83,11 +94,11 @@ class RunLedger:
         data = load_bounded_json(self.path.read_bytes().decode(), max_bytes=MAX_LEDGER_BYTES)
         if (
             not isinstance(data, dict)
-            or data.get("run") != RUN_ID
+            or data.get("run") != self.run
             or type(data.get("dispatches")) is not int
             or type(data.get("halted")) is not bool
             or not isinstance(data.get("cases"), dict)
-            or set(data["cases"]) != set(CASE_IDS)
+            or set(data["cases"]) != set(RUN_CASES[self.run])
         ):
             raise ValueError("Invalid run ledger")
         reserved = 0
@@ -115,7 +126,7 @@ class RunLedger:
 
     def reserve(self, case_id: str) -> None:
         """Durably record dispatch intent before egress; never refunds."""
-        if CASE_ID_PATTERN.fullmatch(case_id) is None or case_id not in CASE_IDS:
+        if CASE_ID_PATTERN.fullmatch(case_id) is None or case_id not in RUN_CASES[self.run]:
             raise ValueError("Unknown verification case")
         with locked(self.path):
             data = self._read()
@@ -127,7 +138,7 @@ class RunLedger:
             write_atomic(self.path, data)
 
     def record_outcome(self, case_id: str, actual_tokens: int | None, *, failed: bool) -> None:
-        if case_id not in CASE_IDS or (
+        if case_id not in RUN_CASES[self.run] or (
             actual_tokens is not None and (type(actual_tokens) is not int or actual_tokens < 0)
         ):
             raise ValueError("Invalid case outcome")
@@ -159,40 +170,44 @@ class RunLedger:
             data = self._read()
             return (
                 not data["halted"]
-                and case_id in CASE_IDS
+                and case_id in RUN_CASES[self.run]
                 and not data["cases"][case_id]["reserved"]
             )
 
 
-def _valid_case_prefix(cases: Any) -> bool:
-    """Manifests list a non-empty leading prefix of the fixed case order."""
+def _valid_case_prefix(run: str, cases: Any) -> bool:
+    """Manifests list a non-empty leading prefix of their run's case order."""
+    order = RUN_CASES.get(run, ())
     return (
         isinstance(cases, list)
         and bool(cases)
         and all(isinstance(case_id, str) for case_id in cases)
-        and list(cases) == list(CASE_IDS[: len(cases)])
+        and list(cases) == list(order[: len(cases)])
     )
 
 
+def _model_field(manifest: Any, cases: list[str], case_id: str, field: str) -> bool:
+    """A model is named exactly when its case is listed, never otherwise."""
+    value = manifest.get(field)
+    if not isinstance(value, str):
+        return False
+    if case_id in cases:
+        return bool(value.strip())
+    return value == ""
+
+
 def validate_manifest(manifest: Any) -> dict[str, Any]:
-    """Bind exact models, prices, bounds and the five fixed cases to a run."""
+    """Bind exact models, prices, bounds and listed cases to an authorized run."""
+    run = manifest.get("run") if isinstance(manifest, dict) else None
+    cases = manifest.get("cases") if isinstance(manifest, dict) else None
     if (
         not isinstance(manifest, dict)
         or manifest.get("version") != 1
-        or manifest.get("run") != RUN_ID
-        or not isinstance(manifest.get("zen_model"), str)
-        or not manifest["zen_model"].strip()
-        or not isinstance(manifest.get("openrouter_model"), str)
-        or not manifest["openrouter_model"].strip()
-        or not isinstance(manifest.get("openrouter_embedding_model"), str)
-        or (
-            "openrouter-embeddings" in (manifest.get("cases") or [])
-            and not manifest["openrouter_embedding_model"].strip()
-        )
-        or (
-            "openrouter-embeddings" not in (manifest.get("cases") or [])
-            and manifest["openrouter_embedding_model"] != ""
-        )
+        or run not in RUN_CASES
+        or not _valid_case_prefix(run, cases)
+        or not _model_field(manifest, cases, "zen-nonstream", "zen_model")
+        or not _model_field(manifest, cases, "openrouter-nonstream", "openrouter_model")
+        or not _model_field(manifest, cases, "openrouter-embeddings", "openrouter_embedding_model")
         or not isinstance(manifest.get("input_per_million"), (int, float))
         or not isinstance(manifest.get("output_per_million"), (int, float))
         or isinstance(manifest.get("input_per_million"), bool)
@@ -201,14 +216,13 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not manifest["output_per_million"] > 0
         or not math.isfinite(float(manifest["input_per_million"]))
         or not math.isfinite(float(manifest["output_per_million"]))
-        or not _valid_case_prefix(manifest.get("cases"))
         or manifest.get("case_timeout_seconds") != CASE_TIMEOUT_SECONDS
         or manifest.get("max_observed_bytes") != MAX_OBSERVED_BYTES
         or manifest.get("max_output_tokens") != MAX_OUTPUT_TOKENS
     ):
         raise ValueError("Invalid verification manifest")
     return {
-        "run": RUN_ID,
+        "run": run,
         "cases": list(manifest["cases"]),
         "max_dispatches": MAX_DISPATCHES,
     }

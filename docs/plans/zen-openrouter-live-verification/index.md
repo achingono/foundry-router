@@ -14,6 +14,7 @@ Live upstream compatibility is not established by the mocked implementation in [
 - [Exit criteria](exit-criteria.md)
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
+- [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
 - [Independent plan review](review.md)
 
 ## Objective and contract
@@ -22,6 +23,15 @@ Establish scoped live evidence that the router's Zen pass-through and OpenRouter
 translation paths work against real upstreams for operator-selected exact
 models, with usage-matched local settlement and zero retained reservations.
 Local estimates remain estimates; nothing here measures provider billing.
+
+Run A covers Stages 1–2 under run `zen-openrouter-live-2026-10-11`. Its Zen
+case halted on provider 403 with no spend; the halted Run A ledger and results
+are preserved untouched as the audit record. Run B covers OpenRouter Stage 2
+alone under run `zen-openrouter-live-2026-10-11-openrouter`, authorized by the
+[OpenRouter-only amendment](amendment-openrouter.md): providers and credentials
+are independent, no Run A spend occurred, and Run B uses separate canonical
+durable files with the same reserve/halt/reconciliation guarantees. No run can
+reset another run's budget, and a further run needs its own reviewed amendment.
 
 1. Three sequential stages with halt gates: Stage 1 Zen Responses
    (one non-streaming + one streaming request, one operator-selected

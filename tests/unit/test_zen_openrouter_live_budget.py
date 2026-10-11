@@ -82,6 +82,20 @@ def test_committed_run_manifest_matches_operator_approval():
     assert manifest_data["output_per_million"] == 1000.0
 
 
+def test_committed_openrouter_manifest_matches_operator_approval():
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "docs/plans/zen-openrouter-live-verification/manifest.openrouter.json"
+    )
+    manifest_data = json.loads(path.read_text())
+    summary = budget.validate_manifest(manifest_data)
+    assert summary["run"] == budget.RUN_ID_OPENROUTER
+    assert summary["cases"] == ["openrouter-nonstream", "openrouter-stream"]
+    assert manifest_data["zen_model"] == ""
+    assert manifest_data["openrouter_model"] == "google/gemma-4-26b-a4b-it:free"
+    assert manifest_data["openrouter_embedding_model"] == ""
+
+
 @pytest.mark.parametrize(
     "override",
     [

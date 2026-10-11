@@ -321,7 +321,8 @@ def test_cli_reports_ledger_dispatches_not_zero(tmp_path, monkeypatch, capsys):
     ledger.reserve("zen-nonstream")
     monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
     assert stage.main() == 2
-    assert json.loads(capsys.readouterr().out)["provider_requests"] == 1
+    report = json.loads(capsys.readouterr().out)["provider_requests"]
+    assert report[budget.RUN_ID] == 1
 
 
 def test_cli_reports_unknown_for_unreadable_ledger(tmp_path, monkeypatch, capsys):
@@ -329,7 +330,8 @@ def test_cli_reports_unknown_for_unreadable_ledger(tmp_path, monkeypatch, capsys
     (tmp_path / "ledger.json").write_text("corrupt")
     monkeypatch.setattr(sys, "argv", ["zen_openrouter_live_stage.py"])
     assert stage.main() == 2
-    assert json.loads(capsys.readouterr().out)["provider_requests"] == "unknown"
+    report = json.loads(capsys.readouterr().out)["provider_requests"]
+    assert report[budget.RUN_ID] == "unknown"
 
 
 def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
@@ -572,3 +574,64 @@ def test_unlisted_result_rejected(tmp_path):
     with pytest.raises(ValueError):
         run_stage(tmp_path, board, prefix_manifest())
     assert board.calls == 4
+
+
+def openrouter_manifest(**overrides):
+    base = manifest(
+        run=budget.RUN_ID_OPENROUTER,
+        zen_model="",
+        openrouter_embedding_model="",
+        cases=["openrouter-nonstream", "openrouter-stream"],
+    )
+    base.update(overrides)
+    return base
+
+
+def test_openrouter_run_passes_on_separate_files(tmp_path):
+    board = Switchboard()
+    results = stage.execute_stage(
+        openrouter_manifest(),
+        stage_dir=tmp_path,
+        zen_credential="synthetic-zen-credential",
+        openrouter_credential="synthetic-or-credential",
+        transport_factory=lambda: board,
+    )
+    assert [item["case_id"] for item in results["attempts"]] == [
+        "openrouter-nonstream",
+        "openrouter-stream",
+    ]
+    assert all(item["status"] == "passed" for item in results["attempts"])
+    assert board.calls == 2
+    assert (tmp_path / "ledger-openrouter.json").exists()
+    assert (tmp_path / "results-openrouter.json").exists()
+    assert not (tmp_path / "ledger.json").exists()
+
+
+def test_openrouter_run_ignores_halted_default_run(tmp_path):
+    board = Switchboard()
+    halted = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    halted.reserve("zen-nonstream")
+    halted.record_outcome("zen-nonstream", None, failed=True)
+    results = stage.execute_stage(
+        openrouter_manifest(),
+        stage_dir=tmp_path,
+        zen_credential="synthetic-zen-credential",
+        openrouter_credential="synthetic-or-credential",
+        transport_factory=lambda: board,
+    )
+    assert all(item["status"] == "passed" for item in results["attempts"])
+    assert board.calls == 2
+
+
+def test_unknown_run_identity_rejected(tmp_path):
+    board = Switchboard()
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, openrouter_manifest(run="other-run"))
+    assert board.calls == 0
+
+
+def test_run_b_rejects_zen_model_on_record(tmp_path):
+    board = Switchboard()
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, openrouter_manifest(zen_model="gpt-5.4"))
+    assert board.calls == 0
