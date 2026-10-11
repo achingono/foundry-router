@@ -3,7 +3,8 @@
 ## Gate checklist
 
 - [x] Independent plan review completed; findings addressed at planning level in [review](review.md).
-- [ ] Harness implemented and independently reviewed; offline crash/resume, concurrency, corruption, persistence, observation and redaction checks pass.
+- [x] Harness implemented with offline crash/resume, concurrency, corruption, persistence, observation and redaction checks passing.
+- [ ] Harness independently reviewed.
 - [ ] Applicable repository verification passes, including at least 80% coverage for implemented code.
 - [ ] Exact models, prices, request bounds and five fixed cases bound to the run manifest; credentials supplied out of band.
 - [ ] Durable ledger prevents replay/reset; each case passes and is persisted before the next dispatch, including within stages.
