@@ -735,6 +735,8 @@ def _accept_responses(
         return False
     if guard.usage is None:
         return False
+    if guard.usage[1] > MAX_OUTPUT_TOKENS:
+        return False
     public_usage = public.get("usage")
     if not isinstance(public_usage, dict):
         return False

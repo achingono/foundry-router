@@ -199,6 +199,14 @@ async def test_mismapped_usage_rejected(tmp_path):
     assert result["usage_matches"] is False
 
 
+async def test_over_cap_output_rejected(tmp_path):
+    body = zen_body()
+    body["usage"] = {"input_tokens": 10, "output_tokens": 129, "total_tokens": 139}
+    transport = ok_transport(json.dumps(body).encode())
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+
+
 async def test_missing_usage_rejected(tmp_path):
     transport = ok_transport(json.dumps(zen_body(usage=False)).encode())
     result = await run_case("zen-nonstream", transport, tmp_path)

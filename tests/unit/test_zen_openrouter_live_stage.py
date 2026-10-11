@@ -240,6 +240,40 @@ def test_result_mutations_rejected(tmp_path, mutation):
         stage.load_results(tmp_path / "missing.json", manifest_data, data=results)
 
 
+def test_over_cap_passed_result_rejected(tmp_path):
+    manifest_data = manifest()
+    results = {
+        "run": budget.RUN_ID,
+        "manifest": stage.manifest_fingerprint(manifest_data),
+        "attempts": [
+            {
+                "case_id": "zen-nonstream",
+                "kind": "zen-nonstream",
+                "stream": False,
+                "status": "passed",
+                "http_status": 200,
+                "provider_http_status": 200,
+                "dispatched": True,
+                "input_tokens": 10,
+                "output_tokens": 129,
+                "usage_matches": True,
+                "terminated_ok": True,
+                "settlement_matches": True,
+                "reservations_cleared": True,
+                "synthetic_debit_usd": 0.139,
+                "vector_count": 0,
+                "dimensions": 0,
+                "order_matches": False,
+                "vector_values_match": False,
+                "error_category": None,
+                "elapsed_seconds": 0.1,
+            }
+        ],
+    }
+    with pytest.raises(ValueError):
+        stage.load_results(tmp_path / "missing.json", manifest_data, data=results)
+
+
 def test_results_write_failure_blocks_without_replay(tmp_path):
     board = Switchboard()
     ro_dir = tmp_path / "ro"
