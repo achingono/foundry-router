@@ -233,6 +233,50 @@ async def test_truncated_trailing_failure_rejected(tmp_path):
     assert result["terminated_ok"] is False
 
 
+async def test_multiple_bounded_frames_in_one_chunk_are_accepted(tmp_path):
+    # The combined chunk exceeds MAX_FRAME_BYTES, but each SSE frame does not.
+    padding = b"x" * 150
+    frame = b'data: {"type":"response.created","padding":"' + padding + b'"}\\n\\n'
+    completed = (
+        b'data: {"type":"response.completed","response":{"status":"completed",'
+        b'"output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\\n\\n'
+    )
+    upstream = frame + frame + completed
+    assert len(frame) < runtime.MAX_FRAME_BYTES
+    assert len(frame + frame) > runtime.MAX_FRAME_BYTES
+
+    async def handler(_request):
+        async def chunks():
+            yield upstream
+
+        return httpx.Response(200, content=chunks())
+
+    guard = runtime.ZenGuard(
+        FakeUpstream(handler),
+        ledger=ledger(tmp_path),
+        case_id="zen-stream",
+        credential=SECRET,
+        deployment="gpt-5.4",
+        stream=True,
+    )
+    body = json.dumps(
+        {"model": "gpt-5.4", "input": runtime.PROMPT, "max_output_tokens": 128, "stream": True}
+    ).encode()
+    request = httpx.Request(
+        "POST",
+        "https://opencode.ai/zen/v1/responses",
+        content=body,
+        headers={"authorization": f"Bearer {SECRET}", "accept-encoding": "identity"},
+    )
+    response = await guard.handle_async_request(request)
+    forwarded = b""
+    async for chunk in response.aiter_bytes():
+        forwarded += chunk
+    assert forwarded == upstream
+    assert guard.terminated_ok is True
+    assert guard.truncated is False
+
+
 async def test_stream_bytes_forwarded_unchanged(tmp_path):
     upstream = (
         b'data: {"type":"response.created"}\n\n'
