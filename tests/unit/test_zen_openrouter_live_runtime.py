@@ -262,7 +262,6 @@ async def test_unexpected_url_rejected_without_reserve(tmp_path):
     assert led.runnable("zen-nonstream") is True
 
 
-
 async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
     public = {
         "data": [
