@@ -107,6 +107,7 @@ screenshots/
 /docs/plans/**/*.json
 /docs/plans/**/*.txt
 /docs/plans/**/*.lock
+/docs/plans/**/*.identity
 !/docs/plans/google-ai-studio-tools-multimodal/live-discovery.json
 !/docs/plans/google-ai-studio-tools-multimodal/live-runner/manifest.json
 !/docs/plans/google-ai-routing-order/ledger-native-text-2026-10-08.json
