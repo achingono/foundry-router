@@ -169,10 +169,7 @@ def validate_result(result: Any) -> None:
         or result["error_category"] is not None
         or result["input_tokens"] is None
         or result["output_tokens"] is None
-        or (
-            result["case_id"] == "openrouter-embeddings"
-            and not result["vector_values_match"]
-        )
+        or (result["case_id"] == "openrouter-embeddings" and not result["vector_values_match"])
     ):
         raise ValueError("Invalid stage success evidence")
 
