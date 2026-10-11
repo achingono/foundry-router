@@ -140,18 +140,14 @@ class TestZenValidation:
         body = _body(input="x" * (256 * 1024 + 1))
         assert adapter.check_request("responses", body) is not None
 
-    def test_oversized_instructions_rejected_by_text_byte_bound(
-        self, adapter: ZenAdapter
-    ) -> None:
+    def test_oversized_instructions_rejected_by_text_byte_bound(self, adapter: ZenAdapter) -> None:
         body = _body(instructions="x" * (256 * 1024 + 1))
         rejection = adapter.check_request("responses", body)
         assert rejection is not None
         assert rejection.code == "invalid_request"
         assert "byte bound" in rejection.message
 
-    def test_instructions_and_input_share_aggregate_byte_bound(
-        self, adapter: ZenAdapter
-    ) -> None:
+    def test_instructions_and_input_share_aggregate_byte_bound(self, adapter: ZenAdapter) -> None:
         body = _body(input="x" * (128 * 1024), instructions="y" * (128 * 1024 + 1))
         rejection = adapter.check_request("responses", body)
         assert rejection is not None
