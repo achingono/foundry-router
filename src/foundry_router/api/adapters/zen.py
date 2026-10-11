@@ -121,13 +121,21 @@ class ZenAdapter:
                     "metadata requires string keys up to 64 and values up to 512 characters"
                 )
         try:
-            self._check_input(body.get("input"), deadline=deadline_monotonic)
+            self._check_input(
+                body.get("input"),
+                deadline=deadline_monotonic,
+                instructions=instructions,
+            )
         except ValueError as exc:
             return AdapterRejection(422, "invalid_request", str(exc))
         return None
 
-    def _check_input(self, value: Any, *, deadline: float | None) -> None:
-        used = 0
+    def _check_input(
+        self, value: Any, *, deadline: float | None, instructions: str | None = None
+    ) -> None:
+        used = len(instructions.encode()) if instructions is not None else 0
+        if used > MAX_ZEN_TEXT_BYTES:
+            raise ValueError("Zen text history exceeds its byte bound")
 
         def text(part: Any) -> str:
             nonlocal used
