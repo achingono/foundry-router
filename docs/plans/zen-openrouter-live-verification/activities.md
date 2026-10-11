@@ -15,8 +15,11 @@
    validate upstream credentials.
 4. Initialize and bind the fixed manifest/ledger once, then hold the exclusive
    run lock across validation, requests and durable outcome writes. Execute the
-   following cases sequentially; every predecessor must have a validated,
-   persisted pass before its successor may dispatch.
+   manifest's listed cases sequentially; every predecessor must have a validated,
+   persisted pass before its successor may dispatch. The manifest lists a
+   non-empty leading prefix of the fixed order below; unlisted cases are never
+   dispatched. The current run lists the first four (Stages 1–2); the embeddings
+   case awaits its own reviewed run.
 
    | Stage | Case ID | Request |
    | --- | --- | --- |

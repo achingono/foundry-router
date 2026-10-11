@@ -6,7 +6,8 @@
 - [x] Harness implemented with offline crash/resume, concurrency, corruption, persistence, observation and redaction checks passing.
 - [ ] Harness independently reviewed.
 - [ ] Applicable repository verification passes, including at least 80% coverage for implemented code.
-- [ ] Exact models, prices, request bounds and five fixed cases bound to the run manifest; credentials supplied out of band.
+- [x] Exact models, prices, request bounds and listed cases bound to the run manifest ([manifest.json](manifest.json), Stages 1–2; embeddings deferred).
+- [ ] Credentials supplied out of band at execution time.
 - [ ] Durable ledger prevents replay/reset; each case passes and is persisted before the next dispatch, including within stages.
 - [ ] Upstream status/usage independently observed and compared with public results; 401/403 count as dispatches and block remaining cases without credential cycling.
 - [ ] Stage 1 Zen non-streaming and streaming successful with usage/output presence and zero retained reservations.

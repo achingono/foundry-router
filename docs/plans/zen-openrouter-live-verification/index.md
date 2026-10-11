@@ -30,9 +30,16 @@ Local estimates remain estimates; nothing here measures provider billing.
    (one non-streaming + one streaming request, one operator-selected exact
    namespaced model, same text bounds). Stage 3 runs only after Stage 2
    success: OpenRouter embeddings (one call, one operator-selected exact
-   embedding model, short input). At most five live dispatches plus bounded
+   embedding model, short input). Stage 3 is deferred: no free embedding model
+   exists in the OpenRouter catalog, so the current run covers Stages 1–2
+   (four cases) and embeddings awaits a separately reviewed future run.
+   A run manifest lists a non-empty leading prefix of the fixed case order;
+   unlisted cases are never dispatched and their ledger slots stay unreserved.
+   At most five live dispatches plus bounded
    read-only diagnostics; no retries, no alternative models, no production
-   changes.
+   changes. Note: the contributor-free Zen model permits provider training on
+   prompts per Zen privacy terms, so verification text stays short and
+   nonsensitive per item 3.
 2. Credentials are operator-supplied out of band and live only in the executing
    environment (environment variables or token-authenticated vault reads).
    They are never committed, logged, displayed, or recorded in evidence. Client

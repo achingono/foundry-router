@@ -14,7 +14,14 @@
 
 ## Open Decisions
 
-- Exact operator-selected models and test prices (required before Stage 1).
+- ~~Exact operator-selected models and test prices~~ Resolved 2026-10-11:
+  Zen `muse-spark-1.3-contributor-free` (Responses-wire per Zen docs, present in
+  the authed catalog); OpenRouter `google/gemma-4-26b-a4b-it:free`; synthetic
+  test prices $1000/M input and output (real spend stays zero on free models).
+- ~~Stage 3 embeddings model~~ Deferred 2026-10-11: no free embedding model
+  exists in the OpenRouter catalog, so Stage 3 is deferred to a separately
+  reviewed future run. The current run covers Stages 1–2 (four cases) under a
+  manifest prefix amendment; see [contract](index.md).
 - Credential supply mechanism (env vs token-authenticated vault reads).
 
 Harness implementation and offline/contextual review remain pending before live use.

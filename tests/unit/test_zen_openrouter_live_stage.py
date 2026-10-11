@@ -517,3 +517,58 @@ def test_non_embeddings_claiming_vectors_blocked(tmp_path):
     with pytest.raises(ValueError):
         run_stage(tmp_path, board, manifest_data)
     assert board.calls == 0
+
+
+def prefix_manifest():
+    return manifest(
+        cases=list(budget.CASE_IDS[:4]),
+        openrouter_embedding_model="",
+    )
+
+
+def test_prefix_run_completes_without_embeddings_dispatch(tmp_path):
+    board = Switchboard()
+    results = run_stage(tmp_path, board, prefix_manifest())
+    assert [item["case_id"] for item in results["attempts"]] == list(budget.CASE_IDS[:4])
+    assert all(item["status"] == "passed" for item in results["attempts"])
+    assert board.calls == 4
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    assert ledger.runnable("openrouter-embeddings") is True
+    rerun = run_stage(tmp_path, board, prefix_manifest())
+    assert len(rerun["attempts"]) == 4
+    assert board.calls == 4
+
+
+def test_unlisted_result_rejected(tmp_path):
+    board = Switchboard()
+    run_stage(tmp_path, board, prefix_manifest())
+    results_path = tmp_path / "results.json"
+    results = json.loads(results_path.read_text())
+    results["attempts"].append(
+        {
+            "case_id": "openrouter-embeddings",
+            "kind": "openrouter-embeddings",
+            "stream": False,
+            "status": "failed",
+            "http_status": None,
+            "provider_http_status": None,
+            "dispatched": False,
+            "input_tokens": None,
+            "output_tokens": None,
+            "usage_matches": False,
+            "terminated_ok": False,
+            "settlement_matches": False,
+            "reservations_cleared": False,
+            "synthetic_debit_usd": 0.0,
+            "vector_count": 0,
+            "dimensions": 0,
+            "order_matches": False,
+            "vector_values_match": False,
+            "error_category": None,
+            "elapsed_seconds": 0.0,
+        }
+    )
+    results_path.write_text(json.dumps(results))
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, prefix_manifest())
+    assert board.calls == 4

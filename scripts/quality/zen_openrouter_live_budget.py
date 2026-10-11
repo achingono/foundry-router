@@ -164,6 +164,16 @@ class RunLedger:
             )
 
 
+def _valid_case_prefix(cases: Any) -> bool:
+    """Manifests list a non-empty leading prefix of the fixed case order."""
+    return (
+        isinstance(cases, list)
+        and bool(cases)
+        and all(isinstance(case_id, str) for case_id in cases)
+        and list(cases) == list(CASE_IDS[: len(cases)])
+    )
+
+
 def validate_manifest(manifest: Any) -> dict[str, Any]:
     """Bind exact models, prices, bounds and the five fixed cases to a run."""
     if (
@@ -175,7 +185,14 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not isinstance(manifest.get("openrouter_model"), str)
         or not manifest["openrouter_model"].strip()
         or not isinstance(manifest.get("openrouter_embedding_model"), str)
-        or not manifest["openrouter_embedding_model"].strip()
+        or (
+            "openrouter-embeddings" in (manifest.get("cases") or [])
+            and not manifest["openrouter_embedding_model"].strip()
+        )
+        or (
+            "openrouter-embeddings" not in (manifest.get("cases") or [])
+            and manifest["openrouter_embedding_model"] != ""
+        )
         or not isinstance(manifest.get("input_per_million"), (int, float))
         or not isinstance(manifest.get("output_per_million"), (int, float))
         or isinstance(manifest.get("input_per_million"), bool)
@@ -184,7 +201,7 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not manifest["output_per_million"] > 0
         or not math.isfinite(float(manifest["input_per_million"]))
         or not math.isfinite(float(manifest["output_per_million"]))
-        or manifest.get("cases") != list(CASE_IDS)
+        or not _valid_case_prefix(manifest.get("cases"))
         or manifest.get("case_timeout_seconds") != CASE_TIMEOUT_SECONDS
         or manifest.get("max_observed_bytes") != MAX_OBSERVED_BYTES
         or manifest.get("max_output_tokens") != MAX_OUTPUT_TOKENS
@@ -192,6 +209,6 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         raise ValueError("Invalid verification manifest")
     return {
         "run": RUN_ID,
-        "cases": list(CASE_IDS),
+        "cases": list(manifest["cases"]),
         "max_dispatches": MAX_DISPATCHES,
     }

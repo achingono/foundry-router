@@ -78,10 +78,6 @@ RESULT_KEYS = {
 }
 
 
-def stage_cases() -> list[str]:
-    return list(CASE_IDS)
-
-
 def empty_results(manifest: dict[str, Any]) -> dict[str, Any]:
     return {"run": RUN_ID, "manifest": manifest_fingerprint(manifest), "attempts": []}
 
@@ -115,8 +111,11 @@ def load_results(path: Path, manifest: dict[str, Any], *, data: Any = None) -> d
     ):
         raise ValueError("Invalid stage results")
     seen = set()
+    listed = manifest["cases"]
     for result in data["attempts"]:
         validate_result(result)
+        if result["case_id"] not in listed:
+            raise ValueError("Unlisted stage result")
         if result["case_id"] in seen:
             raise ValueError("Duplicate stage result")
         seen.add(result["case_id"])
@@ -260,7 +259,7 @@ def execute_stage(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase contr
         factory = transport_factory or (
             lambda: httpx.AsyncHTTPTransport(trust_env=False, retries=0)
         )
-        for case_id in stage_cases():
+        for case_id in manifest["cases"]:
             if case_id in by_id:
                 continue
             if not ledger.runnable(case_id):

@@ -45,7 +45,8 @@ def test_manifest_accepts_exact_five_case_binding():
         {"input_per_million": 0},
         {"output_per_million": -1},
         {"input_per_million": True},
-        {"cases": ["zen-nonstream"]},
+        {"cases": []},
+        {"cases": ["openrouter-nonstream"]},
         {"cases": [*list(budget.CASE_IDS), "extra"]},
         {"case_timeout_seconds": 30},
         {"max_output_tokens": 1024},
@@ -54,6 +55,48 @@ def test_manifest_accepts_exact_five_case_binding():
 def test_manifest_mutations_rejected(override):
     with pytest.raises(ValueError):
         budget.validate_manifest(manifest(**override))
+
+
+def test_manifest_accepts_leading_prefix_without_embeddings_model():
+    summary = budget.validate_manifest(
+        manifest(
+            cases=list(budget.CASE_IDS[:4]),
+            openrouter_embedding_model="",
+        )
+    )
+    assert summary["cases"] == list(budget.CASE_IDS[:4])
+
+
+def test_committed_run_manifest_matches_operator_approval():
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "docs/plans/zen-openrouter-live-verification/manifest.json"
+    )
+    manifest_data = json.loads(path.read_text())
+    summary = budget.validate_manifest(manifest_data)
+    assert summary["cases"] == list(budget.CASE_IDS[:4])
+    assert manifest_data["zen_model"] == "muse-spark-1.3-contributor-free"
+    assert manifest_data["openrouter_model"] == "google/gemma-4-26b-a4b-it:free"
+    assert manifest_data["openrouter_embedding_model"] == ""
+    assert manifest_data["input_per_million"] == 1000.0
+    assert manifest_data["output_per_million"] == 1000.0
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"openrouter_embedding_model": "organization/embed"},
+        {"openrouter_embedding_model": None},
+    ],
+)
+def test_prefix_manifest_embedding_model_rules(override):
+    manifest_data = manifest(
+        cases=list(budget.CASE_IDS[:4]),
+        openrouter_embedding_model="",
+    )
+    manifest_data.update(override)
+    with pytest.raises(ValueError):
+        budget.validate_manifest(manifest_data)
 
 
 def test_reserve_then_outcome_lifecycle(tmp_path):
