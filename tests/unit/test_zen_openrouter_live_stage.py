@@ -303,7 +303,6 @@ def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["status"] == "refused_or_interrupted"
 
 
-
 def test_deleted_ledger_after_pass_blocks_without_dispatch(tmp_path):
     board = Switchboard()
     run_stage(tmp_path, board)
