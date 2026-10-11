@@ -13,12 +13,19 @@ A/B. Documented operator model/price choices were treated as the intended scope;
 this review did not retrieve credentials or independently verify provider prices
 or billing.
 
-## Disposition
+## Current disposition
 
-**Changes required before paid-model live execution.** One Major finding and one
-Suggestion remain open. No Critical findings were identified. Prior harness
-review clearances remain scoped to their reviewed revisions; they do not clear
-this new amendment's model/price authorization boundary.
+**Paid-models amendment review gate cleared.** Follow-up review of
+`0a544a0db7088e9f7393ad30b09a79b9c174f79d`, with the tree at
+`f80fea1c1ab7f5c81c1fa7e24e31f89b3eef1b3d`, closes PM-1 and PM-2 for the three
+committed paid manifests. No unresolved Critical or Major findings remain in
+this scoped review. See the follow-up verification below for limits.
+
+## Initial disposition at 6d5a799
+
+Changes were required: one Major finding and one Suggestion were open. No
+Critical findings were identified. The original findings and reproduction below
+are retained as history; their follow-up dispositions supersede the open status.
 
 ### PM-1 — Major: Paid run identities do not bind approved models and prices
 
@@ -53,7 +60,7 @@ this new amendment's model/price authorization boundary.
   all three. `execute_stage` with temporary canonical run files and a recording
   fake transport dispatched both cases to the substituted model and returned
   two passes for each run. Six fake dispatches total; no live network traffic.
-- **Status:** Open; no implementation fix made during this review.
+- **Initial status:** Open at `6d5a799`; closed by the follow-up review below.
 
 ### PM-2 — Suggestion: Distinguish list-price estimates from provider spend
 
@@ -72,7 +79,7 @@ this new amendment's model/price authorization boundary.
 - **Recommended Fix:** Cite provider/model pricing sources with the date checked.
   Describe any amount as an estimated local cost at the selected rates and
   stated token assumptions; retain the explicit unverified provider-billing gate.
-- **Status:** Open; no provider pricing lookup or billing verification performed.
+- **Initial status:** Open at `6d5a799`; documentation correction verified in the follow-up below. No provider pricing lookup or billing verification was performed by this reviewer.
 
 ## Verification and limits
 
@@ -93,3 +100,47 @@ this new amendment's model/price authorization boundary.
 - Relative links in the review and plan were checked, along with whitespace and
   the final documentation diff. No runtime code, tests, configuration, credentials
   or production resources were changed; no live requests were sent.
+
+## Follow-up review of immutable paid specifications
+
+Date: 2026-10-11. The same independent reviewer checked fix commit
+`0a544a0db7088e9f7393ad30b09a79b9c174f79d` and its documentation at HEAD
+`f80fea1c1ab7f5c81c1fa7e24e31f89b3eef1b3d`. This is a follow-up of the two
+findings, not a claim of another reviewing model or of live execution.
+
+- **PM-1 closed:** `RUN_SPECS` defines the exact active model, empty inactive
+  model fields and input/output prices for each paid run independently of the
+  supplied JSON. `validate_manifest` checks that specification and the fixed
+  run case order before stage locking/ledger initialization and transport setup.
+  Existing case-prefix support may select fewer cases but cannot add another
+  operation or model; paid amendment completion still requires each full pair.
+  All three committed manifests match their specifications. The canonical files,
+  resume fingerprint and persistent per-run halt/replay controls remain intact.
+- **PM-2 closed:** The amendment now records provider pricing source URLs and
+  fetch dates and labels configured rates/costs as local estimates. Actual
+  provider billing and any spend ceiling remain explicitly unverified. This
+  reviewer checked the documentation change, not the historical provider fetches
+  or current availability/prices.
+- **Verification:** All 109 focused harness tests passed using the repository
+  virtual environment. Eighteen additional temporary execution probes changed
+  each of the three model fields, each price independently, and the case scope
+  across all three paid manifests. Every mutation raised `ValueError` before
+  ledger creation and with zero fake transport calls. The focused suite also
+  verifies both successful cases and idempotent reruns on canonical files for
+  each paid manifest.
+- **Legacy-run limitation:** The free-run validation branch still accepts
+  nonblank model names rather than an exact reviewed model specification. This
+  follow-up clears only the three paid run IDs and their committed manifests;
+  it does not approve dispatch via a modified free manifest, a new free ledger,
+  or reuse/reset of halted historical runs. Those paths cannot be substituted
+  for a paid run as part of this clearance. Broad authorization enforcement
+  across all run IDs remains outside this review's clearance.
+- **Scope limits:** The separate embeddings-scope change in `f80fea1` was not
+  independently reviewed here and gains no clearance from this paid-model
+  review. Production, billing, quota/admission and actual provider compatibility
+  remain outside the review. All live execution and applicable repository
+  verification prerequisites still apply; the review itself sends no traffic.
+- **Documentation verification:** Plan relative links and `git diff --check`
+  passed. Only review/status documentation changed. No live state, credentials,
+  runtime code or tests were modified; no live requests were made. Full-suite,
+  coverage, lint/type and Docker verification were not rerun in this follow-up.

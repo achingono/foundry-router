@@ -15,7 +15,7 @@ Live upstream compatibility is not established by the mocked implementation in [
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
 - [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
-- [Paid-models amendment (Planned; review requires changes)](amendment-paid-models.md)
+- [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Independent paid-models commit review](review-paid-models-6d5a799.md)
 - [Independent plan review](review.md)
 

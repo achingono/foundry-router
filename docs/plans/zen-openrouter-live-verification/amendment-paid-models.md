@@ -1,11 +1,13 @@
 # Amendment: standard paid-model runs
 
-Date: 2026-10-11. Status: **Planned**; independent review complete, changes
-required before live execution. No live dispatches under this amendment yet.
+Date: 2026-10-11. Status: **Planned** for live verification; the independent
+paid-models amendment review gate is cleared. No live dispatches under this
+amendment yet.
 
-[Commit review](review-paid-models-6d5a799.md) found one Major authorization-binding
-gap and one pricing-evidence Suggestion. Both remain open; the review does not
-clear this amendment for live execution.
+[Follow-up review](review-paid-models-6d5a799.md#follow-up-review-of-immutable-paid-specifications)
+verified the immutable paid specifications in `0a544a0` and the pricing-evidence
+correction. PM-1 and PM-2 are closed for the three committed paid manifests.
+Execution prerequisites and per-run halt/settlement checks remain in force.
 
 ## Background
 
@@ -56,13 +58,16 @@ A hand-edited free manifest could therefore name a paid model. Mitigations:
 run manifests are committed and pinned by offline tests, the CLI binds live
 execution to canonical files, every dispatch is ledger-reserved with halt on
 failure, and live execution always requires explicit operator credential export
-per invocation. Accepting this residual is the reviewer's call.
+per invocation. The follow-up review clears only the three paid run IDs and
+committed manifests. Modified free manifests, new free ledgers and reuse/reset
+of halted historical runs are outside that clearance; this amendment does not
+approve using the free branch to dispatch a paid model.
 
 ## Exit criteria delta
 
 - [x] Independent review of this amendment and its implementation recorded in the [commit review](review-paid-models-6d5a799.md).
-- [ ] PM-1 model/price binding fixed and independently re-reviewed before live execution.
-- [ ] All three manifests bound to operator-approved models/prices (committed).
+- [x] PM-1 model/price binding fixed and independently re-reviewed in `0a544a0`; PM-2 pricing provenance/estimate wording verified.
+- [x] All three committed manifests bound to their documented operator-approved model/price specifications.
 - [ ] Each run passes both cases with usage/settlement evidence and zero
       retained reservations, or its halt is recorded with no further egress.
 - [ ] Gemma/Muse diagnosis, embeddings, billing, quota/admission, Table, and

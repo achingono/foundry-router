@@ -1,9 +1,9 @@
 # Live verification evidence
 
-**Planned.** No live dispatches made. Independent plan review is complete;
-findings are addressed at the planning level. Harness implemented with offline
-validation; implementation review, operator inputs, and live stages remain
-pending. This record does not establish live compatibility.
+Paid-model live verification remains **Planned**; no paid-amendment dispatches
+are recorded. Its independent review gate is cleared as documented below.
+Historical Run A/B attempts and halts are retained separately. Offline harness
+verification does not establish live compatibility or provider billing.
 
 | Item | Reference | Notes |
 | --- | --- | --- |
@@ -28,7 +28,8 @@ pending. This record does not establish live compatibility.
 | Live execution Run B (2026-10-11) | Local-only ledger/results; numeric summary below | 1 dispatch, then persistent halt. Free model, no real spend |
 | `openrouter-nonstream` | google/gemma-4-26b-a4b-it:free | Public 502 / provider 200 in 1.257s; independently observed usage 7 in / 1 out, public usage absent; $0.00 debit; run halted per contract |
 | `openrouter-stream` | Unreserved | Never dispatched |
-| Paid-models amendment | [Amendment](amendment-paid-models.md) plus 3 committed manifests | Operator-approved: Zen gpt-5.4-mini ($0.75/$4.50), OR gpt-4o-mini ($0.15/$0.60), OR claude-haiku-4.5 ($1.00/$5.00); configured list-price estimates for local accounting; review complete with changes required, no live dispatches yet |
-| Paid-models commit review (2026-10-11) | [Independent review of 6d5a799](review-paid-models-6d5a799.md) | One Major open: first-dispatch model/price binding. One Suggestion: price provenance and estimated-spend wording. 103 focused checks passed; three offline mutated-manifest probes reached fake transport. Not cleared for paid-model live execution |
+| Paid-models amendment | [Amendment](amendment-paid-models.md) plus 3 committed manifests | Operator-approved: Zen gpt-5.4-mini ($0.75/$4.50), OR gpt-4o-mini ($0.15/$0.60), OR claude-haiku-4.5 ($1.00/$5.00); configured list-price estimates for local accounting; paid-amendment review gate cleared; no live dispatches yet |
+| Paid-models commit review (2026-10-11) | [Independent review of 6d5a799](review-paid-models-6d5a799.md) | Initial finding: one Major on first-dispatch model/price binding and one pricing-evidence Suggestion. 103 focused checks passed; three offline mutated-manifest probes reached fake transport. Both findings subsequently closed by the follow-up below |
+| Paid-models follow-up review (2026-10-11) | [Review disposition](review-paid-models-6d5a799.md#follow-up-review-of-immutable-paid-specifications), fix `0a544a0`, tree `f80fea1` | PM-1/PM-2 closed for the three paid manifests. 109 focused checks passed; 18 independent mutations refused before ledger creation/transport. Legacy free-run substitutions and the separate embeddings-scope change are outside this clearance. No live requests sent |
 | Pending scope | Operator decision required | Zen: key reaches `/models` (41-model authed catalog) but `/responses` refuses with 403: likely workspace billing/enablement or key scope. OpenRouter: provider-200 envelope carries valid usage but fails strict translation (likely output-shape mismatch on this free model); public usage/settlement unverified. No retry, probe, or model substitution without a reviewed amendment |
 | Embeddings live scope (2026-10-11) | Zen docs endpoint table; OpenRouter `/api/v1/models` catalog (458 models) | Closed as untestable: Zen exposes no embeddings surface; the catalog lists no embedding model. Mocked embeddings verification stands; live embeddings reopens only on a new surface or catalog entry |
