@@ -925,7 +925,7 @@ class OpenRouterEmbeddingsGuard(ObservationGuard):
     expected_host = "openrouter.ai"
     expected_path = "/api/v1/embeddings"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 -- explicit owned verification inputs
         self,
         transport: httpx.AsyncBaseTransport,
         *,
