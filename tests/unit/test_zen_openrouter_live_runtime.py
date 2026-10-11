@@ -213,6 +213,60 @@ async def test_truncated_stream_rejected(tmp_path):
     assert result["terminated_ok"] is False
 
 
+async def test_truncated_trailing_failure_rejected(tmp_path):
+    payload = (
+        b'data: {"type":"response.created"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+        b'data: {"type":"response.failed","response":{"status":"incompl'
+    )
+    transport = ok_transport(payload)
+    result = await run_case("zen-stream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["terminated_ok"] is False
+
+
+async def test_stream_bytes_forwarded_unchanged(tmp_path):
+    upstream = (
+        b'data: {"type":"response.created"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+    )
+    seen = []
+
+    async def handler(_request):
+        async def chunks():
+            for index in range(0, len(upstream), 7):
+                seen.append(upstream[index : index + 7])
+                yield upstream[index : index + 7]
+
+        return httpx.Response(200, content=chunks())
+
+    led = ledger(tmp_path)
+    guard = runtime.ZenGuard(
+        FakeUpstream(handler),
+        ledger=led,
+        case_id="zen-stream",
+        credential=SECRET,
+        deployment="gpt-5.4",
+        stream=True,
+    )
+    body = json.dumps(
+        {"model": "gpt-5.4", "input": runtime.PROMPT, "max_output_tokens": 128, "stream": True}
+    ).encode()
+    request = httpx.Request(
+        "POST",
+        "https://opencode.ai/zen/v1/responses",
+        content=body,
+        headers={"authorization": f"Bearer {SECRET}", "accept-encoding": "identity"},
+    )
+    response = await guard.handle_async_request(request)
+    forwarded = b""
+    async for chunk in response.aiter_bytes():
+        forwarded += chunk
+    assert forwarded == upstream
+    assert guard.terminated_ok is True
+    assert guard.truncated is False
+
+
 async def test_embeddings_order_error_rejected(tmp_path):
     body = {
         "data": [

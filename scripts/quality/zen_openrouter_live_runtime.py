@@ -177,6 +177,7 @@ class ObservationGuard(httpx.AsyncBaseTransport):
         self.provider_http_status: int | None = None
         self.usage: tuple[int, int] | None = None
         self.terminated_ok = False
+        self.truncated = False
         self.observed_bytes = 0
 
     def _expected_body(self) -> dict[str, Any]:
@@ -240,27 +241,30 @@ class ObservationGuard(httpx.AsyncBaseTransport):
         guard = self
 
         async def observed() -> Any:
-            buffer = bytearray()
-            frame = bytearray()
+            # Forward original bytes unchanged while observing a separate copy:
+            # the router must see exactly what the provider sent, including any
+            # truncated trailing frame, so acceptance can reject it.
+            pending = bytearray()
             try:
                 async for chunk in response.aiter_bytes():
                     guard.observed_bytes += len(chunk)
                     if guard.observed_bytes > MAX_OBSERVED_BYTES:
                         raise ValueError("Verification response bound exceeded")
-                    buffer.extend(chunk)
+                    pending.extend(chunk)
+                    if len(pending) > MAX_FRAME_BYTES:
+                        raise ValueError("Verification frame bound exceeded")
                     while True:
-                        event, rest = _split_frame(bytes(buffer))
+                        event, rest = _split_frame(bytes(pending))
                         if event is None:
                             break
-                        buffer = bytearray(rest)
-                        frame.extend(event)
-                        if len(frame) > MAX_FRAME_BYTES:
+                        pending = bytearray(rest)
+                        if len(event) > MAX_FRAME_BYTES:
                             raise ValueError("Verification frame bound exceeded")
-                        guard._capture_usage(frame, stream=True)
-                        frame = bytearray()
-                        yield event
-                if buffer.strip():
-                    guard._capture_usage(bytes(buffer), stream=True, final=True)
+                        guard._capture_usage(event, stream=True)
+                    yield chunk
+                if pending.strip():
+                    guard.truncated = True
+                    guard.terminated_ok = False
             finally:
                 await response.aclose()
 
