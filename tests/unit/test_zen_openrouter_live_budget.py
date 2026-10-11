@@ -57,7 +57,7 @@ def test_manifest_mutations_rejected(override):
 
 
 def test_reserve_then_outcome_lifecycle(tmp_path):
-    ledger = budget.RunLedger(tmp_path / "ledger.json")
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     assert ledger.runnable("zen-nonstream") is True
     ledger.reserve("zen-nonstream")
     assert ledger.runnable("zen-nonstream") is False
@@ -108,7 +108,7 @@ def test_unknown_case_rejected(tmp_path):
 )
 def test_corrupt_ledger_rejected(tmp_path, mutation):
     path = tmp_path / "ledger.json"
-    budget.RunLedger(path)
+    budget.RunLedger(path, initialize=True)
     data = json.loads(path.read_text())
     data.update(mutation)
     path.write_text(json.dumps(data))
@@ -147,3 +147,14 @@ def test_five_case_budget_is_final(tmp_path):
     assert ledger._read()["dispatches"] == 5
     with pytest.raises(ValueError):
         ledger.reserve("zen-nonstream")
+
+
+
+def test_missing_initialized_ledger_fails_closed(tmp_path):
+    path = tmp_path / "ledger.json"
+    ledger = budget.RunLedger(path, initialize=True)
+    ledger.reserve("zen-nonstream")
+    ledger.record_outcome("zen-nonstream", 12, failed=False)
+    path.unlink()
+    with pytest.raises(ValueError, match="missing"):
+        budget.RunLedger(path, initialize=True)
