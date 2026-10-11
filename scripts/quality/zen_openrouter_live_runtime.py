@@ -255,8 +255,6 @@ class ObservationGuard(httpx.AsyncBaseTransport):
                     if guard.observed_bytes > MAX_OBSERVED_BYTES:
                         raise ValueError("Verification response bound exceeded")
                     pending.extend(chunk)
-                    if len(pending) > MAX_FRAME_BYTES:
-                        raise ValueError("Verification frame bound exceeded")
                     while True:
                         event, rest = _split_frame(bytes(pending))
                         if event is None:
@@ -265,6 +263,10 @@ class ObservationGuard(httpx.AsyncBaseTransport):
                         if len(event) > MAX_FRAME_BYTES:
                             raise ValueError("Verification frame bound exceeded")
                         guard._capture_usage(event, stream=True)
+                    # Bound only the incomplete remainder. A transport chunk may
+                    # contain many complete, individually bounded SSE frames.
+                    if len(pending) > MAX_FRAME_BYTES:
+                        raise ValueError("Verification frame bound exceeded")
                     yield chunk
                 if pending.strip():
                     guard.truncated = True
