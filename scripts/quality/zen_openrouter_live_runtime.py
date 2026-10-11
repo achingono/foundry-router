@@ -523,6 +523,7 @@ async def run_live_case(  # noqa: PLR0913, PLR0915, PLR0911, PLR0912 -- fixed ve
         "vector_count": 0,
         "dimensions": 0,
         "order_matches": False,
+        "vector_values_match": False,
         "error_category": None,
         "elapsed_seconds": 0.0,
     }
@@ -748,6 +749,12 @@ def _accept_embeddings(public: dict[str, Any], guard: Any, result: dict[str, Any
         and guard.vector_count == EMBEDDING_VECTOR_COUNT
         and guard.dimensions == len(vectors[0])
     )
+    # Policy: exact element-by-element equality after JSON numeric values are
+    # normalized to Python floats. Vectors remain transient and are never persisted.
+    result["vector_values_match"] = bool(
+        guard.upstream_vectors
+        and vectors == guard.upstream_vectors
+    )
     if guard.usage is None:
         return False
     public_usage = public.get("usage")
@@ -757,7 +764,7 @@ def _accept_embeddings(public: dict[str, Any], guard: Any, result: dict[str, Any
     matches = observed_in == guard.usage[0]
     result["usage_matches"] = bool(matches)
     result["terminated_ok"] = True
-    return bool(matches and result["order_matches"])
+    return bool(matches and result["order_matches"] and result["vector_values_match"])
 
 
 class OpenRouterEmbeddingsGuard(ObservationGuard):
@@ -766,6 +773,7 @@ class OpenRouterEmbeddingsGuard(ObservationGuard):
     vector_count = 0
     dimensions = 0
     order_ok = False
+    upstream_vectors: list[list[float]] = []
 
     def _expected_body(self) -> dict[str, Any]:
         return {
@@ -805,6 +813,7 @@ class OpenRouterEmbeddingsGuard(ObservationGuard):
                 self.vector_count = EMBEDDING_VECTOR_COUNT
                 self.dimensions = len(vectors[0])
                 self.order_ok = True
+                self.upstream_vectors = [[float(value) for value in vector] for vector in vectors]
         usage = body.get("usage")
         counts = _strict_usage(usage, "prompt_tokens", "total_tokens")
         if counts is not None and counts[1] >= counts[0]:
