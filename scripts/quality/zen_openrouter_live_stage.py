@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import time
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -164,6 +165,9 @@ def validate_result(result: Any) -> None:
         raise ValueError("Invalid stage result category")
     if result["status"] == "passed" and (
         not result["dispatched"]
+        or result["http_status"] != HTTPStatus.OK
+        or result["provider_http_status"] != HTTPStatus.OK
+        or result["stream"] is not result["case_id"].endswith("-stream")
         or not result["usage_matches"]
         or not result["terminated_ok"]
         or not result["settlement_matches"]
@@ -173,6 +177,21 @@ def validate_result(result: Any) -> None:
         or result["output_tokens"] is None
         or result["output_tokens"] > MAX_OUTPUT_TOKENS
         or (result["case_id"] == "openrouter-embeddings" and not result["vector_values_match"])
+        or (
+            result["case_id"] == "openrouter-embeddings"
+            and not (
+                result["vector_count"] > 0 and result["dimensions"] > 0 and result["order_matches"]
+            )
+        )
+        or (
+            result["case_id"] != "openrouter-embeddings"
+            and (
+                result["vector_count"] != 0
+                or result["dimensions"] != 0
+                or result["order_matches"]
+                or result["vector_values_match"]
+            )
+        )
     ):
         raise ValueError("Invalid stage success evidence")
 

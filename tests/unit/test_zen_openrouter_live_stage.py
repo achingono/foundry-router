@@ -425,3 +425,95 @@ def test_setup_failure_blocks_without_ledger_outcome(tmp_path, monkeypatch):
     ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
     assert ledger.dispatch_count() == 0
     assert ledger.runnable("zen-nonstream") is True
+
+
+def _passed_result(**overrides):
+    result = {
+        "case_id": "zen-nonstream",
+        "kind": "zen-nonstream",
+        "stream": False,
+        "status": "passed",
+        "http_status": 200,
+        "provider_http_status": 200,
+        "dispatched": True,
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "usage_matches": True,
+        "terminated_ok": True,
+        "settlement_matches": True,
+        "reservations_cleared": True,
+        "synthetic_debit_usd": 0.015,
+        "vector_count": 0,
+        "dimensions": 0,
+        "order_matches": False,
+        "vector_values_match": False,
+        "error_category": None,
+        "elapsed_seconds": 0.1,
+    }
+    result.update(overrides)
+    return result
+
+
+def _seeded(tmp_path, result):
+    manifest_data = manifest()
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    ledger.reserve(result["case_id"])
+    tokens = result["input_tokens"], result["output_tokens"]
+    actual = tokens[0] + tokens[1] if all(type(v) is int for v in tokens) else None
+    ledger.record_outcome(result["case_id"], actual, failed=result["status"] != "passed")
+    (tmp_path / "results.json").write_text(
+        json.dumps(
+            {
+                "run": budget.RUN_ID,
+                "manifest": stage.manifest_fingerprint(manifest_data),
+                "attempts": [result],
+            }
+        )
+    )
+    return manifest_data
+
+
+def test_contradictory_success_blocks_resume(tmp_path):
+    board = Switchboard()
+    manifest_data = _seeded(tmp_path, _passed_result(http_status=500, provider_http_status=500))
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, manifest_data)
+    assert board.calls == 0
+
+
+def test_stream_mismatch_blocks_resume(tmp_path):
+    board = Switchboard()
+    manifest_data = _seeded(tmp_path, _passed_result(stream=True))
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, manifest_data)
+    assert board.calls == 0
+
+
+def test_embeddings_passed_without_vector_evidence_blocked(tmp_path):
+    board = Switchboard()
+    manifest_data = _seeded(
+        tmp_path,
+        _passed_result(
+            case_id="openrouter-embeddings",
+            kind="openrouter-embeddings",
+            input_tokens=6,
+            output_tokens=0,
+            vector_count=0,
+            dimensions=0,
+            order_matches=False,
+            vector_values_match=True,
+        ),
+    )
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, manifest_data)
+    assert board.calls == 0
+
+
+def test_non_embeddings_claiming_vectors_blocked(tmp_path):
+    board = Switchboard()
+    manifest_data = _seeded(
+        tmp_path, _passed_result(vector_count=2, dimensions=3, order_matches=True)
+    )
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board, manifest_data)
+    assert board.calls == 0
