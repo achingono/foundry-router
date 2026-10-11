@@ -56,11 +56,25 @@ def _initial_ledger() -> dict[str, Any]:
 class RunLedger:
     """Fixed five-case ledger with durable reserve-before-egress semantics."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, initialize: bool = False):
         self.path = path
+        self.identity_path = path.with_name(path.name + ".identity")
         with locked(path):
             if not path.exists():
+                # Initialization is explicit and allowed only once. The sidecar
+                # survives ledger loss and prevents a missing ledger resetting budget.
+                if not initialize or self.identity_path.exists():
+                    raise ValueError("Initialized run ledger is missing")
                 write_atomic(path, _initial_ledger())
+                write_atomic(self.identity_path, {"run": RUN_ID})
+            if not self.identity_path.exists():
+                raise ValueError("Run ledger identity is missing")
+            identity = load_bounded_json(
+                self.identity_path.read_bytes().decode(),
+                max_bytes=1024,
+            )
+            if identity != {"run": RUN_ID}:
+                raise ValueError("Invalid run ledger identity")
             self._read()
 
     def _read(self) -> dict[str, Any]:
