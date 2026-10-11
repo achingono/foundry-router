@@ -233,6 +233,44 @@ async def test_truncated_trailing_failure_rejected(tmp_path):
     assert result["terminated_ok"] is False
 
 
+def test_frame_split_prefers_earliest_boundary():
+    combined = b'data: {"a":1}\n\ndata: {"b":2}\r\n\r\n'
+    first, rest = runtime._split_frame(combined)
+    assert first == b'data: {"a":1}\n\n'
+    second, rest = runtime._split_frame(rest)
+    assert second == b'data: {"b":2}\r\n\r\n'
+    assert rest == b""
+
+
+async def test_mixed_endings_single_chunk_matches_chunked(tmp_path):
+    created = b'data: {"type":"response.created"}\n\n'
+    completed = b'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\r\n\r\n'
+    transport = ok_transport(created + completed)
+    result = await run_case("zen-stream", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["usage_matches"] is True
+    assert result["terminated_ok"] is True
+
+
+async def test_fragmented_mixed_endings_pass(tmp_path):
+    created = b'data: {"type":"response.created"}\n\n'
+    completed = b'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\r\n\r\n'
+    wire = created + completed
+    parts = [wire[:10], wire[10:35], wire[35:]]
+
+    async def handler(_request):
+        async def chunks():
+            for part in parts:
+                yield part
+
+        return httpx.Response(200, content=chunks())
+
+    result = await run_case("zen-stream", FakeUpstream(handler), tmp_path)
+    assert result["status"] == "passed"
+    assert result["usage_matches"] is True
+    assert result["terminated_ok"] is True
+
+
 async def test_multiple_bounded_frames_in_one_chunk_are_accepted(tmp_path):
     # The combined chunk exceeds MAX_FRAME_BYTES, but each SSE frame does not.
     padding = b"x" * 140_000

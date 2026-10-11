@@ -295,11 +295,14 @@ def _safe_headers(response: httpx.Response) -> dict[str, str]:
 
 
 def _split_frame(buffer: bytes) -> tuple[bytes | None, bytes]:
-    for delimiter in (b"\r\n\r\n", b"\n\n"):
-        index = buffer.find(delimiter)
-        if index >= 0:
-            return buffer[: index + len(delimiter)], buffer[index + len(delimiter) :]
-    return None, buffer
+    # Split at the earliest valid event boundary: preferring a delimiter type
+    # over an earlier boundary merges separate events when line endings mix.
+    candidates = [(buffer.find(delimiter), delimiter) for delimiter in (b"\r\n\r\n", b"\n\n")]
+    found = [(index, delimiter) for index, delimiter in candidates if index >= 0]
+    if not found:
+        return None, buffer
+    index, delimiter = min(found)
+    return buffer[: index + len(delimiter)], buffer[index + len(delimiter) :]
 
 
 def _parse_event_usage(payload: bytes) -> dict[str, Any] | None:
