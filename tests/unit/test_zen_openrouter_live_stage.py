@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/quality"))
 import zen_openrouter_live_budget as budget
+import zen_openrouter_live_runtime as runtime
 import zen_openrouter_live_stage as stage
 
 
@@ -409,3 +410,18 @@ def test_ledger_outcome_without_matching_result_blocks_restart(tmp_path):
     with pytest.raises(ValueError):
         run_stage(tmp_path, board)
     assert board.calls == 5
+
+
+def test_setup_failure_blocks_without_ledger_outcome(tmp_path, monkeypatch):
+    board = Switchboard()
+
+    async def boom(**_kwargs):
+        raise runtime.VerificationSetupError("not ready")
+
+    monkeypatch.setattr(stage, "run_live_case", boom)
+    with pytest.raises(ValueError, match="setup failed before dispatch"):
+        run_stage(tmp_path, board)
+    assert board.calls == 0
+    ledger = budget.RunLedger(tmp_path / "ledger.json", initialize=True)
+    assert ledger.dispatch_count() == 0
+    assert ledger.runnable("zen-nonstream") is True

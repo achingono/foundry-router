@@ -372,3 +372,127 @@ async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
     assert runtime._accept_embeddings(public, guard, acceptance) is False
     assert acceptance["order_matches"] is True
     assert acceptance["vector_values_match"] is False
+
+
+class StubResponse:
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+class StubClient:
+    def __init__(self, routes):
+        self.routes = routes
+
+    async def get(self, path, headers=None):
+        _ = headers
+        status, payload = self.routes[path]
+        return StubResponse(status, payload)
+
+
+def admin_payload(remaining=1000.0, active=0, inflight=0.0):
+    return {
+        "credit_groups": {
+            "v": {
+                "live": {
+                    "estimated_remaining_usd": remaining,
+                    "active_reservations": active,
+                    "reserved_inflight_usd": inflight,
+                }
+            }
+        }
+    }
+
+
+def ready_payload(ready=True):
+    return {"ready": ready, "checks": {}}
+
+
+async def test_ready_and_quiet_returns_canonical_balance():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, admin_payload(999.5)),
+        }
+    )
+    assert await runtime._verify_ready_and_quiet(client, "admin-key") == 999.5
+
+
+async def test_readiness_failure_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (503, ready_payload(False)),
+            "/admin/status": (200, admin_payload()),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_busy_account_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, admin_payload(active=1)),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_malformed_admin_evidence_blocks():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (200, {"credit_groups": {}}),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "admin-key")
+
+
+async def test_admin_auth_failure_blocks_before_dispatch():
+    client = StubClient(
+        {
+            "/health/live": (200, {"status": "alive"}),
+            "/health/ready": (200, ready_payload(True)),
+            "/admin/status": (401, {"detail": "Invalid admin API key"}),
+        }
+    )
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime._verify_ready_and_quiet(client, "wrong-key")
+
+
+async def test_readiness_failure_blocks_live_dispatch_end_to_end(tmp_path, monkeypatch):
+    transport = ok_transport(b"{}")
+    real_settings = runtime.verification_settings
+
+    def unready_settings(**kwargs):
+        return real_settings(**kwargs).model_copy(update={"pricing": {}})
+
+    monkeypatch.setattr(runtime, "verification_settings", unready_settings)
+    led = ledger(tmp_path)
+    with pytest.raises(runtime.VerificationSetupError):
+        await runtime.run_live_case(
+            kind="zen-nonstream",
+            credential=SECRET,
+            ledger=led,
+            case_id="zen-nonstream",
+            transport=transport,
+            zen_model="gpt-5.4",
+            openrouter_model="organization/model",
+            embedding_model="organization/embed",
+            input_per_million=1000.0,
+            output_per_million=1000.0,
+        )
+    assert transport.calls == 0
+    assert led.runnable("zen-nonstream") is True
