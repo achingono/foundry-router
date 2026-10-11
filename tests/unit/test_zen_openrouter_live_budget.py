@@ -97,6 +97,54 @@ def test_committed_openrouter_manifest_matches_operator_approval():
 
 
 @pytest.mark.parametrize(
+    "filename,run,model_field,model,price_in,price_out,cases",
+    [
+        (
+            "manifest.zen-paid.json",
+            budget.RUN_ID_ZEN_PAID,
+            "zen_model",
+            "gpt-5.4-mini",
+            0.75,
+            4.5,
+            ["zen-nonstream", "zen-stream"],
+        ),
+        (
+            "manifest.or-openai.json",
+            budget.RUN_ID_OR_OPENAI,
+            "openrouter_model",
+            "openai/gpt-4o-mini",
+            0.15,
+            0.6,
+            ["openrouter-nonstream", "openrouter-stream"],
+        ),
+        (
+            "manifest.or-anthropic.json",
+            budget.RUN_ID_OR_ANTHROPIC,
+            "openrouter_model",
+            "anthropic/claude-haiku-4.5",
+            1.0,
+            5.0,
+            ["openrouter-nonstream", "openrouter-stream"],
+        ),
+    ],
+)
+def test_committed_paid_manifests_match_operator_approval(  # noqa: PLR0913, PLR0917 -- fixed approval matrix
+    filename, run, model_field, model, price_in, price_out, cases
+):
+    path = (
+        Path(__file__).resolve().parents[2]
+        / f"docs/plans/zen-openrouter-live-verification/{filename}"
+    )
+    manifest_data = json.loads(path.read_text())
+    summary = budget.validate_manifest(manifest_data)
+    assert summary["run"] == run
+    assert summary["cases"] == cases
+    assert manifest_data[model_field] == model
+    assert manifest_data["input_per_million"] == price_in
+    assert manifest_data["output_per_million"] == price_out
+
+
+@pytest.mark.parametrize(
     "override",
     [
         {"openrouter_embedding_model": "organization/embed"},

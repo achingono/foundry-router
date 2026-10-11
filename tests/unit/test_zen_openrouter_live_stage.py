@@ -635,3 +635,57 @@ def test_run_b_rejects_zen_model_on_record(tmp_path):
     with pytest.raises(ValueError):
         run_stage(tmp_path, board, openrouter_manifest(zen_model="gpt-5.4"))
     assert board.calls == 0
+
+
+@pytest.mark.parametrize(
+    "filename,ledger_name,results_name,cases",
+    [
+        (
+            "manifest.zen-paid.json",
+            "ledger-zen-paid.json",
+            "results-zen-paid.json",
+            ["zen-nonstream", "zen-stream"],
+        ),
+        (
+            "manifest.or-openai.json",
+            "ledger-or-openai.json",
+            "results-or-openai.json",
+            ["openrouter-nonstream", "openrouter-stream"],
+        ),
+        (
+            "manifest.or-anthropic.json",
+            "ledger-or-anthropic.json",
+            "results-or-anthropic.json",
+            ["openrouter-nonstream", "openrouter-stream"],
+        ),
+    ],
+)
+def test_paid_runs_pass_on_canonical_files(tmp_path, filename, ledger_name, results_name, cases):
+    manifest_path = (
+        Path(__file__).resolve().parents[2]
+        / f"docs/plans/zen-openrouter-live-verification/{filename}"
+    )
+    manifest_data = json.loads(manifest_path.read_text())
+    board = Switchboard()
+    results = stage.execute_stage(
+        manifest_data,
+        stage_dir=tmp_path,
+        zen_credential="synthetic-zen-credential",
+        openrouter_credential="synthetic-or-credential",
+        transport_factory=lambda: board,
+    )
+    assert [item["case_id"] for item in results["attempts"]] == cases
+    assert all(item["status"] == "passed" for item in results["attempts"])
+    assert all(item["settlement_matches"] for item in results["attempts"])
+    assert board.calls == 2
+    assert (tmp_path / ledger_name).exists()
+    assert (tmp_path / results_name).exists()
+    rerun = stage.execute_stage(
+        manifest_data,
+        stage_dir=tmp_path,
+        zen_credential="synthetic-zen-credential",
+        openrouter_credential="synthetic-or-credential",
+        transport_factory=lambda: board,
+    )
+    assert len(rerun["attempts"]) == 2
+    assert board.calls == 2

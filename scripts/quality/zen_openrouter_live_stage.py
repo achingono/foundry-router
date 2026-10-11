@@ -24,6 +24,9 @@ from zen_openrouter_live_budget import (
     MAX_OUTPUT_TOKENS,
     RUN_ID,
     RUN_ID_OPENROUTER,
+    RUN_ID_OR_ANTHROPIC,
+    RUN_ID_OR_OPENAI,
+    RUN_ID_ZEN_PAID,
     RunLedger,
     locked,
     validate_manifest,
@@ -50,6 +53,9 @@ MAX_RESULTS_BYTES = 65536
 RUN_FILES = {
     RUN_ID: ("ledger.json", "results.json"),
     RUN_ID_OPENROUTER: ("ledger-openrouter.json", "results-openrouter.json"),
+    RUN_ID_ZEN_PAID: ("ledger-zen-paid.json", "results-zen-paid.json"),
+    RUN_ID_OR_OPENAI: ("ledger-or-openai.json", "results-or-openai.json"),
+    RUN_ID_OR_ANTHROPIC: ("ledger-or-anthropic.json", "results-or-anthropic.json"),
 }
 MAX_DEBIT_USD = 1000
 

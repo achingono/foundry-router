@@ -21,6 +21,9 @@ from foundry_router.api.adapters.google_schema import load_bounded_json
 
 RUN_ID = "zen-openrouter-live-2026-10-11"
 RUN_ID_OPENROUTER = "zen-openrouter-live-2026-10-11-openrouter"
+RUN_ID_ZEN_PAID = "zen-openrouter-live-2026-10-11-zen-paid"
+RUN_ID_OR_OPENAI = "zen-openrouter-live-2026-10-11-openrouter-openai"
+RUN_ID_OR_ANTHROPIC = "zen-openrouter-live-2026-10-11-openrouter-anthropic"
 MAX_LEDGER_BYTES = 65536
 MAX_MANIFEST_BYTES = 65536
 MAX_DISPATCHES = 5
@@ -46,6 +49,9 @@ CASE_ID_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,80}")
 RUN_CASES: dict[str, tuple[str, ...]] = {
     RUN_ID: CASE_IDS,
     RUN_ID_OPENROUTER: ("openrouter-nonstream", "openrouter-stream"),
+    RUN_ID_ZEN_PAID: ("zen-nonstream", "zen-stream"),
+    RUN_ID_OR_OPENAI: ("openrouter-nonstream", "openrouter-stream"),
+    RUN_ID_OR_ANTHROPIC: ("openrouter-nonstream", "openrouter-stream"),
 }
 
 

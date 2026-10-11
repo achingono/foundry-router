@@ -121,3 +121,6 @@ screenshots/
 !/docs/plans/google-compatible-signature-text/ledger-baseline.json
 !/docs/plans/zen-openrouter-live-verification/manifest.json
 !/docs/plans/zen-openrouter-live-verification/manifest.openrouter.json
+!/docs/plans/zen-openrouter-live-verification/manifest.zen-paid.json
+!/docs/plans/zen-openrouter-live-verification/manifest.or-openai.json
+!/docs/plans/zen-openrouter-live-verification/manifest.or-anthropic.json
