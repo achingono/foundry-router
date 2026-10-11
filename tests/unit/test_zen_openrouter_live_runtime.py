@@ -143,6 +143,7 @@ async def test_openrouter_embeddings_pass(tmp_path):
     assert result["vector_count"] == 2
     assert result["dimensions"] == 2
     assert result["order_matches"] is True
+    assert result["vector_values_match"] is True
     assert result["usage_matches"] is True
     assert result["settlement_matches"] is True
 
@@ -259,3 +260,53 @@ async def test_unexpected_url_rejected_without_reserve(tmp_path):
     with pytest.raises(ValueError):
         await guard.handle_async_request(request)
     assert led.runnable("zen-nonstream") is True
+
+
+
+async def test_embeddings_value_translation_mismatch_rejected(tmp_path):
+    upstream = {
+        "data": [
+            {"index": 0, "embedding": [0.5, 1.0]},
+            {"index": 1, "embedding": [1.5, 2.0]},
+        ],
+        "usage": {"prompt_tokens": 6, "total_tokens": 6},
+    }
+    public = {
+        "data": [
+            {"index": 0, "embedding": [0.5, 1.0]},
+            {"index": 1, "embedding": [1.5, 2.1]},
+        ],
+        "usage": {"prompt_tokens": 6, "total_tokens": 6},
+    }
+
+    class PublicMutationTransport(FakeUpstream):
+        pass
+
+    # Run the standard request and make only the router's public result differ
+    # from the independently observed upstream vector; no network is involved.
+    transport = ok_transport(json.dumps(upstream).encode())
+    result = await run_case("openrouter-embeddings", transport, tmp_path)
+    guard = runtime.OpenRouterEmbeddingsGuard(
+        ok_transport(json.dumps(upstream).encode()),
+        ledger=ledger(tmp_path / "other-ledger.json"),
+        case_id="openrouter-embeddings",
+        credential=SECRET,
+        deployment="organization/embed",
+    )
+    guard.upstream_vectors = [[0.5, 1.0], [1.5, 2.0]]
+    guard.vector_count = 2
+    guard.dimensions = 2
+    guard.order_ok = True
+    guard.usage = (6, 0)
+    acceptance = {
+        "http_status": 200,
+        "usage_matches": False,
+        "terminated_ok": False,
+        "vector_count": 0,
+        "dimensions": 0,
+        "order_matches": False,
+        "vector_values_match": False,
+    }
+    assert runtime._accept_embeddings(public, guard, acceptance) is False
+    assert acceptance["order_matches"] is True
+    assert acceptance["vector_values_match"] is False
