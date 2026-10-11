@@ -15,7 +15,7 @@ SECRET = "synthetic-credential-value"
 
 
 def ledger(tmp_path):
-    return budget.RunLedger(tmp_path / "ledger.json")
+    return budget.RunLedger(tmp_path / "ledger.json", initialize=True)
 
 
 class FakeUpstream(httpx.AsyncBaseTransport):
