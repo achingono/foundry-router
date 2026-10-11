@@ -540,3 +540,34 @@ async def test_readiness_failure_blocks_live_dispatch_end_to_end(tmp_path, monke
         )
     assert transport.calls == 0
     assert led.runnable("zen-nonstream") is True
+
+
+def test_embedding_guard_evidence_is_isolated_per_instance(tmp_path):
+    transport = ok_transport(b"{}")
+    run_ledger = ledger(tmp_path)
+    first = runtime.OpenRouterEmbeddingsGuard(
+        transport,
+        ledger=run_ledger,
+        case_id="first",
+        credential=SECRET,
+        deployment="organization/embed",
+    )
+    second = runtime.OpenRouterEmbeddingsGuard(
+        transport,
+        ledger=run_ledger,
+        case_id="second",
+        credential=SECRET,
+        deployment="organization/embed",
+    )
+
+    first.vector_count = runtime.EMBEDDING_VECTOR_COUNT
+    first.dimensions = 3
+    first.order_ok = True
+    first.upstream_vectors.append([0.1, 0.2, 0.3])
+
+    assert second.vector_count == 0
+    assert second.dimensions == 0
+    assert second.order_ok is False
+    assert second.upstream_vectors == []
+    assert second.upstream_vectors is not first.upstream_vectors
+
