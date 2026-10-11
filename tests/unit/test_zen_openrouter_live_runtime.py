@@ -236,10 +236,10 @@ async def test_truncated_trailing_failure_rejected(tmp_path):
 async def test_multiple_bounded_frames_in_one_chunk_are_accepted(tmp_path):
     # The combined chunk exceeds MAX_FRAME_BYTES, but each SSE frame does not.
     padding = b"x" * 150
-    frame = b'data: {"type":"response.created","padding":"' + padding + b'"}\\n\\n'
+    frame = b'data: {"type":"response.created","padding":"' + padding + b'"}\n\n'
     completed = (
         b'data: {"type":"response.completed","response":{"status":"completed",'
-        b'"output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\\n\\n'
+        b'"output":[],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
     )
     upstream = frame + frame + completed
     assert len(frame) < runtime.MAX_FRAME_BYTES
