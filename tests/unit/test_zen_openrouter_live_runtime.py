@@ -1,0 +1,261 @@
+"""Offline harness checks: guards, runner, observation and redaction."""
+
+import json
+import sys
+from pathlib import Path
+
+import httpx
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/quality"))
+import zen_openrouter_live_budget as budget
+import zen_openrouter_live_runtime as runtime
+
+SECRET = "synthetic-credential-value"
+
+
+def ledger(tmp_path):
+    return budget.RunLedger(tmp_path / "ledger.json")
+
+
+class FakeUpstream(httpx.AsyncBaseTransport):
+    """Canned provider bytes with call counting and failure injection."""
+
+    def __init__(self, handler):
+        self.handler = handler
+        self.calls = 0
+
+    async def handle_async_request(self, request):
+        self.calls += 1
+        return await self.handler(request)
+
+    async def aclose(self):
+        pass
+
+
+def zen_body(usage=True):
+    body = {
+        "id": "resp_1",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "ready"}],
+            }
+        ],
+        "model": "gpt-5.4",
+    }
+    if usage:
+        body["usage"] = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    return body
+
+
+def chat_body():
+    return {
+        "choices": [
+            {"message": {"role": "assistant", "content": "answer"}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+
+
+def run_case(kind, transport, tmp_path, **overrides):
+    params = {
+        "kind": kind,
+        "credential": SECRET,
+        "ledger": ledger(tmp_path),
+        "case_id": kind,
+        "transport": transport,
+        "zen_model": "gpt-5.4",
+        "openrouter_model": "organization/model",
+        "embedding_model": "organization/embed",
+        "input_per_million": 1000.0,
+        "output_per_million": 1000.0,
+    }
+    params.update(overrides)
+    return runtime.run_live_case(**params)
+
+
+def ok_transport(payload: bytes, status: int = 200):
+    async def handler(_request):
+        return httpx.Response(status, content=payload)
+
+    return FakeUpstream(handler)
+
+
+async def test_zen_nonstream_pass(tmp_path):
+    transport = ok_transport(json.dumps(zen_body()).encode())
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["usage_matches"] is True
+    assert result["settlement_matches"] is True
+    assert result["reservations_cleared"] is True
+    assert result["dispatched"] is True
+    assert transport.calls == 1
+    assert SECRET not in json.dumps(result)
+
+
+async def test_zen_stream_pass(tmp_path):
+    payload = (
+        b'data: {"type":"response.created"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ready"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+    )
+    transport = ok_transport(payload)
+    result = await run_case("zen-stream", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["terminated_ok"] is True
+    assert result["usage_matches"] is True
+    assert transport.calls == 1
+
+
+async def test_openrouter_nonstream_pass(tmp_path):
+    transport = ok_transport(json.dumps(chat_body()).encode())
+    result = await run_case("openrouter-nonstream", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["usage_matches"] is True
+    assert result["settlement_matches"] is True
+
+
+async def test_openrouter_stream_pass(tmp_path):
+    payload = (
+        b'data: {"choices":[{"delta":{"content":"answer"},"finish_reason":"stop"}]}\n\n'
+        b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n'
+        b"data: [DONE]\n\n"
+    )
+    transport = ok_transport(payload)
+    result = await run_case("openrouter-stream", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["terminated_ok"] is True
+
+
+async def test_openrouter_embeddings_pass(tmp_path):
+    body = {
+        "data": [
+            {"index": 0, "embedding": [0.5, 1.0]},
+            {"index": 1, "embedding": [1.5, 2.0]},
+        ],
+        "usage": {"prompt_tokens": 6, "total_tokens": 6},
+    }
+    transport = ok_transport(json.dumps(body).encode())
+    result = await run_case("openrouter-embeddings", transport, tmp_path)
+    assert result["status"] == "passed"
+    assert result["vector_count"] == 2
+    assert result["dimensions"] == 2
+    assert result["order_matches"] is True
+    assert result["usage_matches"] is True
+    assert result["settlement_matches"] is True
+
+
+async def test_second_dispatch_rejected_at_observer(tmp_path):
+    transport = ok_transport(json.dumps(zen_body()).encode())
+    first = await run_case("zen-nonstream", transport, tmp_path)
+    assert first["status"] == "passed"
+    assert transport.calls == 1
+    # A reserved case never reaches transport twice: the stage refuses, and a
+    # direct rerun fails closed at the ledger reservation.
+    led = ledger(tmp_path)
+    assert led.runnable("zen-nonstream") is False
+
+
+async def test_crash_after_intent_blocks_replay(tmp_path):
+    async def handler(_request):
+        raise httpx.ConnectError("down")
+
+    transport = FakeUpstream(handler)
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["dispatched"] is True
+    led = ledger(tmp_path)
+    assert led.runnable("zen-nonstream") is False
+    # A rerun with the same ledger refuses before egress.
+    transport2 = ok_transport(json.dumps(zen_body()).encode())
+    rerun = await run_case(
+        "zen-nonstream",
+        transport2,
+        tmp_path,
+        ledger=led,
+    )
+    assert rerun["status"] == "failed"
+    assert rerun["dispatched"] is False
+    assert transport2.calls == 0
+
+
+async def test_provider_401_counts_as_dispatched(tmp_path):
+    transport = ok_transport(b"no", status=401)
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["provider_http_status"] == 401
+    assert result["dispatched"] is True
+
+
+async def test_mismapped_usage_rejected(tmp_path):
+    body = zen_body()
+    body["usage"] = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 99}
+    transport = ok_transport(json.dumps(body).encode())
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["usage_matches"] is False
+
+
+async def test_missing_usage_rejected(tmp_path):
+    transport = ok_transport(json.dumps(zen_body(usage=False)).encode())
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+
+
+async def test_truncated_stream_rejected(tmp_path):
+    payload = b'data: {"type":"response.created"}\n\n'
+    transport = ok_transport(payload)
+    result = await run_case("zen-stream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["terminated_ok"] is False
+
+
+async def test_embeddings_order_error_rejected(tmp_path):
+    body = {
+        "data": [
+            {"index": 1, "embedding": [0.5]},
+            {"index": 0, "embedding": [1.5]},
+        ],
+        "usage": {"prompt_tokens": 6, "total_tokens": 6},
+    }
+    transport = ok_transport(json.dumps(body).encode())
+    result = await run_case("openrouter-embeddings", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["order_matches"] is False
+
+
+async def test_bound_breach_rejected(tmp_path):
+    transport = ok_transport(b"x" * (runtime.MAX_OBSERVED_BYTES + 1))
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    assert result["error_category"] == runtime.ERROR_BOUND
+
+
+async def test_secret_bearing_errors_redacted(tmp_path):
+    async def handler(_request):
+        raise ValueError("boom synthetic-secret-marker-123")
+
+    transport = FakeUpstream(handler)
+    result = await run_case("zen-nonstream", transport, tmp_path)
+    assert result["status"] == "failed"
+    dumped = json.dumps(result)
+    assert "synthetic-secret-marker-123" not in dumped
+    assert SECRET not in dumped
+    assert runtime.PROMPT not in dumped
+
+
+async def test_unexpected_url_rejected_without_reserve(tmp_path):
+    led = ledger(tmp_path)
+    guard = runtime.ZenGuard(
+        ok_transport(b"{}"),
+        ledger=led,
+        case_id="zen-nonstream",
+        credential=SECRET,
+        deployment="gpt-5.4",
+    )
+    request = httpx.Request("POST", "https://evil.test/zen/v1/responses", content=b"{}")
+    with pytest.raises(ValueError):
+        await guard.handle_async_request(request)
+    assert led.runnable("zen-nonstream") is True
