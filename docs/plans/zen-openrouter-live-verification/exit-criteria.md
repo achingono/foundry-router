@@ -6,13 +6,13 @@
 - [x] Harness implemented with offline crash/resume, concurrency, corruption, persistence, observation and redaction checks passing.
 - [ ] Harness independently reviewed.
 - [ ] Applicable repository verification passes, including at least 80% coverage for implemented code.
-- [x] Exact models, prices, request bounds and listed cases bound to the run manifest ([manifest.json](manifest.json), Stages 1–2; embeddings deferred).
+- [x] Exact models, prices, request bounds and listed cases bound to the run manifest ([manifest.json](manifest.json), Stages 1–2).
 - [ ] Credentials supplied out of band at execution time.
 - [ ] Durable ledger prevents replay/reset; each case passes and is persisted before the next dispatch, including within stages.
 - [ ] Upstream status/usage independently observed and compared with public results; 401/403 count as dispatches and block remaining cases without credential cycling.
 - [ ] Stage 1 Zen non-streaming and streaming successful with usage/output presence and zero retained reservations.
 - [ ] Stage 2 OpenRouter non-streaming and streaming successful with mapped usage/settlement and zero retained reservations.
-- [ ] Stage 3 OpenRouter embeddings successful with count/order/dimensions, input-token reconciliation and zero retained reservations.
+- [ ] Stage 3 OpenRouter embeddings: closed as untestable 2026-10-11 (no Zen embeddings surface; OpenRouter catalog of 458 models lists none, free or paid). Reopens only on a new upstream surface or catalog entry via fresh amendment.
 - [ ] Per-request canonical credit-group deltas reconciled against independently observed usage at test prices; explicitly unrelated to provider billing.
 - [ ] Evidence/review/links complete; no prompts, outputs, error bodies, or credential values recorded.
 - [ ] Pending gates (other models, billing, quota/admission, Table, production) explicit.

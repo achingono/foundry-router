@@ -42,9 +42,10 @@ reset another run's budget, and a further run needs its own reviewed amendment.
    (one non-streaming + one streaming request, one operator-selected exact
    namespaced model, same text bounds). Stage 3 runs only after Stage 2
    success: OpenRouter embeddings (one call, one operator-selected exact
-   embedding model, short input). Stage 3 is deferred: no free embedding model
-   exists in the OpenRouter catalog, so the current run covers Stages 1–2
-   (four cases) and embeddings awaits a separately reviewed future run.
+   embedding model, short input). Stage 3 is closed as untestable 2026-10-11:
+   Zen exposes no embeddings surface and the OpenRouter catalog (458 models,
+   fetched 2026-10-11) lists no embedding model, free or paid. A new upstream
+   surface or catalog entry triggers a fresh amendment.
    A run manifest lists a non-empty leading prefix of the fixed case order;
    unlisted cases are never dispatched and their ledger slots stay unreserved.
    At most five live dispatches plus bounded
