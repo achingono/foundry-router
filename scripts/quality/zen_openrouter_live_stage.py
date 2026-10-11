@@ -69,6 +69,7 @@ RESULT_KEYS = {
     "vector_count",
     "dimensions",
     "order_matches",
+    "vector_values_match",
     "error_category",
     "elapsed_seconds",
 }
@@ -195,9 +196,26 @@ def execute_stage(  # noqa: PLR0913 -- fixed phase contract and fixture injectio
     ledger_file = ledger_path or (stage_dir / "ledger.json")
     results_file = results_path or (stage_dir / "results.json")
     with locked(stage_dir / "stage"):
-        ledger = RunLedger(ledger_file)
+        first_initialization = not ledger_file.exists() and not results_file.exists()
+        ledger = RunLedger(ledger_file, initialize=first_initialization)
         results = load_results(results_file, manifest)
-        by_id = {item["case_id"]: item for item in results["attempts"]}
+        # Reconcile both durable records before any provider egress. A reservation
+        # without an outcome, or an outcome without a matching result, is terminal.
+        ledger_data = ledger._read()
+        result_by_id = {item["case_id"]: item for item in results["attempts"]}
+        for case_id, case in ledger_data["cases"].items():
+            persisted = result_by_id.get(case_id)
+            if case["reserved"]:
+                if case["outcome"] is None or persisted is None:
+                    raise ValueError("Incomplete durable case outcome")
+                tokens = persisted.get("input_tokens"), persisted.get("output_tokens")
+                actual = sum(tokens) if all(type(value) is int for value in tokens) else None
+                expected_outcome = "passed" if persisted["status"] == "passed" else "failed"
+                if case["outcome"] != expected_outcome or case["actual_tokens"] != actual:
+                    raise ValueError("Ledger/result outcome mismatch")
+            elif case["outcome"] is not None or persisted is not None:
+                raise ValueError("Ledger/result outcome mismatch")
+        by_id = result_by_id
         if any(item["status"] != "passed" for item in results["attempts"]):
             return results
         if not zen_credential or not zen_credential.strip():
@@ -228,11 +246,13 @@ def execute_stage(  # noqa: PLR0913 -- fixed phase contract and fixture injectio
             result["elapsed_seconds"] = round(time.monotonic() - started, 3)
             validate_result(result)
             results["attempts"].append(result)
-            write_atomic(results_file, results)
-            by_id[case_id] = result
+            # Record the ledger outcome first, then atomically persist results.
+            # A crash between these writes is detected by bidirectional reconciliation.
             tokens = result.get("input_tokens"), result.get("output_tokens")
             actual = tokens[0] + tokens[1] if all(type(value) is int for value in tokens) else None
             ledger.record_outcome(case_id, actual, failed=result["status"] != "passed")
+            write_atomic(results_file, results)
+            by_id[case_id] = result
             if result["status"] != "passed":
                 break
         return results
