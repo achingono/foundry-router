@@ -40,7 +40,11 @@ def test_seeded_structural_strings_match_json_decoder():
         assert load_bounded_json(wire) == json.loads(wire)
 
 
-@pytest.mark.parametrize("value", ["x" * 2000000, "\\" * 1000000, '"' * 600000])
+@pytest.mark.parametrize(
+    "value",
+    ["x" * 2000000, "\\" * 1000000, '"' * 600000],
+    ids=["plain-text-2m", "backslashes-1m", "quotes-600k"],
+)
 def test_maximum_string_workload_is_bounded_and_lossless(value):
     wire = json.dumps(value)
     assert load_bounded_json(wire, max_bytes=2097152) == value
