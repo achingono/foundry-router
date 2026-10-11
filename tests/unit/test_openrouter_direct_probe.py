@@ -203,7 +203,7 @@ def test_write_failure_after_intent_blocks_replay(tmp_path, monkeypatch):
 
     def flaky_write(path, data):
         writes["count"] += 1
-        if writes["count"] == 2:
+        if writes["count"] == 3:
             raise OSError("disk full")
         return real_write(path, data)
 
@@ -338,3 +338,77 @@ async def test_probe_model_binding_mismatch_rejected():
     with pytest.raises(ValueError):
         await probe.run_probe("probe-gemma", "other/model", "synthetic-key", transport)
     assert transport.calls == 0
+
+
+def test_deleted_results_after_init_refuses(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    calls = []
+
+    def factory():
+        async def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, content=json.dumps(envelope()).encode())
+
+        return FakeUpstream(handler)
+
+    probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 3
+    (tmp_path / "results-probe.json").unlink()
+    with pytest.raises(ValueError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 3
+
+
+def test_deleted_identity_refuses(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    (tmp_path / "results-probe.json.identity").write_text("{}")
+
+    def no_egress():
+        raise AssertionError("no transport on refused run")
+
+    with pytest.raises(ValueError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=no_egress)
+
+
+async def test_pre_header_timeout_reports_dispatched():
+    async def entered_then_hung(_request):
+        raise httpx.ReadTimeout("no headers")
+
+    transport = FakeUpstream(entered_then_hung)
+    result = await probe.run_probe("probe-openai", "openai/gpt-4o-mini", "synthetic-key", transport)
+    assert transport.calls == 1
+    assert result["dispatched"] is True
+    assert result["error_category"] == "transport_failure"
+
+
+def test_unknown_root_field_refused(tmp_path):
+    with pytest.raises(ValueError):
+        probe.load_probe_results(
+            tmp_path / "missing.json",
+            data={
+                "probe": "openrouter-direct",
+                "reserved": [],
+                "attempts": [],
+                "unknown": "synthetic-marker-root",
+            },
+        )
+
+
+def test_oversized_envelope_write_blocked(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    monkeypatch.setattr(probe, "MAX_RESULTS_BYTES", 128)
+    calls = []
+
+    def factory():
+        async def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, content=json.dumps(envelope()).encode())
+
+        return FakeUpstream(handler)
+
+    with pytest.raises(ValueError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 1
+    with pytest.raises(ValueError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 1

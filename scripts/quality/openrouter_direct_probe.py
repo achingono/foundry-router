@@ -27,7 +27,8 @@ from foundry_router.api.adapters.google_schema import load_bounded_json
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGE_DIR = ROOT / "docs/plans/zen-openrouter-live-verification"
-RESULTS_PATH = STAGE_DIR / "results-probe.json"
+RESULTS_NAME = "results-probe.json"
+IDENTITY_SUFFIX = ".identity"
 MAX_RESULTS_BYTES = 65536
 
 PROBE_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -316,6 +317,15 @@ def validate_probe_result(result: Any) -> None:  # noqa: PLR0912 -- bounded evid
         raise ValueError("Invalid probe result size")
 
 
+def _serialized_size(data: Any) -> int:
+    return len(json.dumps(data).encode("utf-8"))
+
+
+def _check_envelope_size(data: Any) -> None:
+    if _serialized_size(data) > MAX_RESULTS_BYTES:
+        raise ValueError("Probe record exceeds bound")
+
+
 def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
     if data is None:
         if not path.exists():
@@ -325,11 +335,13 @@ def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
         data = load_bounded_json(path.read_text(), max_bytes=MAX_RESULTS_BYTES)
     if (
         not isinstance(data, dict)
+        or set(data) != {"probe", "reserved", "attempts"}
         or data.get("probe") != "openrouter-direct"
         or not isinstance(data.get("reserved"), list)
         or not isinstance(data.get("attempts"), list)
     ):
         raise ValueError("Invalid probe results")
+    _check_envelope_size(data)
     seen = set()
     allowed = {probe for probe, _ in PROBES}
     reserved = data["reserved"]
@@ -344,7 +356,49 @@ def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
     if any(probe not in recorded for probe in reserved):
         # A reservation without an outcome blocks replay pending review.
         raise ValueError("Unresolved probe reservation")
+    if any(probe not in reserved for probe in recorded):
+        # An outcome without a prior reservation is an impossible state.
+        raise ValueError("Unreserved probe outcome")
     return data
+
+
+def _identity_path(results_path: Path) -> Path:
+    return results_path.with_name(results_path.name + IDENTITY_SUFFIX)
+
+
+def ensure_probe_initialized(results_path: Path) -> None:
+    """One-time durable initialization; missing initialized state refuses.
+
+    The identity sidecar survives results loss: deleting results after a first
+    initialization is detected and blocks instead of resetting the budget.
+    """
+    identity = _identity_path(results_path)
+    if not results_path.exists() and not identity.exists():
+        write_atomic(identity, {"probe": "openrouter-direct"})
+        return
+    if not results_path.exists() or not identity.exists():
+        raise ValueError("Initialized probe state is missing")
+    try:
+        marker = load_bounded_json(identity.read_bytes().decode(), max_bytes=1024)
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise ValueError("Invalid probe identity") from exc
+    if marker != {"probe": "openrouter-direct"}:
+        raise ValueError("Invalid probe identity")
+
+
+class _EntryMarker(httpx.AsyncBaseTransport):
+    """Records transport entry: lack of headers does not prove zero egress."""
+
+    def __init__(self, transport: httpx.AsyncBaseTransport):
+        self.transport = transport
+        self.entered = False
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.entered = True
+        return await self.transport.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self.transport.aclose()
 
 
 async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
@@ -374,10 +428,11 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
     raw_body = json.dumps(body).encode()
     if len(raw_body) > MAX_REQUEST_BYTES:
         return finish("request_bound_exceeded")
+    marker = _EntryMarker(transport)
     try:
         async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
             async with httpx.AsyncClient(
-                transport=transport, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
+                transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
             ) as client:
                 # Stream so bounds apply while reading: headers mark dispatch,
                 # raw identity bytes are counted as they arrive, and the
@@ -407,7 +462,10 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
                     except (OSError, RuntimeError, httpx.HTTPError, ValueError):
                         return finish("transport_failure")
     except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError):
-        # Transport-raised values carry no trusted content; never persist them.
+        # Transport entry may precede headers: preserve conservative dispatch
+        # intent instead of reporting zero egress. Raised values carry no
+        # trusted content; never persist them.
+        result["dispatched"] = marker.entered
         return finish("transport_failure")
     try:
         payload = load_bounded_json(bytes(chunks).decode("utf-8"), max_bytes=MAX_BODY_BYTES)
@@ -430,6 +488,7 @@ def execute_probes(
     directory = stage_dir if stage_dir is not None else STAGE_DIR
     results_path = directory / "results-probe.json"
     with locked(directory / "stage"):
+        ensure_probe_initialized(results_path)
         results = load_probe_results(results_path)
         recorded = {item["probe_id"] for item in results["attempts"]}
         factory = transport_factory or (
@@ -441,13 +500,13 @@ def execute_probes(
             # Durably reserve the slot before egress; a crash or failed write
             # afterwards blocks replay pending review instead of resending.
             results["reserved"].append(probe_id)
+            _check_envelope_size(results)
             write_atomic(results_path, results)
             outcome = asyncio.run(run_probe(probe_id, model, credential, factory()))
             validate_probe_result(outcome)
-            if len(json.dumps(outcome).encode("utf-8")) > MAX_ATTEMPT_BYTES:
-                raise ValueError("Probe outcome exceeds bound")
             results["attempts"].append(outcome)
             load_probe_results(results_path, data=results)
+            _check_envelope_size(results)
             write_atomic(results_path, results)
             recorded.add(probe_id)
         return results
