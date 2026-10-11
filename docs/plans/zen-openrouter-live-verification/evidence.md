@@ -17,4 +17,6 @@ pending. This record does not establish live compatibility.
 | Repository verification | Repository virtual environment | 2,277 passed, 3 skipped, 19 deselected (`not docker and not azurite`); `ruff check`/`ruff format --check` clean repo-wide; strict mypy clean on `src/` |
 | Static scan | Conditional repository script absent | `scripts/quality/sonarqube-scan.sh` does not exist |
 | Harness implementation review | Pending | Required before live dispatch |
+| Independent harness review (5 Majors) | Reviewer report, no files changed | Budget reset via path switching; truncated SSE hidden from router; exception paths misreporting dispatch; unenforced output cap; bypassed auth/readiness/admin checks |
+| Finding dispositions | Harness commits on main | Canonical CLI ledger binding; unchanged byte forwarding with truncation rejection; fact harvesting on all exits plus ledger-count CLI reporting; output-cap enforcement in acceptance and result validation; real routes/auth with canonical admin evidence and setup-error propagation |
 | Live stages | None | No requests sent; no credentials retrieved; no production changes |
