@@ -230,6 +230,7 @@ def test_result_mutations_rejected(tmp_path, mutation):
         "vector_count": 0,
         "dimensions": 0,
         "order_matches": False,
+        "vector_values_match": False,
         "error_category": None,
         "elapsed_seconds": 0.1,
     }
@@ -300,3 +301,38 @@ def test_cli_refuses_missing_credentials(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert stage.main() == 2
     assert json.loads(capsys.readouterr().out)["status"] == "refused_or_interrupted"
+
+
+
+def test_deleted_ledger_after_pass_blocks_without_dispatch(tmp_path):
+    board = Switchboard()
+    run_stage(tmp_path, board)
+    (tmp_path / "ledger.json").unlink()
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board)
+    assert board.calls == 5
+
+
+def test_reserved_case_without_ledger_outcome_blocks_restart(tmp_path):
+    board = Switchboard()
+    run_stage(tmp_path, board)
+    ledger_path = tmp_path / "ledger.json"
+    data = json.loads(ledger_path.read_text())
+    data["cases"]["zen-nonstream"]["outcome"] = None
+    data["cases"]["zen-nonstream"]["actual_tokens"] = None
+    ledger_path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board)
+    assert board.calls == 5
+
+
+def test_ledger_outcome_without_matching_result_blocks_restart(tmp_path):
+    board = Switchboard()
+    run_stage(tmp_path, board)
+    results_path = tmp_path / "results.json"
+    results = json.loads(results_path.read_text())
+    results["attempts"] = results["attempts"][1:]
+    results_path.write_text(json.dumps(results))
+    with pytest.raises(ValueError):
+        run_stage(tmp_path, board)
+    assert board.calls == 5
