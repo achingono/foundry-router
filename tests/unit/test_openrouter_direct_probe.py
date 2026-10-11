@@ -1,5 +1,6 @@
 """Offline direct-probe checks: structure classification and redaction."""
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -184,3 +185,156 @@ def test_cli_refuses_without_execute(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["openrouter_direct_probe.py"])
     assert probe.main() == 2
     assert json.loads(capsys.readouterr().out)["status"] == "refused"
+
+
+def test_write_failure_after_intent_blocks_replay(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    calls = []
+
+    def factory():
+        async def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, content=json.dumps(envelope()).encode())
+
+        return FakeUpstream(handler)
+
+    writes = {"count": 0}
+    real_write = probe.write_atomic
+
+    def flaky_write(path, data):
+        writes["count"] += 1
+        if writes["count"] == 2:
+            raise OSError("disk full")
+        return real_write(path, data)
+
+    monkeypatch.setattr(probe, "write_atomic", flaky_write)
+    with pytest.raises(OSError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 1
+    with pytest.raises(ValueError):
+        probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(calls) == 1
+
+
+def test_reserved_without_outcome_blocks_replay(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    (tmp_path / "results-probe.json").write_text(
+        json.dumps({"probe": "openrouter-direct", "reserved": ["probe-gemma"], "attempts": []})
+    )
+    with pytest.raises(ValueError):
+        probe.execute_probes(
+            credential="synthetic-key", transport_factory=lambda: FakeUpstream(None)
+        )
+
+
+async def test_timeout_after_entry_reports_dispatched(monkeypatch):
+    async def hanging(_request):
+        async def chunks():
+            await asyncio.sleep(5)
+            yield b"x"
+
+        return httpx.Response(200, content=chunks())
+
+    transport = FakeUpstream(hanging)
+    monkeypatch.setattr(probe, "PROBE_TIMEOUT_SECONDS", 0.05)
+    result = await probe.run_probe("probe-openai", "openai/gpt-4o-mini", "synthetic-key", transport)
+    assert result["dispatched"] is True
+    assert result["error_category"] == "transport_failure"
+
+
+async def test_oversized_stream_terminates_early(monkeypatch):
+    yielded = []
+
+    async def handler(_request):
+        async def chunks():
+            for _ in range(10):
+                yielded.append(1)
+                yield b"x" * 16
+
+        return httpx.Response(200, content=chunks())
+
+    transport = FakeUpstream(handler)
+    monkeypatch.setattr(probe, "MAX_BODY_BYTES", 32)
+    result = await probe.run_probe("probe-openai", "openai/gpt-4o-mini", "synthetic-key", transport)
+    assert result["error_category"] == "response_bound_exceeded"
+    assert len(yielded) < 10
+
+
+async def test_encoded_response_rejects_without_reading_body():
+    read = []
+
+    async def handler(_request):
+        async def chunks():
+            read.append(1)
+            yield b"x"
+
+        return httpx.Response(200, headers={"content-encoding": "gzip"}, content=chunks())
+
+    transport = FakeUpstream(handler)
+    result = await probe.run_probe("probe-openai", "openai/gpt-4o-mini", "synthetic-key", transport)
+    assert result["error_category"] == "encoded_response"
+    assert read == []
+    assert result["dispatched"] is True
+
+
+async def test_finish_reason_marker_never_persisted():
+    body = envelope()
+    body["choices"][0]["finish_reason"] = "synthetic-secret-marker-789"
+    transport = ok_transport(json.dumps(body).encode())
+    result = await probe.run_probe("probe-openai", "openai/gpt-4o-mini", "synthetic-key", transport)
+    structure = result["structure"]
+    assert structure["finish_reason"] is None
+    assert structure["unexpected_finish_reason"] is True
+    assert structure["finish_reason_length"] == len(b"synthetic-secret-marker-789")
+    assert b"synthetic-secret-marker-789" not in json.dumps(result).encode()
+
+
+def test_corrupt_results_refused(tmp_path):
+    base = {
+        "probe_id": "probe-gemma",
+        "model": "google/gemma-4-26b-a4b-it:free",
+        "http_status": 200,
+        "dispatched": True,
+        "elapsed_seconds": 0.1,
+        "structure": None,
+        "error_category": None,
+    }
+    mutations = [
+        {"finish_reason": "weird", "unexpected_finish_reason": False},
+        {"content_kind": "novel"},
+        {"model": "other/model"},
+        {"http_status": 99},
+        {"extra": True},
+    ]
+    for mutation in mutations:
+        if "finish_reason" in mutation or "content_kind" in mutation:
+            attempt = dict(base)
+            attempt["structure"] = {
+                "top_fields": [],
+                "extra_top_fields": [],
+                "finish_reason": mutation.get("finish_reason"),
+                "unexpected_finish_reason": False,
+                "finish_reason_length": None,
+                "message_fields": [],
+                "extra_message_fields": [],
+                "content_kind": mutation.get("content_kind", "text"),
+                "content_length": 1,
+                "usage": None,
+                "usage_valid": False,
+                "metadata_valid": True,
+            }
+        else:
+            attempt = dict(base)
+            attempt.update(mutation)
+        with pytest.raises(ValueError):
+            probe.load_probe_results(
+                tmp_path / "missing.json",
+                data={"probe": "openrouter-direct", "reserved": [], "attempts": [attempt]},
+            )
+
+
+async def test_probe_model_binding_mismatch_rejected():
+    transport = ok_transport(b"{}")
+    with pytest.raises(ValueError):
+        await probe.run_probe("probe-gemma", "other/model", "synthetic-key", transport)
+    assert transport.calls == 0
