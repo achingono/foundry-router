@@ -832,3 +832,107 @@ def test_halted_ledger_with_passing_results_blocks(tmp_path):
     with pytest.raises(ValueError):
         run_validation(tmp_path, manifest, app)
     assert len(app.calls) == 4
+
+
+def test_true_upstream_flag_rejected():
+    result = {
+        "case_id": "staging-zen-nonstream",
+        "pool": "gpt-5.4-mini-zen",
+        "stream": False,
+        "status": "passed",
+        "http_status": 200,
+        "provider": "opencode_zen",
+        "deployment": "gpt-5.4-mini",
+        "dispatched": True,
+        "input_tokens": 12,
+        "output_tokens": 5,
+        "usage_coherent": True,
+        "terminated_ok": True,
+        "settlement_matches": True,
+        "reservations_cleared": True,
+        "synthetic_debit_usd": 0.0000315,
+        "retry_attempts": 2,
+        "retry_max_delay_seconds": 30,
+        "independent_upstream_observed": True,
+        "evidence_scope": sv.EVIDENCE_SCOPE,
+        "error_category": None,
+        "elapsed_seconds": 0.5,
+    }
+    with pytest.raises(ValueError):
+        sv.validate_result(result, staging_manifest())
+
+
+def test_wrong_evidence_scope_rejected():
+    manifest = staging_manifest()
+    manifest["evidence_scope"] = "other-scope-v9"
+    with pytest.raises(ValueError):
+        sv.validate_manifest(manifest)
+
+
+def test_untagged_historical_result_rejected(tmp_path):
+    manifest = staging_manifest()
+    attempt = {
+        "case_id": "staging-zen-nonstream",
+        "pool": "gpt-5.4-mini-zen",
+        "stream": False,
+        "status": "passed",
+        "http_status": 200,
+        "provider": "opencode_zen",
+        "deployment": "gpt-5.4-mini",
+        "dispatched": True,
+        "input_tokens": 12,
+        "output_tokens": 5,
+        "usage_coherent": True,
+        "terminated_ok": True,
+        "settlement_matches": True,
+        "reservations_cleared": True,
+        "synthetic_debit_usd": 0.0000315,
+        "retry_attempts": 2,
+        "retry_max_delay_seconds": 30,
+        "independent_upstream_observed": False,
+        "error_category": None,
+        "elapsed_seconds": 0.5,
+    }
+    with pytest.raises(ValueError):
+        sv.load_validation_results(
+            tmp_path / "missing.json",
+            manifest,
+            data={
+                "run": manifest["run"],
+                "manifest": sv.manifest_fingerprint(manifest),
+                "attempts": [attempt],
+            },
+        )
+
+
+async def test_marker_ignores_setup_traffic():
+    marker = sv._EntryMarker(FakeApp(staging_manifest()))
+    async with httpx.AsyncClient(transport=marker, base_url="http://x") as client:
+        await client.get("/health/live")
+        assert marker.entered is False
+        await client.get("/admin/status", headers={"x-admin-key": "admin-key"})
+        assert marker.entered is False
+
+
+async def test_inference_oversize_reports_dispatched():
+    manifest = staging_manifest()
+
+    class BigApp(FakeApp):
+        async def handle_async_request(self, request):
+            response = await super().handle_async_request(request)
+            if request.url.path == "/openai/v1/responses":
+                return httpx.Response(200, content=b"x" * (sv.MAX_RESPONSE_BYTES + 1))
+            return response
+
+    app = BigApp(manifest)
+    result = await sv.run_validation_case(
+        case=manifest["cases"][0],
+        manifest=manifest,
+        base_url="http://staging.test",
+        caller_key="client-key",
+        admin_key="admin-key",
+        transport=app,
+    )
+    assert result["dispatched"] is True
+    assert result["error_category"] == "response_bound_exceeded"
+    assert result["status"] == "failed"

@@ -45,6 +45,7 @@ ADMIN_TIMEOUT_SECONDS = 5
 CLEANUP_POLLS = 10
 CLEANUP_INTERVAL_SECONDS = 1.0
 HTTP_OK = 200
+EVIDENCE_SCOPE = "deployed-public-admin-v1"
 HTTP_STATUS_MIN = 100
 HTTP_STATUS_MAX = 599
 MAX_SECRET_STRING = 256
@@ -184,6 +185,7 @@ RESULT_KEYS = {
     "retry_attempts",
     "retry_max_delay_seconds",
     "independent_upstream_observed",
+    "evidence_scope",
     "error_category",
     "elapsed_seconds",
 }
@@ -236,6 +238,7 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         ) / 1_000_000
     if (
         manifest.get("prompt") != PROMPT
+        or manifest.get("evidence_scope") != EVIDENCE_SCOPE
         or manifest.get("max_output_tokens") != MAX_OUTPUT_TOKENS
         or manifest.get("case_timeout_seconds") != CASE_TIMEOUT_SECONDS
         or manifest.get("max_response_bytes") != MAX_RESPONSE_BYTES
@@ -253,6 +256,7 @@ def manifest_fingerprint(manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "run": manifest["run"],
         "environment": manifest["environment"],
+        "evidence_scope": manifest["evidence_scope"],
         "cases": [{key: case[key] for key in CASE_SPEC_KEYS} for case in manifest["cases"]],
         "max_output_tokens": manifest["max_output_tokens"],
         "allowance_usd": manifest["allowance_usd"],
@@ -428,6 +432,12 @@ def validate_result(  # noqa: PLR0912 -- bounded evidence schema
     ):
         if type(result.get(name)) is not bool:
             raise ValueError("Invalid result flags")
+    # This harness never observes the provider hop: a true upstream flag is
+    # fabricated evidence, and the scope tag binds the narrowed contract.
+    if result.get("independent_upstream_observed") is not False:
+        raise ValueError("Invalid upstream evidence claim")
+    if result.get("evidence_scope") != EVIDENCE_SCOPE:
+        raise ValueError("Invalid evidence scope")
     for name in ("retry_attempts", "retry_max_delay_seconds"):
         value = result.get(name)
         if value is not None and (type(value) is not int or isinstance(value, bool) or value < 0):
@@ -762,14 +772,19 @@ def _terminal_response(event: dict) -> dict:
 
 
 class _EntryMarker(httpx.AsyncBaseTransport):
-    """Records transport entry: a timeout afterwards is still a dispatch."""
+    """Records inference-POST entry: a timeout afterwards is still a dispatch.
+
+    Health/admin setup calls pass through unmarked; only the inference POST
+    path counts as dispatch evidence.
+    """
 
     def __init__(self, transport: httpx.AsyncBaseTransport):
         self.transport = transport
         self.entered = False
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        self.entered = True
+        if request.url.path == "/openai/v1/responses":
+            self.entered = True
         return await self.transport.handle_async_request(request)
 
     async def aclose(self) -> None:
@@ -806,6 +821,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
         "retry_attempts": None,
         "retry_max_delay_seconds": None,
         "independent_upstream_observed": False,
+        "evidence_scope": EVIDENCE_SCOPE,
         "error_category": None,
         "elapsed_seconds": 0.0,
     }
@@ -942,6 +958,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
         harvest()
         return finish("encoded_response")
     except ValueError as exc:
+        harvest()
         message = str(exc)
         if "bound exceeded" in message:
             return finish("response_bound_exceeded")

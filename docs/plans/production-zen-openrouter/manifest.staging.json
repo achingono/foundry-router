@@ -49,5 +49,6 @@
       "input_per_million": 1.0,
       "output_per_million": 5.0
     }
-  ]
+  ],
+  "evidence_scope": "deployed-public-admin-v1"
 }
