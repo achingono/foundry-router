@@ -10,8 +10,9 @@
 - [ ] Credentials supplied out of band at execution time.
 - [ ] Durable ledger prevents replay/reset; each case passes and is persisted before the next dispatch, including within stages.
 - [ ] Upstream status/usage independently observed and compared with public results; 401/403 count as dispatches and block remaining cases without credential cycling.
-- [ ] Stage 1 Zen non-streaming and streaming successful with usage/output presence and zero retained reservations.
-- [ ] Stage 2 OpenRouter non-streaming and streaming successful with mapped usage/settlement and zero retained reservations.
+- [x] Stage 1 Zen non-streaming and streaming successful with usage/output presence and zero retained reservations (paid `gpt-5.4-mini` run).
+- [x] Stage 2 OpenRouter non-streaming successful with mapped usage/settlement and zero retained reservations (three models).
+- [ ] Stage 2 OpenRouter streaming: accepted scope limitation 2026-10-11. Non-streaming is established live; streaming stays covered by mocked verification only, given observed provider terminator variability. Reopens via fresh amendment, not by rerunning halted ledgers.
 - [ ] Stage 3 OpenRouter embeddings: closed as untestable 2026-10-11 (no Zen embeddings surface; OpenRouter catalog of 458 models lists none, free or paid). Reopens only on a new upstream surface or catalog entry via fresh amendment.
 - [ ] Per-request canonical credit-group deltas reconciled against independently observed usage at test prices; explicitly unrelated to provider billing.
 - [ ] Evidence/review/links complete; no prompts, outputs, error bodies, or credential values recorded.

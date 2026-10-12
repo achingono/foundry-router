@@ -46,6 +46,8 @@ diagnostic evidence under the same contract.
 
 - [x] Independent review of this amendment and its implementation.
 - [x] All three rerun manifests bound to their specifications (committed).
-- [ ] Each rerun passes both cases with usage/settlement evidence and zero
-      retained reservations, or its halt is recorded with no further egress.
+- [x] Each rerun's nonstream case passes with usage/settlement evidence and zero
+      retained reservations; stream halts recorded with no further egress.
+- [ ] Streaming reruns: scope accepted as mocked-only (see exit criteria);
+      not retried under this amendment.
 - [ ] Billing, quota/admission, Table, and production remain gated.
