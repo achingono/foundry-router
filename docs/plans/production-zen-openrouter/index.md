@@ -1,6 +1,7 @@
 # Production enablement for Zen/OpenRouter backends
 
-**Planned.** Independent plan review is recorded in [review.md](review.md).
+**Staging case validation passed; production planned.** Independent plan review
+is recorded in [review.md](review.md).
 The draft has been revised at planning level; no staging or production change,
 secret provisioning, image rollout or live dispatch is authorized by this record.
 Execution prerequisites and operator approvals remain open. The
@@ -11,6 +12,13 @@ is cleared for the six committed cases under the
 This does not clear the separate staging/production execution gates or establish
 independent provider/billing evidence.
 
+The [staging evidence review](review-staging-evidence-be1f2c0.md) accepts all four
+case records under that contract. Production remains blocked on the recorded
+remaining infrastructure operational evidence and immutable release binding,
+plus corrected seeds/reserve policy and the existing operator gates. The release contract below
+remains the reviewed baseline; staging deviations are recorded as SE-1, not
+implicitly approved by the case pass.
+
 ## Companion documents
 
 - [Inputs](inputs.md)
@@ -20,7 +28,10 @@ independent provider/billing evidence.
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
 - [Independent review](review.md)
+- [Independent staging evidence review](review-staging-evidence-be1f2c0.md)
 - [Independent staging harness review](review-staging-harness-9a763c7.md)
+- [Staging infrastructure amendment and review](amendment-staging-infrastructure.md)
+- [Per-group reserve policy amendment (draft)](amendment-per-backend-reserves.md)
 - [Scoped black-box acceptance amendment](amendment-black-box-acceptance.md)
 
 ## Decision and rollout scope
@@ -75,7 +86,10 @@ remain independent and reflect documented shared limits, never guessed capacity.
 
 - Keep memory state, one worker and one replica, existing ingress, identities,
   registry, resources and unrelated settings. No infrastructure template or
-  resource additions are planned. Review any necessary scope change first.
+  resource additions are planned for production. The retrospective
+  [staging infrastructure amendment](amendment-staging-infrastructure.md) records
+  the staging exception; it does not approve new production resources or reserve
+  changes. Review any further scope change first.
 - Promote the tested image digest and reviewed provider configuration delta.
   Staging and production use separate environment bundles, auth and state seeds;
   do not promote an entire staging topology or its balances into production.
