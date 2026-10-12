@@ -124,3 +124,6 @@ screenshots/
 !/docs/plans/zen-openrouter-live-verification/manifest.zen-paid.json
 !/docs/plans/zen-openrouter-live-verification/manifest.or-openai.json
 !/docs/plans/zen-openrouter-live-verification/manifest.or-anthropic.json
+!/docs/plans/zen-openrouter-live-verification/manifest.rerun-gemma.json
+!/docs/plans/zen-openrouter-live-verification/manifest.rerun-openai.json
+!/docs/plans/zen-openrouter-live-verification/manifest.rerun-anthropic.json

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "run": "zen-openrouter-live-2026-10-11-rerun-openai",
+  "zen_model": "",
+  "openrouter_model": "openai/gpt-4o-mini",
+  "openrouter_embedding_model": "",
+  "input_per_million": 0.15,
+  "output_per_million": 0.6,
+  "cases": ["openrouter-nonstream", "openrouter-stream"],
+  "case_timeout_seconds": 120,
+  "max_observed_bytes": 1048576,
+  "max_output_tokens": 128
+}
