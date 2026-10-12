@@ -18,6 +18,13 @@ import { EnvironmentConfig, RouterConfig, IngressIpSecurityRestriction } from '.
 @allowed(['new', 'existing'])
 param registryMode string = 'new'
 
+@description('Whether to provision a new Container Apps environment or attach to an existing one.')
+@allowed(['new', 'existing'])
+param environmentMode string = 'new'
+
+@description('Full resource ID of the existing Container Apps managed environment; required when environmentMode is existing.')
+param existingEnvironmentId string = ''
+
 @description('Whether to provision a new Key Vault or attach to an existing one.')
 @allowed(['new', 'existing'])
 param keyVaultMode string = 'new'
@@ -195,6 +202,8 @@ assert registryServerHostnameOnly = registryServer == '' || (!contains(registryS
 assert registryServerCharactersValid = length(filter(range(0, length(registryServer)), i => !contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-', substring(registryServer, i, 1)))) == 0
 // Secret mode requires a credential source note (value itself never committed).
 assert secretModeHasUsername = effectiveRegistryAuthMode != 'secret' || length(registryUsername) > 0
+// Existing-environment attach requires the full environment resource ID.
+assert existingEnvironmentRequiresId = environmentMode != 'existing' || length(existingEnvironmentId) > 0
 
 // --- Existing resource declarations (explicit scope for cross-RG attach) ---
 resource existingRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = if (effectiveRegistryMode == 'existing' && registryServer == '') {
@@ -268,8 +277,8 @@ var cycleStartDaySecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${
 var cycleAllowanceSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendCycleAllowanceSecretName}'
 var initialRemainingSecretUrl = '${effectiveVaultUri}secrets/${secretNamePrefix}-${backendInitialRemainingSecretName}${empty(backendInitialRemainingSecretVersion) ? '' : '/${backendInitialRemainingSecretVersion}'}'
 
-// --- Log Analytics with cost guardrails ---
-module observability './modules/observability.bicep' = {
+// --- Log Analytics with cost guardrails (skipped when attaching to an existing environment) ---
+module observability './modules/observability.bicep' = if (environmentMode == 'new') {
   name: 'observability-${uniqueString(resourceGroup().id, logAnalyticsWorkspaceName)}'
   params: {
     config: {
@@ -295,7 +304,7 @@ var containerAppEnvironmentConfig EnvironmentConfig = {
   workspaceName: logAnalyticsWorkspaceName
 }
 
-module containerAppEnv './modules/containers/environment.bicep' = {
+module containerAppEnv './modules/containers/environment.bicep' = if (environmentMode == 'new') {
   name: 'environment-${uniqueString(resourceGroup().id, containerAppEnvName)}'
   dependsOn: [observability]
   params: {
@@ -323,12 +332,16 @@ var routerIdentity RuntimeIdentityRef = {
   principalId: runtimeIdentity.outputs.identityRef.principalId
 }
 
+// Shared production-environment attach: staging runs in the existing managed
+// environment while all other staging resources live in their own group.
+var effectiveEnvironmentId = environmentMode == 'existing' ? existingEnvironmentId : containerAppEnv!.outputs.environmentRef.id
+
 var routerConfig RouterConfig = {
   name: containerAppName
   containerName: appName
   location: location
   tags: tags
-  environmentId: containerAppEnv.outputs.environmentRef.id
+  environmentId: effectiveEnvironmentId
   image: containerImage
   clientId: routerIdentity.clientId
   containerPort: containerPort
@@ -453,8 +466,8 @@ var tableEndpoint = effectiveStateBackend == 'table' ? (effectiveStorageMode == 
 // --- Outputs ---
 output containerAppFqdn string = containerApp.outputs.routerRef.fqdn
 output keyVaultUri string = effectiveVaultUri
-output logAnalyticsWorkspaceId string = observability.outputs.workspaceRef.workspaceId
-output containerAppEnvId string = containerAppEnv.outputs.environmentRef.id
+output logAnalyticsWorkspaceId string = environmentMode == 'new' ? observability!.outputs.workspaceRef.workspaceId : ''
+output containerAppEnvId string = effectiveEnvironmentId
 output containerImage string = containerImage
 output effectiveRegistryServer string = effectiveRegistryServer
 output tableEndpoint string = tableEndpoint
