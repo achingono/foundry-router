@@ -51,7 +51,13 @@ class FakeApp(httpx.AsyncBaseTransport):
         self.reserve_policies = options.get("reserve_policies", {})
         self.allowances = options.get("allowances", {})
         self.global_reserves = options.get("global_reserves", (10.0, 5.0))
+        self.omit_groups = options.get("omit_groups", [])
+        self.drop_groups_after_first = options.get("drop_groups_after_first", [])
+        self.rebind_after_first = options.get("rebind_after_first", {})
         self.mutate_policy_after = options.get("mutate_policy_after", {})
+        self.model_backends = {
+            case["pool"]: {f"backend-{case['pool']}": 1.0} for case in manifest["cases"]
+        }
         self.dispatched = 0
         self.stuck_reservations = options.get("stuck_reservations", False)
         self.ready = options.get("ready", True)
@@ -60,9 +66,11 @@ class FakeApp(httpx.AsyncBaseTransport):
         self.debit_scale = options.get("debit_scale", 1.0)
 
     def _admin(self):
+        dropped = self.drop_groups_after_first if self.dispatched >= 1 else []
+        hidden = set(self.omit_groups) | set(dropped)
         return {
             "models": {
-                case["pool"]: {"backends": {f"backend-{case['pool']}": 1.0}}
+                case["pool"]: {"backends": dict(self.model_backends[case["pool"]])}
                 for case in self.manifest["cases"]
             },
             "backends": {
@@ -86,6 +94,7 @@ class FakeApp(httpx.AsyncBaseTransport):
                     },
                 }
                 for group, remaining in self.groups.items()
+                if group not in hidden
             },
             "config": {
                 "retry_attempts": 2,
@@ -109,7 +118,7 @@ class FakeApp(httpx.AsyncBaseTransport):
         self.groups[group] -= cost * self.debit_scale
         return cost
 
-    async def handle_async_request(self, request):  # noqa: PLR0911 -- fixed fake routes
+    async def handle_async_request(self, request):  # noqa: PLR0911, PLR0912 -- fixed fake routes
         path = request.url.path
         if path == "/health/live":
             return httpx.Response(200, json={"status": "alive"})
@@ -136,6 +145,17 @@ class FakeApp(httpx.AsyncBaseTransport):
                 for group, policy in self.mutate_policy_after.items():
                     if group in self.reserve_policies:
                         self.reserve_policies[group] = policy
+                for pool, spec in self.rebind_after_first.items():
+                    old_ids = list(self.model_backends.get(pool, {}))
+                    new_id = spec.get("backend_id", old_ids[0] if old_ids else f"backend-{pool}")
+                    base = dict(self.backends.get(old_ids[0], {})) if old_ids else {}
+                    for key in ("credit_group", "provider", "deployment", "supported_operations"):
+                        if key in spec:
+                            base[key] = spec[key]
+                    for old_id in old_ids:
+                        self.backends.pop(old_id, None)
+                    self.backends[new_id] = base
+                    self.model_backends[pool] = {new_id: 1.0}
             if case["id"] in self.status_override:
                 status, payload = self.status_override[case["id"]]
                 return httpx.Response(status, json=payload)
@@ -1218,3 +1238,79 @@ def test_roster_combined_allowance_missing_manifest(tmp_path):
     with pytest.raises(ValueError):
         run_validation(tmp_path, manifest, app)
     assert app.calls == []
+
+
+def test_roster_zen_absent_initially_refused(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(manifest, omit_groups=["zen-staging"])
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def test_roster_zen_disappearance_halts(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(manifest, drop_groups_after_first=["zen-staging"])
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert len(app.calls) == 1
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert len(app.calls) == 1
+
+
+def test_roster_backend_metadata_change_halts(tmp_path):
+    manifest = roster_manifest()
+    pool = manifest["cases"][0]["pool"]
+    app = roster_app(
+        manifest,
+        rebind_after_first={pool: {"provider": "azure", "deployment": "other"}},
+    )
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert results["attempts"][0]["error_category"] == "acceptance_mismatch"
+    assert len(app.calls) == 1
+
+
+def test_roster_group_change_matching_balances_halts(tmp_path):
+    manifest = roster_manifest()
+    pool = manifest["cases"][0]["pool"]
+    app = roster_app(
+        manifest,
+        extra_groups={"zen-staging": 10.0, "evil-shared": 4.83},
+        group_balances={"or-shared": 4.83, "zen-staging": 10.0},
+        reserve_policies={
+            "or-shared": {
+                "min_credit_reserve_usd": 0.05,
+                "min_credit_reserve_percent": 5.0,
+                "source": "override",
+            },
+            "evil-shared": {
+                "min_credit_reserve_usd": 0.05,
+                "min_credit_reserve_percent": 5.0,
+                "source": "override",
+            },
+            "zen-staging": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "inherited",
+            },
+        },
+        allowances={"or-shared": 4.83, "evil-shared": 4.83, "zen-staging": 10.0},
+        rebind_after_first={pool: {"credit_group": "evil-shared"}},
+    )
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert len(app.calls) == 1
+
+
+def test_roster_backend_id_change_halts(tmp_path):
+    manifest = roster_manifest()
+    pool = manifest["cases"][0]["pool"]
+    app = roster_app(
+        manifest,
+        rebind_after_first={pool: {"backend_id": "backend-swap"}},
+    )
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert len(app.calls) == 1

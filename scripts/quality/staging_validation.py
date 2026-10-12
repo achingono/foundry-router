@@ -958,6 +958,8 @@ def _observe_roster_policy(  # noqa: PLR0912 -- fixed roster evidence checklist
     if not isinstance(expected_override, dict):
         raise ValidationSetupError("Validation roster override unavailable")
     observed: tuple[float, float] | None = None
+    seen_inherited: set[str] = set()
+    required_inherited = configuration.get("inherited_groups", [])
     for name, entry in groups.items():
         if not isinstance(entry, dict):
             raise ValidationSetupError("Validation credit evidence unavailable")
@@ -978,15 +980,18 @@ def _observe_roster_policy(  # noqa: PLR0912 -- fixed roster evidence checklist
             if observed_usd == global_usd:
                 raise ValidationSetupError("Validation roster policy contrast unavailable")
             observed = (float(observed_usd), float(observed_percent))
-        elif name in configuration.get("inherited_groups", []):
+        elif name in required_inherited:
             if (
                 policy.get("source") != "inherited"
                 or policy.get("min_credit_reserve_usd") != global_usd
                 or policy.get("min_credit_reserve_percent") != global_percent
             ):
                 raise ValidationSetupError("Validation inherited policy mismatch")
+            seen_inherited.add(name)
     if observed is None:
         raise ValidationSetupError("Validation roster override unavailable")
+    if not isinstance(required_inherited, list) or set(seen_inherited) != set(required_inherited):
+        raise ValidationSetupError("Validation inherited evidence incomplete")
     return observed
 
 
@@ -1166,6 +1171,13 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                         result["retry_max_delay_seconds"] = int(delay)
                 result["provider"] = config.get("provider")
                 result["deployment"] = config.get("deployment")
+                opening_binding = (
+                    _group,
+                    _backend,
+                    config.get("provider"),
+                    config.get("deployment"),
+                    config.get("supported_operations"),
+                )
                 if case["stream"]:
                     status, public = await _read_stream_terminal(client, caller_key, body)
                 else:
@@ -1199,7 +1211,22 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 for _ in range(CLEANUP_POLLS):
                     snapshot = await _read_admin(client, admin_key)
                     resolved_now = _resolve_group(snapshot, case["pool"]) if snapshot else None
-                    closing = _live_numbers(resolved_now[2]) if resolved_now else None
+                    if resolved_now is not None:
+                        group_now, config_now, _live_now, backend_now = resolved_now
+                        closing_binding = (
+                            group_now,
+                            backend_now,
+                            config_now.get("provider"),
+                            config_now.get("deployment"),
+                            config_now.get("supported_operations"),
+                        )
+                        if closing_binding != opening_binding:
+                            binding_changed = True
+                            break
+                    else:
+                        binding_changed = True
+                        break
+                    closing = _live_numbers(resolved_now[2])
                     if roster_run and snapshot is not None:
                         try:
                             now_usd, now_percent = _observe_roster_policy(
