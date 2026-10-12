@@ -303,3 +303,42 @@ def test_mixed_pool_embeddings_skips_zen_backend(monkeypatch):
     assert zen_route.call_count == 0
     assert or_route.call_count == 1
     assert response.json()["data"][0]["embedding"] == [0.5]
+
+
+@respx.mock
+@pytest.mark.parametrize("stream", [False, True])
+def test_openrouter_null_reasoning_accepted(monkeypatch, stream):
+    _wire(monkeypatch, openrouter_settings())
+    if stream:
+        payload = b'data: {"choices":[{"delta":{"content":"answer","reasoning":null},"finish_reason":"stop"}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2}}\n\ndata: [DONE]\n\n'
+        upstream = httpx.Response(
+            200, content=payload, headers={"content-type": "text/event-stream"}
+        )
+    else:
+        body = chat_ok()
+        body["choices"][0]["message"]["reasoning"] = None
+        upstream = httpx.Response(200, json=body)
+    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(return_value=upstream)
+    response = TestClient(app).post(
+        "/openai/v1/responses",
+        headers={"api-key": "client-key"},
+        json={"model": "logical", "input": "synthetic", "stream": stream},
+    )
+    assert response.status_code == 200
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_openrouter_reasoning_content_rejected(monkeypatch):
+    _wire(monkeypatch, openrouter_settings())
+    body = chat_ok()
+    body["choices"][0]["message"]["reasoning"] = "thinking text"
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=body)
+    )
+    response = TestClient(app).post(
+        "/openai/v1/responses",
+        headers={"api-key": "client-key"},
+        json={"model": "logical", "input": "synthetic"},
+    )
+    assert response.status_code == 502

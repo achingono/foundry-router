@@ -58,7 +58,8 @@ implemented and default-off pending gates. Signed continuation remains startup-g
 Configured `openai_compatible` pools provide **Implemented, mocked-verified** Responses
 translation to Chat Completions and float embeddings. They support text-only string/history
 input, instructions, metadata and existing generation parameters; unsupported tools,
-schemas, media and provider state fail before reservation/egress. Streaming uses the shared
+schemas, media and provider state fail before reservation/egress. Explicit-null
+`reasoning` fields are dropped; anything else unknown fails closed. Streaming uses the shared
 bounded Responses lifecycle decoder and requires the Chat `[DONE]` terminator; no failover
 occurs after any downstream event. Missing/invalid response usage retains conservative
 settlement, including ambiguous dispatched 5xx and cancellation. Logical models/aliases and

@@ -40,6 +40,25 @@ from foundry_router.credit import (
     extract_response_usage_tokens,
 )
 from foundry_router.health import BackendHealthState
+from foundry_router.logging import get_logger
+
+_logger = get_logger(__name__)
+
+
+def _log_translated_rejection(
+    exc: BaseException, *, operation: str | None = None, backend_id: str | None = None
+) -> None:
+    """Debug-log sanitized rejected field names; never values or bodies."""
+    fields = getattr(exc, "fields", ())
+    if not fields:
+        return
+    _logger.debug(
+        "translated_response_rejected",
+        operation=operation,
+        backend=backend_id,
+        fields=list(fields),
+    )
+
 
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 MAX_SSE_EVENT_BUFFER_BYTES = 1024 * 1024
@@ -1663,7 +1682,8 @@ def _translate_google_success(
             metadata=public_body.get("metadata"),
             request_body=public_body,
         )
-    except ValueError:
+    except ValueError as exc:
+        _log_translated_rejection(exc, operation=operation)
         fallback_cost, fallback_input = _fallback_estimate_cost(
             settings, public_body, logical_model, operation
         )
@@ -2511,7 +2531,8 @@ async def _prefetch_google_events(
                     continue
                 try:
                     events = decoder.feed(chunk)
-                except ValueError:
+                except ValueError as exc:
+                    _log_translated_rejection(exc)
                     return "Backend returned an invalid response"
                 if events:
                     prefetched.extend(events)
@@ -2525,7 +2546,8 @@ async def _prefetch_google_events(
                         else decoder.finish()
                     )
                     prefetched.extend(events)
-                except ValueError:
+                except ValueError as exc:
+                    _log_translated_rejection(exc)
                     return "Backend returned an invalid response"
                 decoder.prefetch_finished = True
                 return None
@@ -2630,7 +2652,8 @@ async def _google_stream_response(
                 mark_delivered(event)
             yield event
         _settle_from_decoder()
-    except ValueError:
+    except ValueError as exc:
+        _log_translated_rejection(exc, backend_id=backend_id)
         metric_status_code = 502
         _settle_from_decoder()
         await set_backend_cooldown(

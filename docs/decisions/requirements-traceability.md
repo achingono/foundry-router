@@ -47,6 +47,7 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 | Zen bounded stateless-text validation with Responses wire pass-through | `api/adapters/zen.py` | `tests/unit/test_zen_adapter.py`: allow-list, foreign-field, bounds, model-only substitution, usage/error mapping |
 | OpenRouter fixed-dialect translation via shared text hooks | Adapter registry, `compatible_text.py` | `tests/integration/test_zen_openrouter_integration.py`: translated Responses/streaming/embeddings, routing-extra rejection |
 | Single-shot dispatch, 429-only failover, conservative ambiguous-failure/cancellation settlement | `forwarding/` Zen paths, existing routing/accounting stores | `tests/unit/test_zen_forwarding.py`, integration 5xx/429/cancellation cases; [plan evidence](../plans/opencode-zen-openrouter/evidence.md) |
+| Null-tolerant `reasoning` on translated messages with redacted rejection trace | `api/adapters/openai_compatible.py`, `compatible_text.py`, `forwarding/` debug hook | `tests/unit/test_reasoning_tolerance.py`, OpenRouter null/content integration cases; [amendment](../plans/zen-openrouter-live-verification/amendment-reasoning-tolerance.md) |
 
 ### Process-local combination exclusion
 

@@ -13,6 +13,7 @@ from foundry_router.api.adapters.base import (
     AdapterRejection,
     ProviderAdapter,
     TranslatedError,
+    TranslatedRejectionError,
     TranslatedSuccess,
 )
 from foundry_router.api.adapters.compatible_text import CompatibleTextAdapter
@@ -99,6 +100,7 @@ __all__ = [
     "OpenAICompatibleStreamDecoder",
     "ProviderAdapter",
     "TranslatedError",
+    "TranslatedRejectionError",
     "TranslatedSuccess",
     "ZenAdapter",
     "get_adapter",

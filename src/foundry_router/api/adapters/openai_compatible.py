@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 import uuid
 from typing import TYPE_CHECKING, Any, Protocol
 
-from foundry_router.api.adapters.base import AdapterRejection, TranslatedError, TranslatedSuccess
+from foundry_router.api.adapters.base import (
+    AdapterRejection,
+    TranslatedError,
+    TranslatedRejectionError,
+    TranslatedSuccess,
+)
 
 if TYPE_CHECKING:
     from foundry_router.api.google_pdf import PreparedGoogleMedia
@@ -67,6 +73,46 @@ _ALLOWED_FINISH_REASONS = frozenset({"stop", "length", "content_filter"})
 _MAX_OUTPUT_TOKENS_MIN = 1
 _MAX_OUTPUT_TOKENS_MAX = 128000
 
+_FIELD_NAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+_MAX_REJECTION_FIELDS = 8
+
+
+def _rejection_fields(mapping: Any, allowed: frozenset[str]) -> tuple[str, ...]:
+    """Sanitized offending field names: safe names only, bounded count."""
+    try:
+        keys = list(mapping)
+    except TypeError:
+        return ("<unexpected-field>",)
+    extra = [key for key in keys if key not in allowed]
+    safe = [key for key in extra if isinstance(key, str) and _FIELD_NAME_PATTERN.fullmatch(key)]
+    shown = safe[:_MAX_REJECTION_FIELDS]
+    if len(shown) != len(extra):
+        shown = [*shown, "<unexpected-field>"]
+    return tuple(shown)
+
+
+_OUTPUT_FIELDS = frozenset({"role", "content", "tool_calls", "refusal"})
+
+
+def _check_output_fields(
+    mapping: Any, *, tolerated: frozenset[str], provider_label: str, location: str
+) -> None:
+    """Reject unknown output fields except tolerated null/empty values."""
+    if not isinstance(mapping, dict) or not any(key not in _OUTPUT_FIELDS for key in mapping):
+        return
+    blocking = [
+        key
+        for key in mapping
+        if key not in _OUTPUT_FIELDS and not (key in tolerated and mapping.get(key) in (None, ""))
+    ]
+    if blocking:
+        fields = _rejection_fields(mapping, _OUTPUT_FIELDS)
+        raise TranslatedRejectionError(
+            f"Unsupported {provider_label} {location} fields: " + ", ".join(fields),
+            fields=fields,
+        )
+
+
 MAX_OPENAI_EVENT_BYTES = 256 * 1024
 MAX_OPENAI_ASSEMBLED_TEXT_BYTES = 4 * 1024 * 1024
 MAX_OPENAI_SSE_BUFFER_BYTES = 1024 * 1024
@@ -108,6 +154,8 @@ class OpenAICompatibleStreamDecoder[ContextT: ChatRequestContext]:
     """Bounded incremental Chat Completions SSE to Responses SSE translation."""
 
     provider_label = "OpenAI-compatible"
+    #: Delta fields tolerated only when null/empty; subclasses opt in.
+    null_tolerated_message_fields: frozenset[str] = frozenset()
 
     def __init__(
         self,
@@ -317,8 +365,12 @@ class OpenAICompatibleStreamDecoder[ContextT: ChatRequestContext]:
         if not isinstance(delta, dict):
             raise ValueError(f"Malformed {self.provider_label} stream event")
         delta = self.normalize_delta(delta)
-        if set(delta) - {"role", "content", "tool_calls", "refusal"}:
-            raise ValueError(f"Unsupported {self.provider_label} delta or provider state")
+        _check_output_fields(
+            delta,
+            tolerated=self.null_tolerated_message_fields,
+            provider_label=self.provider_label,
+            location="delta",
+        )
         raw_calls = delta.get("tool_calls")
         if raw_calls is not None:
             self._absorb_calls(raw_calls)
@@ -812,6 +864,18 @@ class OpenAICompatibleAdapter[ContextT: ChatRequestContext]:
     stream_decoder_class: type[OpenAICompatibleStreamDecoder[ContextT]] = (
         OpenAICompatibleStreamDecoder
     )
+    #: Message fields tolerated only when null/empty; anything else fails
+    #: closed. Subclasses opt in per provider; the default stays strict.
+    null_tolerated_message_fields: frozenset[str] = frozenset()
+
+    def _check_output_fields(self, mapping: Any, *, location: str) -> None:
+        """Reject unknown output fields except tolerated null/empty values."""
+        _check_output_fields(
+            mapping,
+            tolerated=self.null_tolerated_message_fields,
+            provider_label=self.provider_label,
+            location=location,
+        )
 
     def request_context(self, body: dict[str, Any]) -> ContextT:
         """Return the provider-owned request validation context."""
@@ -1138,8 +1202,7 @@ class OpenAICompatibleAdapter[ContextT: ChatRequestContext]:
         message = self.normalize_message(message, context)
         if message.get("role", "assistant") != "assistant":
             raise ValueError(f"{self.provider_label} message role must be assistant")
-        if set(message) - {"role", "content", "tool_calls", "refusal"}:
-            raise ValueError(f"Unsupported {self.provider_label} output or provider state")
+        self._check_output_fields(message, location="output")
         content = message.get("content")
         # Validate the shape before extraction: anything that is not None, a
         # string, or a list is malformed (e.g. numeric content), as is any

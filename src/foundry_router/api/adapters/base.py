@@ -42,6 +42,22 @@ class TranslatedError:
     message: str
 
 
+@dataclass(frozen=True)
+class TranslatedRejectionError(ValueError):
+    """Rejected provider output carrying sanitized offending field names.
+
+    A ValueError subclass so every existing failure handler behaves
+    identically; forwarding may log ``fields`` at debug level. Field names
+    are sanitized at construction (never values, never unbounded input).
+    """
+
+    message: str
+    fields: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return self.message
+
+
 @runtime_checkable
 class ProviderAdapter(Protocol):
     """Typed transport-neutral adapter boundary."""
@@ -99,5 +115,6 @@ __all__ = [
     "AdapterRejection",
     "ProviderAdapter",
     "TranslatedError",
+    "TranslatedRejectionError",
     "TranslatedSuccess",
 ]

@@ -57,7 +57,9 @@ Bearer credentials, with caller auth/cookies/forwarding headers stripped. Raw en
 validation precedes URL normalization; outbound requests remain confined to the
 configured HTTPS origin, port and API root. Physical model IDs are JSON body values,
 never URL path segments. The text adapters import no Google capability/media/schema
-helpers, execute no tools and fetch no content URLs. Zen passes accepted Responses
+helpers, execute no tools and fetch no content URLs. Explicit-null `reasoning` is
+dropped on translation; content-bearing unknowns fail closed, naming only
+sanitized field names in a debug trace (never values). Zen passes accepted Responses
 bodies through with model-only substitution and never sends the Chat dialect.
 Only pre-output 429 permits failover; ambiguous dispatched failures retain known usage or
 the reservation estimate. Local mocked verification is **Implemented**; actual upstream

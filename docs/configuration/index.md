@@ -21,7 +21,10 @@ embeddings. Native surface and Google feature profiles are invalid for this prov
 The fixed dialect sends `max_completion_tokens` and `stream_options.include_usage`.
 Text-only histories allow at most 128 messages, 128 text parts per message and 256 KiB
 aggregate text including instructions. Tools, structured-output profiles, media, stored
-continuation and provider state are rejected before admission. Configure quota groups,
+continuation and provider state are rejected before admission. Assistant messages
+and stream deltas may carry explicit-null `reasoning` (dropped on translation);
+content-bearing `reasoning` and other unknown fields fail closed with sanitized
+errors and a redacted debug trace. Configure quota groups,
 credit metering and model prices independently; exact upstream/model live compatibility
 remains unverified. See [provider contract](../plans/openai-compatible-provider/index.md).
 

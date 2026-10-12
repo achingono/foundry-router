@@ -40,6 +40,8 @@ def _no_calls(raw: Any) -> list[dict[str, Any]]:
 
 
 class CompatibleTextStreamDecoder(OpenAICompatibleStreamDecoder[TextRequestContext]):
+    null_tolerated_message_fields = frozenset({"reasoning"})
+
     def _translate_calls(self, raw: Any, *, completed: bool, refusal: bool) -> list[dict[str, Any]]:
         _ = completed, refusal
         return _no_calls(raw)
@@ -48,6 +50,7 @@ class CompatibleTextStreamDecoder(OpenAICompatibleStreamDecoder[TextRequestConte
 class CompatibleTextAdapter(OpenAICompatibleAdapter[TextRequestContext]):
     """Fixed Chat Completions dialect with text histories and float embeddings."""
 
+    null_tolerated_message_fields = frozenset({"reasoning"})
     stream_decoder_class = CompatibleTextStreamDecoder
 
     def request_context(self, body: dict[str, Any]) -> TextRequestContext:
