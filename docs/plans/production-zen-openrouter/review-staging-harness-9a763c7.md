@@ -9,13 +9,13 @@ implementation. Only review/status documentation was edited.
 
 ## Disposition
 
-**Harness review gate not cleared.** After the
-[follow-up review of febe207](#follow-up-review-of-febe207), SV-2, SV-3, SV-4,
-SV-5 and SV-7 are closed. SV-1 and SV-6 remain open; SV-8 is partially addressed.
-The findings below describe the original review and are superseded by the
-follow-up dispositions. The reviewer also accepts a
-[narrower deployment-acceptance contract](amendment-black-box-acceptance.md)
-at plan level; its implementation and re-review are pending.
+**Harness review gate not cleared.** The
+[review of 08221ff](#follow-up-review-of-08221ff) closes SV-1. SV-2, SV-3,
+SV-4, SV-5 and SV-7 remain closed. SV-6 remains a partial Major; SV-8 remains
+a partial, non-blocking Suggestion. Earlier findings/dispositions are historical
+and superseded by the latest follow-up. The
+[narrowed acceptance contract](amendment-black-box-acceptance.md) is approved
+at plan level, but evidence-scope binding is not yet implemented.
 No staging writes, production changes or live requests were performed. The
 separate operator/release/maintenance gates in the plan remain open as well.
 
@@ -343,3 +343,92 @@ keep router-request entry distinct from proof of upstream egress.
   requests, actual historical ledger reads, secret access or deployed changes.
   Full suite/coverage, Ruff/mypy, Docker and Sonar were not rerun by the reviewer;
   the conditional scan script is absent. Plan links, whitespace and diff checked.
+
+## Follow-up review of 08221ff
+
+Date: 2026-10-12.
+Reviewed commit: `08221ff5dd28253814cc785d79068a4a38b7ff1b`.
+Scope: all three changed files, prior failure reproductions, whole-prefix state
+validation, narrowed-contract evidence and inference entry handling.
+
+**Review gate not cleared.** SV-1 is closed. SV-6 remains partially addressed
+and blocking; SV-8 remains a partial Suggestion. The other five Majors retain
+their previous closed dispositions. Only documentation was edited here.
+
+### SV-1 — Closed
+
+`_reconcile_state` now runs before initial skip/return decisions and before each
+iteration. It rejects halted runs, reserved-without-outcome state, missing
+results, result-without-reservation state, inconsistent outcomes and gaps in the
+completed case prefix. Passed-result validation now binds provider/deployment,
+usage caps and recomputed debit to the exact case specification. Production
+prerequisites use the same reconciliation path.
+
+Independent verification generated the actual interrupted-write state using
+`9a763c7`; the current executor refused it before any successor call. Ten further
+variants (provider, deployment, input/output caps, debit, dispatch/termination
+flags, internally valid halted ledger, missing result and unreserved result)
+were refused on both resume and production prerequisite checks. With coherent
+state and the canonical staging manifest present, the fake positive path sent
+four staging plus two production calls and made no additional calls on replay.
+That positive path confirms execution machinery, not SV-6 scope binding.
+
+### SV-6 — Partial: Bind the reviewed evidence contract before allowing promotion
+
+- **File/Module:** [Harness](../../../scripts/quality/staging_validation.py),
+  `manifest_fingerprint`, `validate_manifest`, `validate_result` and
+  `_staging_results_passed`; both committed manifests.
+- **The remaining issue:** Production now uses reconciled public/admin results
+  without requiring the upstream Boolean, which implements part of the narrowing
+  decision. However, the manifests, fingerprints and result schema still lack
+  the explicit evidence-scope binding required by amendment items 2 and 5.
+  `independent_upstream_observed=true` is still accepted, even though this
+  harness cannot produce that evidence. Pre-amendment artifacts are silently
+  accepted as the newly approved contract.
+- **Why Static Analysis Missed It:** The old and new records have the same valid
+  schema; no field distinguishes their acceptance contract or invalidates the
+  unsupported upstream-observation claim.
+- **Impact:** Production prerequisites cannot establish that their evidence was
+  produced under the reviewed narrowed contract, and can preserve an unsupported
+  independent-verification claim. The Boolean no longer unlocks missing/corrupt
+  completion evidence by itself; that earlier bypass is fixed by SV-1. The
+  remaining gap is acceptance-contract binding and provenance claims.
+- **Required fix:** Add an immutable contract identifier, such as
+  `deployed-public-admin-v1`, to manifests and bound result/fingerprint metadata;
+  validate it at all resume/promotion entry points and require the upstream flag
+  to be false. Refuse untagged historical records without rewriting or silently
+  upgrading them. Add positive and negative promotion tests with the canonical
+  staging manifest actually present, including legacy-scope and true-flag cases.
+- **Evidence:** Generated a complete staging run with the actual `febe207`
+  implementation in a temporary directory, copied the committed staging manifest
+  there, and verified the current prerequisite accepted those untouched old
+  artifacts. Setting all upstream flags true also remained accepted and led to
+  two production fake calls with explicit production approval.
+- **Disposition:** Open Major; the narrowing decision itself remains accepted.
+
+### SV-8 — Partial: Claimed inference-only marker/harvesting change is absent
+
+`_EntryMarker.handle_async_request` still sets `entered=true` for every request,
+including health/admin GETs. The bound/encoded/generic ValueError branches still
+return without calling `harvest`; neither area changed in this commit. An
+independent fake router received one inference POST and returned a body over
+1 MiB; the case correctly failed with `response_bound_exceeded` and halted,
+but persisted `dispatched=false`.
+
+Restrict the marker to the inference POST and harvest its fact on all failure
+branches, including bound and encoded-response rejection. This remains an
+evidence Suggestion rather than a demonstrated replay path: ledger reservation
+and failure halting still protect the request budget.
+
+### Verification and limits
+
+- 43 staging-harness tests passed through the repository virtual environment.
+- Independent old-crash, ten state/coherence mutations, positive/replay,
+  pre-amendment artifact, unsupported-flag and oversized-body checks used
+  temporary directories, synthetic credentials and fake transports only.
+- No actual historical ledgers, credentials, deployed settings or provider
+  endpoints were accessed; no live request or staging write was sent.
+- Source review applied the repository deep-review focus to state consistency,
+  evidence trust and resource bounds. Full suite, coverage, Ruff/mypy, Docker
+  and static scanning were not rerun for this review. The conditional scan
+  script is absent. Plan links, whitespace and final documentation diff checked.

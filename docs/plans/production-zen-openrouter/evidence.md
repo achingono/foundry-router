@@ -3,8 +3,8 @@
 **Planned.** No staging/production writes or live inference were performed by the
 reviewer. Independent plan review is complete; revised-scope acceptance,
 implementation/preparation checks and execution approvals remain pending.
-The harness review gate is not cleared: SV-1/SV-6 remain open after follow-up;
-SV-8 is partial. Five Majors are closed. Narrowed deployment acceptance is
+The harness review gate is not cleared: SV-6 evidence-scope binding remains
+open; SV-8 is partial. SV-1 and the five other Majors are closed. Narrowed deployment acceptance is
 accepted at plan level, with implementation/re-review pending.
 
 | Item | Reference | Notes |
@@ -20,3 +20,4 @@ accepted at plan level, with implementation/re-review pending.
 | Independent harness review (2026-10-11) | [Review of 9a763c7](review-staging-harness-9a763c7.md) | Initial review: seven Majors on state/promotion validation, immutable case/aggregate-budget binding, upstream attempt limits, response bounds, SSE framing, missing independent proof and settlement tolerance; follow-up below supersedes dispositions and corrects the Zen retry attribution. One dispatch-evidence Suggestion. 21 tests passed; independent fake-app reproductions confirmed gaps. No live requests or staging writes |
 | Harness follow-up (2026-10-12) | [Review of febe207](review-staging-harness-9a763c7.md#follow-up-review-of-febe207) | SV-2/3/4/5/7 closed; SV-1 and SV-6 remain open; SV-8 partial. 57 focused tests passed, plus independent state, mutation, bounds, stream and debit checks. No live requests |
 | Narrowing decision (2026-10-12) | [Scoped acceptance amendment](amendment-black-box-acceptance.md) | Reviewer accepts deployed public/admin acceptance without independent provider/billing claims; six-case budget and operator gates unchanged. Implementation/re-review pending; no execution clearance |
+| Harness second follow-up (2026-10-12) | [Review of 08221ff](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff) | SV-1 closed; SV-6 remains partial because scope is not bound and legacy/true-upstream-flag records are accepted. SV-8 remains partial; its claimed marker/harvesting fix is absent. 43 tests plus independent state, scope, replay and bounds checks. No live changes |

@@ -52,7 +52,8 @@ rollback, state and approval gates remain unchanged.
 ## Implementation and review gates
 
 - [x] Reviewer narrowing decision and residual evidence limits recorded.
-- [ ] SV-1 reconciliation and result-coherence gaps resolved and independently verified.
+- [x] SV-1 reconciliation and result-coherence gaps independently verified in
+      [08221ff](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff).
 - [ ] Harness/manifests bind this evidence scope and production gating validates
       it; no fabricated upstream flags can satisfy the gate.
 - [ ] Actual resume, crash, corrupted-result and scoped production-positive/
@@ -60,4 +61,5 @@ rollback, state and approval gates remain unchanged.
 - [ ] Revised harness independently reviewed; all separate operator/release gates met.
 
 The decision permits preparing the narrowed implementation. It does not clear
-the current `febe207` harness or authorize staging/production execution.
+the current `08221ff` harness: evidence-scope binding is still missing and
+SV-8 remains partial. Staging/production execution is not cleared.
