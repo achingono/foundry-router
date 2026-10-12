@@ -229,8 +229,9 @@ def test_first_failure_halts_remaining(tmp_path):
     assert len(results["attempts"]) == 1
     assert results["attempts"][0]["status"] == "failed"
     assert len(app.calls) == 1
-    rerun = run_validation(tmp_path, manifest, app)
-    assert len(rerun["attempts"]) == 1
+    # A halted run never resumes, even to return its recorded failure.
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
     assert len(app.calls) == 1
 
 
@@ -776,3 +777,58 @@ async def test_timeout_after_entry_reports_dispatched(monkeypatch):
     assert entered == [1]
     assert result["dispatched"] is True
     assert result["status"] == "failed"
+
+
+def test_legacy_crash_state_blocks_resume(tmp_path):
+    manifest = staging_manifest()
+    app = FakeApp(manifest)
+    ledger = sv.StagingLedger(
+        tmp_path / "ledger-staging.json", initialize=True, run=sv.STAGING_RUN_ID
+    )
+    ledger.reserve("staging-zen-nonstream")
+    results = {
+        "run": sv.STAGING_RUN_ID,
+        "manifest": sv.manifest_fingerprint(manifest),
+        "attempts": [
+            {
+                "case_id": "staging-zen-nonstream",
+                "pool": "gpt-5.4-mini-zen",
+                "stream": False,
+                "status": "passed",
+                "http_status": 200,
+                "provider": "opencode_zen",
+                "deployment": "gpt-5.4-mini",
+                "dispatched": True,
+                "input_tokens": 12,
+                "output_tokens": 5,
+                "usage_coherent": True,
+                "terminated_ok": True,
+                "settlement_matches": True,
+                "reservations_cleared": True,
+                "synthetic_debit_usd": 0.0000315,
+                "retry_attempts": 2,
+                "retry_max_delay_seconds": 30,
+                "independent_upstream_observed": False,
+                "error_category": None,
+                "elapsed_seconds": 0.5,
+            }
+        ],
+    }
+    (tmp_path / "results-staging.json").write_text(json.dumps(results))
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
+    assert len(app.calls) == 0
+
+
+def test_halted_ledger_with_passing_results_blocks(tmp_path):
+    manifest = staging_manifest()
+    app = FakeApp(manifest)
+    run_validation(tmp_path, manifest, app)
+    ledger_path = tmp_path / "ledger-staging.json"
+    data = json.loads(ledger_path.read_text())
+    data["cases"]["staging-zen-nonstream"]["outcome"] = "failed"
+    data["halted"] = True
+    ledger_path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
+    assert len(app.calls) == 4

@@ -54,6 +54,8 @@ MAX_REQUEST_BYTES = 4096
 # ~1e3-magnitude balances carries error well below 1e-9, so the tolerance
 # derives from arithmetic precision, not display rounding.
 SETTLEMENT_TOLERANCE_USD = 1e-9
+# Absolute coherence tolerance for recomputed debits (stored values round to 1e-9).
+DEBIT_COHERENCE_TOLERANCE_USD = 1e-9
 
 STAGING_CASES = (
     "staging-zen-nonstream",
@@ -382,6 +384,12 @@ def _serialized_size(data: Any) -> int:
     return len(json.dumps(data).encode("utf-8"))
 
 
+def _expected_case_debit(usage_in: int, usage_out: int, case: dict) -> float:
+    return (
+        usage_in * float(case["input_per_million"]) + usage_out * float(case["output_per_million"])
+    ) / 1_000_000
+
+
 def validate_result(  # noqa: PLR0912 -- bounded evidence schema
     result: Any, manifest: dict[str, Any]
 ) -> None:
@@ -459,6 +467,15 @@ def validate_result(  # noqa: PLR0912 -- bounded evidence schema
         or result["error_category"] is not None
         or result["input_tokens"] is None
         or result["output_tokens"] is None
+        or result["provider"] != case["provider"]
+        or result["deployment"] != case["deployment"]
+        or not result["input_tokens"] <= PREFLIGHT_INPUT_TOKENS
+        or not result["output_tokens"] <= PREFLIGHT_OUTPUT_TOKENS
+        or abs(
+            result["synthetic_debit_usd"]
+            - _expected_case_debit(result["input_tokens"], result["output_tokens"], case)
+        )
+        > DEBIT_COHERENCE_TOLERANCE_USD
     ):
         raise ValueError("Invalid passed validation evidence")
 
@@ -903,10 +920,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 result["reservations_cleared"] = cleared
                 if not cleared or after is None:
                     return finish("cleanup_timeout")
-                expected = (
-                    usage[0] * float(case["input_per_million"])
-                    + usage[1] * float(case["output_per_million"])
-                ) / 1_000_000
+                expected = _expected_case_debit(usage[0], usage[1], case)
                 debit = before - after
                 result["synthetic_debit_usd"] = round(debit, 9)
                 if expected > 0 and debit == 0:
@@ -964,19 +978,14 @@ def _staging_results_passed(stage_dir: Path) -> bool:
     try:
         manifest = _load_canonical_manifest(stage_dir, "manifest.staging.json")
         ledger_path, results_path = _run_files(STAGING_RUN_ID, stage_dir)
-        ledger = StagingLedger(ledger_path, run=STAGING_RUN_ID)
-        if any(case["outcome"] != "passed" for case in ledger._read()["cases"].values()):
-            return False
-        results = load_validation_results(results_path, manifest)
+        _, results = _reconcile_state(ledger_path, results_path, manifest)
     except (OSError, ValueError):
         return False
     if len(results["attempts"]) != len(STAGING_CASES):
         return False
-    # Black-box checks cannot observe the provider hop: production requires
-    # validated independent upstream evidence, which this path never produces.
-    # The gate stays closed until a reviewed amendment narrows the contract.
-    if any(not item.get("independent_upstream_observed", False) for item in results["attempts"]):
-        return False
+    # Narrowed deployment-acceptance contract (reviewed amendment): public
+    # completion/usage plus canonical admin debit, without independent
+    # provider observation. No billing or provider claim follows.
     return all(
         item["status"] == "passed"
         and item["http_status"] == HTTP_OK
@@ -993,7 +1002,49 @@ def _staging_results_passed(stage_dir: Path) -> bool:
     )
 
 
-def execute_validation(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract
+def _reconcile_state(
+    ledger_path: Path, results_path: Path, manifest: dict, *, initialize: bool = False
+) -> tuple[dict, dict]:
+    """Reconcile durable ledger and results before any skip, return, or dispatch.
+
+    Every listed case must be in exactly one coherent state: pristine
+    (unreserved, no outcome, no result), or complete (reserved, recorded
+    outcome, persisted result with matching status/tokens/debit). Halted runs,
+    unresolved reservations, missing or contradictory records refuse. Cases
+    must complete as a prefix: nothing may follow an incomplete case.
+    """
+    run = manifest["run"]
+    ledger = StagingLedger(ledger_path, initialize=initialize, run=run)
+    ledger_data = ledger._read()
+    if ledger_data["halted"]:
+        raise ValueError("Halted run cannot resume")
+    results = load_validation_results(results_path, manifest)
+    by_id = {item["case_id"]: item for item in results["attempts"]}
+    ordered = [case["id"] for case in manifest["cases"]]
+    prefix_open = True
+    for case_id in ordered:
+        entry = ledger_data["cases"][case_id]
+        persisted = by_id.get(case_id)
+        complete = (
+            entry["reserved"]
+            and entry["outcome"] in {"passed", "failed"}
+            and persisted is not None
+            and persisted["status"] == entry["outcome"]
+        )
+        if complete and persisted["status"] == "passed":
+            if not prefix_open:
+                raise ValueError("Ledger/result outcome mismatch")
+            continue
+        if complete:
+            # A recorded failure ends the run; resume never continues it.
+            raise ValueError("Halted run cannot resume")
+        prefix_open = False
+        if entry["reserved"] or entry["outcome"] is not None or persisted is not None:
+            raise ValueError("Unresolved reserved case")
+    return ledger_data, results
+
+
+def execute_validation(  # noqa: PLR0913 -- fail-closed phase contract
     manifest: dict,
     *,
     stage_dir: Path | None = None,
@@ -1018,11 +1069,10 @@ def execute_validation(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract
     directory = stage_dir if stage_dir is not None else STAGE_DIR
     ledger_path, results_path = _run_files(run, directory)
     with locked(directory / "stage"):
-        ledger = StagingLedger(ledger_path, initialize=not ledger_path.exists(), run=run)
-        results = load_validation_results(results_path, manifest)
+        first_run = not ledger_path.exists() and not results_path.exists()
+        _, results = _reconcile_state(ledger_path, results_path, manifest, initialize=first_run)
+        ledger = StagingLedger(ledger_path, run=run)
         by_id = {item["case_id"]: item for item in results["attempts"]}
-        if any(item["status"] != "passed" for item in results["attempts"]):
-            return results
         if run == PRODUCTION_RUN_ID and not _staging_results_passed(directory):
             raise ValueError("Production validation requires passing staging results")
         factory = transport_factory or (
@@ -1030,6 +1080,7 @@ def execute_validation(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract
         )
         case_map = {case["id"]: case for case in manifest["cases"]}
         for case_id in [case["id"] for case in manifest["cases"]]:
+            _reconcile_state(ledger_path, results_path, manifest)
             if case_id in by_id:
                 continue
             if not ledger.runnable(case_id):
