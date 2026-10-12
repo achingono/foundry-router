@@ -32,19 +32,27 @@ class FakeApp(httpx.AsyncBaseTransport):
         self.manifest = manifest
         self.options = options
         self.calls: list[tuple] = []
+        self.pool_groups = options.get("pool_groups", {})
         self.groups = {}
         for case in manifest["cases"]:
-            group = f"group-{case['pool']}"
-            self.groups[group] = 1000.0
+            group = self.pool_groups.get(case["pool"], f"group-{case['pool']}")
+            self.groups.setdefault(group, options.get("group_balances", {}).get(group, 1000.0))
+        for group, balance in options.get("extra_groups", {}).items():
+            self.groups.setdefault(group, balance)
         self.backends = {
             f"backend-{case['pool']}": {
                 "provider": case["provider"],
                 "deployment": case["deployment"],
-                "credit_group": f"group-{case['pool']}",
+                "credit_group": self.pool_groups.get(case["pool"], f"group-{case['pool']}"),
                 "supported_operations": ["responses"],
             }
             for case in manifest["cases"]
         }
+        self.reserve_policies = options.get("reserve_policies", {})
+        self.allowances = options.get("allowances", {})
+        self.global_reserves = options.get("global_reserves", (10.0, 5.0))
+        self.mutate_policy_after = options.get("mutate_policy_after", {})
+        self.dispatched = 0
         self.stuck_reservations = options.get("stuck_reservations", False)
         self.ready = options.get("ready", True)
         self.status_override = options.get("status_override", {})
@@ -69,15 +77,22 @@ class FakeApp(httpx.AsyncBaseTransport):
             },
             "credit_groups": {
                 group: {
+                    "cycle_allowance_usd": self.allowances.get(group, 1000.0),
+                    "reserve_policy": self.reserve_policies.get(group),
                     "live": {
                         "estimated_remaining_usd": remaining,
                         "active_reservations": 1 if self.stuck_reservations else 0,
                         "reserved_inflight_usd": 0.5 if self.stuck_reservations else 0.0,
-                    }
+                    },
                 }
                 for group, remaining in self.groups.items()
             },
-            "config": {"retry_attempts": 2, "retry_max_delay_seconds": 30.0},
+            "config": {
+                "retry_attempts": 2,
+                "retry_max_delay_seconds": 30.0,
+                "min_credit_reserve_usd": self.global_reserves[0],
+                "min_credit_reserve_percent": self.global_reserves[1],
+            },
         }
 
     def _usage(self, case_id):
@@ -86,7 +101,7 @@ class FakeApp(httpx.AsyncBaseTransport):
         return {"input_tokens": 12, "output_tokens": 5, "total_tokens": 17}
 
     def _debit(self, case, usage):
-        group = f"group-{case['pool']}"
+        group = self.pool_groups.get(case["pool"], f"group-{case['pool']}")
         cost = (
             usage["input_tokens"] * case["input_per_million"]
             + usage["output_tokens"] * case["output_per_million"]
@@ -116,6 +131,11 @@ class FakeApp(httpx.AsyncBaseTransport):
                 if c["pool"] == body.get("model") and c["stream"] is bool(body.get("stream"))
             )
             self.calls.append((case["id"], bool(body.get("stream"))))
+            self.dispatched += 1
+            if self.dispatched == 1:
+                for group, policy in self.mutate_policy_after.items():
+                    if group in self.reserve_policies:
+                        self.reserve_policies[group] = policy
             if case["id"] in self.status_override:
                 status, payload = self.status_override[case["id"]]
                 return httpx.Response(status, json=payload)
@@ -936,3 +956,265 @@ async def test_inference_oversize_reports_dispatched():
     assert result["dispatched"] is True
     assert result["error_category"] == "response_bound_exceeded"
     assert result["status"] == "failed"
+
+
+def roster_manifest(**overrides):
+    manifest = json.loads((PLAN_DIR / "manifest.roster.json").read_text())
+    manifest.update(overrides)
+    return manifest
+
+
+def copy_canonical_pair(tmp_path):
+    import shutil
+
+    for name in ("manifest.staging.json", "manifest.production.json"):
+        shutil.copy(PLAN_DIR / name, tmp_path / name)
+
+
+def roster_app(manifest, **options):
+    pool_groups = {case["pool"]: "or-shared" for case in manifest["cases"]}
+    defaults = {
+        "pool_groups": pool_groups,
+        "extra_groups": {"zen-staging": 10.0},
+        "group_balances": {"or-shared": 4.83, "zen-staging": 10.0},
+        "reserve_policies": {
+            "or-shared": {
+                "min_credit_reserve_usd": 0.05,
+                "min_credit_reserve_percent": 5.0,
+                "source": "override",
+            },
+            "zen-staging": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "inherited",
+            },
+        },
+        "allowances": {"or-shared": 4.83, "zen-staging": 10.0},
+    }
+    defaults.update(options)
+    return FakeApp(manifest, **defaults)
+
+
+def run_roster(tmp_path, manifest_data, app):
+    copy_canonical_pair(tmp_path)
+    return run_validation(tmp_path, manifest_data, app)
+
+
+def test_committed_roster_manifest_pinned():
+    manifest = roster_manifest()
+    summary = sv.validate_manifest(manifest)
+    assert summary["run"] == sv.ROSTER_RUN_ID
+    assert [c["id"] for c in manifest["cases"]] == list(sv.ROSTER_CASES)
+    assert all(c["stream"] is False and c["provider"] == "openrouter" for c in manifest["cases"])
+    assert manifest["release"] == {"image_digest": sv.ROSTER_IMAGE_DIGEST}
+    assert manifest["configuration"] == sv.ROSTER_CONFIGURATION
+    fingerprint = sv.manifest_fingerprint(manifest)
+    assert fingerprint["release"] == manifest["release"]
+    assert fingerprint["configuration"] == manifest["configuration"]
+    staging = json.loads((PLAN_DIR / "manifest.staging.json").read_text())
+    production = json.loads((PLAN_DIR / "manifest.production.json").read_text())
+    assert sv.combined_preflight_estimate(manifest, staging, production) == pytest.approx(
+        0.00571392
+    )
+
+
+def test_old_manifest_fingerprints_unchanged():
+    for name in ("manifest.staging.json", "manifest.production.json"):
+        manifest = json.loads((PLAN_DIR / name).read_text())
+        sv.validate_manifest(manifest)
+        assert "release" not in sv.manifest_fingerprint(manifest)
+        assert "configuration" not in sv.manifest_fingerprint(manifest)
+
+
+def test_roster_file_routing(tmp_path):
+    assert sv.RUN_ENVIRONMENTS[sv.ROSTER_RUN_ID] == "staging"
+    assert sv.RUN_CASES[sv.ROSTER_RUN_ID] == sv.ROSTER_CASES
+    assert sv._run_files(sv.ROSTER_RUN_ID, tmp_path) == (
+        tmp_path / "ledger-roster.json",
+        tmp_path / "results-roster.json",
+    )
+
+
+def test_roster_five_case_pass(tmp_path):
+    manifest = roster_manifest()
+    results = run_roster(tmp_path, manifest, roster_app(manifest))
+    assert [a["case_id"] for a in results["attempts"]] == list(sv.ROSTER_CASES)
+    assert all(a["status"] == "passed" for a in results["attempts"])
+    for attempt in results["attempts"]:
+        assert attempt["observed_reserve_usd"] == 0.05
+        assert attempt["observed_reserve_percent"] == 5.0
+        assert attempt["reserve_source"] == "override"
+        assert attempt["settlement_matches"] is True
+        assert attempt["reservations_cleared"] is True
+    assert results["manifest"]["release"] == {"image_digest": sv.ROSTER_IMAGE_DIGEST}
+
+
+def test_roster_halt_on_failure_without_replay(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(
+        manifest,
+        status_override={"roster-mimo-nonstream": (500, {"error": "boom"})},
+    )
+    results = run_roster(tmp_path, manifest, app)
+    attempted = [a["case_id"] for a in results["attempts"]]
+    assert attempted == list(sv.ROSTER_CASES[:4])
+    assert results["attempts"][-1]["status"] == "failed"
+    assert len(app.calls) == 4
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert len(app.calls) == 4
+
+
+def test_roster_crash_state_blocks_resume(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(manifest)
+    real_write = sv.write_atomic
+
+    def flaky_write(path, data):
+        attempts = data.get("attempts", []) if isinstance(data, dict) else []
+        if str(path).endswith("results-roster.json") and attempts:
+            raise OSError("disk full")
+        return real_write(path, data)
+
+    import staging_validation as svmod
+
+    original = svmod.write_atomic
+    svmod.write_atomic = flaky_write
+    try:
+        with pytest.raises(OSError):
+            run_roster(tmp_path, manifest, app)
+    finally:
+        svmod.write_atomic = original
+    assert len(app.calls) == 1
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert len(app.calls) == 1
+
+
+def test_roster_release_mutation_refused():
+    with pytest.raises(ValueError):
+        sv.validate_manifest(roster_manifest(release={"image_digest": "sha256:other"}))
+    mutated = roster_manifest()
+    mutated["configuration"] = dict(mutated["configuration"])
+    mutated["configuration"]["global_reserve_usd"] = 0.05
+    with pytest.raises(ValueError):
+        sv.validate_manifest(mutated)
+    mutated = roster_manifest()
+    mutated["configuration"] = dict(mutated["configuration"])
+    mutated["configuration"]["group_overrides"] = {"or-shared": dict(sv.ROSTER_OR_OVERRIDE)}
+    mutated["configuration"]["group_overrides"]["or-shared"]["min_credit_reserve_usd"] = 0.06
+    with pytest.raises(ValueError):
+        sv.validate_manifest(mutated)
+
+
+def test_roster_staging_release_key_refused():
+    manifest = staging_manifest(release={"image_digest": sv.ROSTER_IMAGE_DIGEST})
+    with pytest.raises(ValueError):
+        sv.validate_manifest(manifest)
+
+
+def test_roster_tampered_results_refused(tmp_path):
+    manifest = roster_manifest()
+    run_roster(tmp_path, manifest, roster_app(manifest))
+    path = tmp_path / "results-roster.json"
+    data = json.loads(path.read_text())
+    data["attempts"][0]["reserve_source"] = "inherited"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        sv.load_validation_results(path, manifest)
+    with pytest.raises(ValueError):
+        sv.load_validation_results(path, roster_manifest(release={"image_digest": "sha256:other"}))
+
+
+def test_roster_wrong_global_floor_refused(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(manifest, global_reserves=(0.05, 5.0))
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def test_roster_absent_override_refused(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(
+        manifest,
+        reserve_policies={
+            "or-shared": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "inherited",
+            },
+            "zen-staging": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "inherited",
+            },
+        },
+    )
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def test_roster_identical_policies_refused(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(
+        manifest,
+        reserve_policies={
+            "or-shared": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "override",
+            },
+            "zen-staging": {
+                "min_credit_reserve_usd": 10.0,
+                "min_credit_reserve_percent": 5.0,
+                "source": "inherited",
+            },
+        },
+    )
+    with pytest.raises(ValueError):
+        run_roster(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def test_roster_binding_change_halts(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(
+        manifest,
+        mutate_policy_after={
+            "or-shared": {
+                "min_credit_reserve_usd": 0.06,
+                "min_credit_reserve_percent": 5.0,
+                "source": "override",
+            }
+        },
+    )
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert results["attempts"][0]["error_category"] == "acceptance_mismatch"
+    assert len(app.calls) == 1
+
+
+def test_roster_legacy_result_format_refused(tmp_path):
+    manifest = roster_manifest()
+    run_roster(tmp_path, manifest, roster_app(manifest))
+    path = tmp_path / "results-roster.json"
+    data = json.loads(path.read_text())
+    for attempt in data["attempts"]:
+        for key in ("observed_reserve_usd", "observed_reserve_percent", "reserve_source"):
+            del attempt[key]
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        sv.load_validation_results(path, manifest)
+
+
+def test_roster_combined_allowance_missing_manifest(tmp_path):
+    manifest = roster_manifest()
+    app = roster_app(manifest)
+    (tmp_path / "manifest.staging.json").write_text(
+        (PLAN_DIR / "manifest.staging.json").read_text()
+    )
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
+    assert app.calls == []

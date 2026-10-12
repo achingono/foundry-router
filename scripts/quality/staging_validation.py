@@ -32,6 +32,7 @@ MAX_RESULTS_BYTES = 65536
 
 STAGING_RUN_ID = "staging-zen-openrouter-2026-10-11"
 PRODUCTION_RUN_ID = "production-zen-openrouter-2026-10-11"
+ROSTER_RUN_ID = "staging-or-roster-2026-10-12"
 
 PROMPT = "Reply with the word ready."
 MAX_OUTPUT_TOKENS = 128
@@ -57,6 +58,24 @@ MAX_REQUEST_BYTES = 4096
 SETTLEMENT_TOLERANCE_USD = 1e-9
 # Absolute coherence tolerance for recomputed debits (stored values round to 1e-9).
 DEBIT_COHERENCE_TOLERANCE_USD = 1e-9
+# Roster run release/configuration binding (reviewed staging experiment only).
+ROSTER_IMAGE_DIGEST = "sha256:71addc1701611f4c6210df28007b3f03d57eb05b9ccd3fe9eed4e6a13e4165ff"
+ROSTER_GLOBAL_RESERVE_USD = 10.0
+ROSTER_GLOBAL_RESERVE_PERCENT = 5.0
+ROSTER_OR_GROUP = "or-shared"
+ROSTER_ZEN_GROUP = "zen-staging"
+ROSTER_OR_OVERRIDE = {
+    "min_credit_reserve_usd": 0.05,
+    "min_credit_reserve_percent": 5.0,
+}
+ROSTER_CONFIGURATION = {
+    "global_reserve_usd": ROSTER_GLOBAL_RESERVE_USD,
+    "global_reserve_percent": ROSTER_GLOBAL_RESERVE_PERCENT,
+    "credit_group": ROSTER_OR_GROUP,
+    "group_overrides": {ROSTER_OR_GROUP: dict(ROSTER_OR_OVERRIDE)},
+    "inherited_groups": [ROSTER_ZEN_GROUP],
+}
+ROSTER_RELEASE = {"image_digest": ROSTER_IMAGE_DIGEST}
 
 STAGING_CASES = (
     "staging-zen-nonstream",
@@ -68,12 +87,28 @@ PRODUCTION_CASES = (
     "production-zen-nonstream",
     "production-zen-stream",
 )
+ROSTER_CASES = (
+    "roster-luna-nonstream",
+    "roster-haiku-nonstream",
+    "roster-deepseek-nonstream",
+    "roster-mimo-nonstream",
+    "roster-spark-nonstream",
+)
 
-RUN_ENVIRONMENTS = {STAGING_RUN_ID: "staging", PRODUCTION_RUN_ID: "production"}
-RUN_CASES = {STAGING_RUN_ID: STAGING_CASES, PRODUCTION_RUN_ID: PRODUCTION_CASES}
+RUN_ENVIRONMENTS = {
+    STAGING_RUN_ID: "staging",
+    PRODUCTION_RUN_ID: "production",
+    ROSTER_RUN_ID: "staging",
+}
+RUN_CASES = {
+    STAGING_RUN_ID: STAGING_CASES,
+    PRODUCTION_RUN_ID: PRODUCTION_CASES,
+    ROSTER_RUN_ID: ROSTER_CASES,
+}
 RUN_FILES = {
     STAGING_RUN_ID: ("ledger-staging.json", "results-staging.json"),
     PRODUCTION_RUN_ID: ("ledger-production.json", "results-production.json"),
+    ROSTER_RUN_ID: ("ledger-roster.json", "results-roster.json"),
 }
 
 # Immutable reviewed case specifications. Manifests must match their run's
@@ -143,6 +178,58 @@ RUN_SPECS = {
             "output_per_million": 4.5,
         },
     ),
+    ROSTER_RUN_ID: (
+        {
+            "id": "roster-luna-nonstream",
+            "pool": "gpt-6-luna-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "openai/gpt-6-luna",
+            "input_per_million": 0.10,
+            "output_per_million": 0.50,
+        },
+        {
+            "id": "roster-haiku-nonstream",
+            "pool": "claude-haiku-5.5-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "anthropic/claude-haiku-5.5",
+            "input_per_million": 0.10,
+            "output_per_million": 0.50,
+        },
+        {
+            "id": "roster-deepseek-nonstream",
+            "pool": "deepseek-v4.1-flash-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "deepseek/deepseek-v4.1-flash",
+            "input_per_million": 0.15,
+            "output_per_million": 0.60,
+        },
+        {
+            "id": "roster-mimo-nonstream",
+            "pool": "mimo-v2.6-flash-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "xiaomi/mimo-v2.6-flash",
+            "input_per_million": 0.14,
+            "output_per_million": 0.28,
+        },
+        {
+            "id": "roster-spark-nonstream",
+            "pool": "muse-spark-1.3-contributor-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "meta/muse-spark-1.3-contributor",
+            "input_per_million": 0.10,
+            "output_per_million": 0.20,
+        },
+    ),
 }
 
 CASE_SPEC_KEYS = (
@@ -188,6 +275,11 @@ RESULT_KEYS = {
     "evidence_scope",
     "error_category",
     "elapsed_seconds",
+}
+ROSTER_RESULT_KEYS = RESULT_KEYS | {
+    "observed_reserve_usd",
+    "observed_reserve_percent",
+    "reserve_source",
 }
 
 
@@ -247,13 +339,21 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not total <= ALLOWANCE_USD
     ):
         raise ValueError("Invalid staging bounds or allowance")
+    if run == ROSTER_RUN_ID:
+        if manifest.get("release") != ROSTER_RELEASE:
+            raise ValueError("Invalid roster release binding")
+        if manifest.get("configuration") != ROSTER_CONFIGURATION:
+            raise ValueError("Invalid roster configuration binding")
+    elif "release" in manifest or "configuration" in manifest:
+        raise ValueError("Unexpected release binding")
     return {"run": run, "cases": [case["id"] for case in cases]}
 
 
 def manifest_fingerprint(manifest: dict[str, Any]) -> dict[str, Any]:
     # Only the exact reviewed case keys persist; unknown keys are dropped,
-    # never copied into durable state.
-    return {
+    # never copied into durable state. Release/configuration bindings persist
+    # only when the manifest carries them; old manifests are byte-identical.
+    fingerprint = {
         "run": manifest["run"],
         "environment": manifest["environment"],
         "evidence_scope": manifest["evidence_scope"],
@@ -261,10 +361,14 @@ def manifest_fingerprint(manifest: dict[str, Any]) -> dict[str, Any]:
         "max_output_tokens": manifest["max_output_tokens"],
         "allowance_usd": manifest["allowance_usd"],
     }
+    for name in ("release", "configuration"):
+        if name in manifest:
+            fingerprint[name] = manifest[name]
+    return fingerprint
 
 
 def combined_preflight_estimate(*manifests: Any) -> float:
-    """Conservative six-case-style estimate across runs against one allowance."""
+    """Conservative preflight estimate across runs against one allowance."""
     total = 0.0
     for manifest in manifests:
         summary = validate_manifest(manifest)
@@ -394,12 +498,14 @@ def _expected_case_debit(usage_in: int, usage_out: int, case: dict) -> float:
     ) / 1_000_000
 
 
-def validate_result(  # noqa: PLR0912 -- bounded evidence schema
+def validate_result(  # noqa: PLR0912, PLR0915 -- bounded evidence schema
     result: Any, manifest: dict[str, Any]
 ) -> None:
     """Bounded schema for persisted validation outcomes."""
     cases = {case["id"]: case for case in manifest["cases"]}
-    if not isinstance(result, dict) or set(result) != RESULT_KEYS:
+    roster = manifest.get("run") == ROSTER_RUN_ID
+    expected_keys = ROSTER_RESULT_KEYS if roster else RESULT_KEYS
+    if not isinstance(result, dict) or set(result) != expected_keys:
         raise ValueError("Invalid validation result")
     case = cases.get(result.get("case_id"))
     if case is None or result.get("pool") != case["pool"]:
@@ -465,6 +571,18 @@ def validate_result(  # noqa: PLR0912 -- bounded evidence schema
     elapsed = result.get("elapsed_seconds")
     if type(elapsed) not in {int, float} or not 0 <= elapsed <= CASE_TIMEOUT_SECONDS + 60:
         raise ValueError("Invalid result elapsed time")
+    if roster:
+        observed_missing = (
+            result.get("observed_reserve_usd") is None
+            or result.get("observed_reserve_percent") is None
+            or result.get("reserve_source") is None
+        )
+        if observed_missing and not (
+            result.get("status") == "failed" and result.get("dispatched") is False
+        ):
+            raise ValueError("Invalid roster reserve evidence")
+        if not observed_missing:
+            _validate_roster_reserve_evidence(result, manifest)
     if _serialized_size(result) > MAX_RESULTS_BYTES:
         raise ValueError("Invalid result size")
     if result["status"] == "passed" and (
@@ -488,6 +606,30 @@ def validate_result(  # noqa: PLR0912 -- bounded evidence schema
         > DEBIT_COHERENCE_TOLERANCE_USD
     ):
         raise ValueError("Invalid passed validation evidence")
+
+
+def _validate_roster_reserve_evidence(result: dict[str, Any], manifest: dict[str, Any]) -> None:
+    """Observed reserve evidence must match the bound roster configuration."""
+    configuration = manifest.get("configuration")
+    if not isinstance(configuration, dict):
+        # ValueError by harness contract: every validation refusal is ValueError.
+        raise ValueError("Invalid roster reserve evidence")  # noqa: TRY004
+    expected = configuration.get("group_overrides", {}).get(ROSTER_OR_GROUP)
+    for name in ("observed_reserve_usd", "observed_reserve_percent"):
+        value = result.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            # ValueError by harness contract: every validation refusal is ValueError.
+            raise ValueError("Invalid roster reserve evidence")  # noqa: TRY004
+    if result.get("reserve_source") != "override":
+        raise ValueError("Invalid roster reserve evidence")
+    if (
+        not isinstance(expected, dict)
+        or result["observed_reserve_usd"] != expected.get("min_credit_reserve_usd")
+        or result["observed_reserve_percent"] != expected.get("min_credit_reserve_percent")
+    ):
+        raise ValueError("Invalid roster reserve evidence")
+    if expected.get("min_credit_reserve_usd") == configuration.get("global_reserve_usd"):
+        raise ValueError("Invalid roster policy contrast")
 
 
 def load_validation_results(path: Path, manifest: dict[str, Any], *, data: Any = None) -> dict:
@@ -791,6 +933,121 @@ class _EntryMarker(httpx.AsyncBaseTransport):
         await self.transport.aclose()
 
 
+def _observe_roster_policy(  # noqa: PLR0912 -- fixed roster evidence checklist
+    admin: dict, manifest: dict, group: str
+) -> tuple[float, float]:
+    """Read and bind the observed override pair without dispatch preconditions."""
+    configuration = manifest.get("configuration")
+    if not isinstance(configuration, dict):
+        raise ValidationSetupError("Validation roster configuration unavailable")
+    if group != configuration.get("credit_group"):
+        raise ValidationSetupError("Validation roster group mismatch")
+    config = admin.get("config") if isinstance(admin, dict) else None
+    if not isinstance(config, dict):
+        raise ValidationSetupError("Validation global policy unavailable")
+    global_usd = config.get("min_credit_reserve_usd")
+    global_percent = config.get("min_credit_reserve_percent")
+    if global_usd != configuration.get("global_reserve_usd") or global_percent != configuration.get(
+        "global_reserve_percent"
+    ):
+        raise ValidationSetupError("Validation global reserve mismatch")
+    groups = admin.get("credit_groups")
+    if not isinstance(groups, dict):
+        raise ValidationSetupError("Validation credit evidence unavailable")
+    expected_override = configuration.get("group_overrides", {}).get(group)
+    if not isinstance(expected_override, dict):
+        raise ValidationSetupError("Validation roster override unavailable")
+    observed: tuple[float, float] | None = None
+    for name, entry in groups.items():
+        if not isinstance(entry, dict):
+            raise ValidationSetupError("Validation credit evidence unavailable")
+        policy = entry.get("reserve_policy")
+        if not isinstance(policy, dict):
+            raise ValidationSetupError("Validation reserve evidence unavailable")
+        if name == group:
+            if (
+                policy.get("source") != "override"
+                or policy.get("min_credit_reserve_usd")
+                != expected_override.get("min_credit_reserve_usd")
+                or policy.get("min_credit_reserve_percent")
+                != expected_override.get("min_credit_reserve_percent")
+            ):
+                raise ValidationSetupError("Validation roster override mismatch")
+            observed_usd = policy["min_credit_reserve_usd"]
+            observed_percent = policy["min_credit_reserve_percent"]
+            if observed_usd == global_usd:
+                raise ValidationSetupError("Validation roster policy contrast unavailable")
+            observed = (float(observed_usd), float(observed_percent))
+        elif name in configuration.get("inherited_groups", []):
+            if (
+                policy.get("source") != "inherited"
+                or policy.get("min_credit_reserve_usd") != global_usd
+                or policy.get("min_credit_reserve_percent") != global_percent
+            ):
+                raise ValidationSetupError("Validation inherited policy mismatch")
+    if observed is None:
+        raise ValidationSetupError("Validation roster override unavailable")
+    return observed
+
+
+def _roster_policy_gate(admin: dict, manifest: dict, group: str) -> tuple[float, float]:
+    """Enforce the reviewed mixed-policy contrast before any roster dispatch.
+
+    Returns the observed override pair. Refuses wrong global floors, absent
+    overrides, identical policies, non-inherited Zen evidence, unrestful
+    accounts and unprovable headroom contrast without dispatching.
+    """
+    observed_usd, observed_percent = _observe_roster_policy(admin, manifest, group)
+    groups = admin.get("credit_groups")
+    if not isinstance(groups, dict):
+        raise ValidationSetupError("Validation credit evidence unavailable")
+    for entry in groups.values():
+        live = entry.get("live") if isinstance(entry, dict) else None
+        numbers = _live_numbers(live) if isinstance(live, dict) else None
+        if numbers is None:
+            raise ValidationSetupError("Validation credit evidence unavailable")
+        _remaining, active, inflight = numbers
+        if active != 0 or inflight != 0:
+            raise ValidationSetupError("Validation account is not quiet")
+    configuration = manifest.get("configuration")
+    if not isinstance(configuration, dict):
+        raise ValidationSetupError("Validation roster configuration unavailable")
+    overrides = configuration.get("group_overrides", {})
+    if not isinstance(overrides, dict) or not isinstance(overrides.get(group), dict):
+        raise ValidationSetupError("Validation roster override unavailable")
+    _require_roster_headroom(
+        groups[configuration.get("credit_group")],
+        overrides[group].get("min_credit_reserve_usd"),
+        overrides[group].get("min_credit_reserve_percent"),
+        configuration.get("global_reserve_usd"),
+        configuration.get("global_reserve_percent"),
+    )
+    return observed_usd, observed_percent
+
+
+def _require_roster_headroom(
+    entry: dict,
+    override_usd: Any,
+    override_percent: Any,
+    global_usd: Any,
+    global_percent: Any,
+) -> None:
+    """Usable headroom must exist under the override but not the global floor."""
+    allowance = entry.get("cycle_allowance_usd")
+    live = entry.get("live") if isinstance(entry, dict) else None
+    remaining = live.get("estimated_remaining_usd") if isinstance(live, dict) else None
+    values = [allowance, remaining, override_usd, override_percent, global_usd, global_percent]
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
+        raise ValidationSetupError("Validation headroom evidence unavailable")
+    allowance_f, remaining_f, o_usd, o_pct, g_usd, g_pct = (float(v) for v in values)
+    if not all(math.isfinite(v) for v in (allowance_f, remaining_f, o_usd, o_pct, g_usd, g_pct)):
+        raise ValidationSetupError("Validation headroom evidence unavailable")
+    under_override = remaining_f - max(o_usd, allowance_f * o_pct / 100)
+    under_global = remaining_f - max(g_usd, allowance_f * g_pct / 100)
+    if not (under_override > 0 and under_global <= 0):
+        raise ValidationSetupError("Validation headroom contrast unavailable")
+
+
 async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fixed validation contract
     *,
     case: dict,
@@ -802,6 +1059,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
 ) -> dict:
     """One bounded black-box case; only redacted numerics are returned."""
     started = time.monotonic()
+    roster_run = manifest.get("run") == ROSTER_RUN_ID
     result: dict = {
         "case_id": case["id"],
         "pool": case["pool"],
@@ -825,6 +1083,14 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
         "error_category": None,
         "elapsed_seconds": 0.0,
     }
+    if roster_run:
+        result.update(
+            {
+                "observed_reserve_usd": None,
+                "observed_reserve_percent": None,
+                "reserve_source": None,
+            }
+        )
 
     def finish(category: str | None) -> dict:
         result["error_category"] = category
@@ -885,6 +1151,11 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 _require_setup(numbers is not None, "Validation credit evidence unavailable")
                 before, active, inflight = numbers
                 _require_setup(active == 0 and inflight == 0, "Validation account is not quiet")
+                if roster_run:
+                    observed_usd, observed_percent = _roster_policy_gate(admin, manifest, _group)
+                    result["observed_reserve_usd"] = observed_usd
+                    result["observed_reserve_percent"] = observed_percent
+                    result["reserve_source"] = "override"
                 retry_config = admin.get("config") if isinstance(admin, dict) else None
                 if isinstance(retry_config, dict):
                     attempts = retry_config.get("retry_attempts")
@@ -924,16 +1195,32 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 result["terminated_ok"] = True
                 cleared = False
                 after = None
+                binding_changed = False
                 for _ in range(CLEANUP_POLLS):
                     snapshot = await _read_admin(client, admin_key)
                     resolved_now = _resolve_group(snapshot, case["pool"]) if snapshot else None
                     closing = _live_numbers(resolved_now[2]) if resolved_now else None
+                    if roster_run and snapshot is not None:
+                        try:
+                            now_usd, now_percent = _observe_roster_policy(
+                                snapshot, manifest, _group
+                            )
+                        except ValidationSetupError:
+                            now_usd, now_percent = None, None
+                        if (now_usd, now_percent) != (
+                            result["observed_reserve_usd"],
+                            result["observed_reserve_percent"],
+                        ):
+                            binding_changed = True
+                            break
                     if closing is not None and closing[1] == 0 and closing[2] == 0:
                         cleared = True
                         after = closing[0]
                         break
                     await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
                 result["reservations_cleared"] = cleared
+                if binding_changed:
+                    return finish("acceptance_mismatch")
                 if not cleared or after is None:
                     return finish("cleanup_timeout")
                 expected = _expected_case_debit(usage[0], usage[1], case)
@@ -974,6 +1261,7 @@ def _run_files(run: str, stage_dir: Path) -> tuple[Path, Path]:
     names = {
         STAGING_RUN_ID: ("ledger-staging.json", "results-staging.json"),
         PRODUCTION_RUN_ID: ("ledger-production.json", "results-production.json"),
+        ROSTER_RUN_ID: ("ledger-roster.json", "results-roster.json"),
     }
     ledger_name, results_name = names[run]
     return stage_dir / ledger_name, stage_dir / results_name
@@ -986,7 +1274,11 @@ def _load_canonical_manifest(directory: Path, name: str) -> dict:
         raise ValueError("Staging manifest unavailable")
     manifest = load_bounded_json(path.read_text(), max_bytes=MAX_RESULTS_BYTES)
     validate_manifest(manifest)
-    if manifest["run"] != STAGING_RUN_ID:
+    expected = {
+        "manifest.staging.json": STAGING_RUN_ID,
+        "manifest.production.json": PRODUCTION_RUN_ID,
+    }.get(name)
+    if expected is None or manifest["run"] != expected:
         raise ValueError("Staging manifest unavailable")
     return manifest
 
@@ -1061,7 +1353,7 @@ def _reconcile_state(
     return ledger_data, results
 
 
-def execute_validation(  # noqa: PLR0913 -- fail-closed phase contract
+def execute_validation(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase contract
     manifest: dict,
     *,
     stage_dir: Path | None = None,
@@ -1092,6 +1384,19 @@ def execute_validation(  # noqa: PLR0913 -- fail-closed phase contract
         by_id = {item["case_id"]: item for item in results["attempts"]}
         if run == PRODUCTION_RUN_ID and not _staging_results_passed(directory):
             raise ValueError("Production validation requires passing staging results")
+        if run == ROSTER_RUN_ID:
+            try:
+                staging_manifest = _load_canonical_manifest(directory, "manifest.staging.json")
+                production_manifest = _load_canonical_manifest(
+                    directory, "manifest.production.json"
+                )
+            except (OSError, ValueError):
+                raise ValueError("Roster validation requires committed run manifests") from None
+            if (
+                combined_preflight_estimate(manifest, staging_manifest, production_manifest)
+                > ALLOWANCE_USD
+            ):
+                raise ValueError("Combined estimate exceeds allowance")
         factory = transport_factory or (
             lambda: httpx.AsyncHTTPTransport(trust_env=False, retries=0)
         )
