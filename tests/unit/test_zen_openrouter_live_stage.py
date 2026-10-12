@@ -699,7 +699,9 @@ def test_paid_runs_pass_on_canonical_files(tmp_path, filename, ledger_name, resu
         ("manifest.or-anthropic.json", "openrouter_model", "unapproved/model"),
     ],
 )
-def test_substituted_model_refused_without_dispatch(tmp_path, filename, model_field, model_override):
+def test_substituted_model_refused_without_dispatch(
+    tmp_path, filename, model_field, model_override
+):
     manifest_path = (
         Path(__file__).resolve().parents[2]
         / f"docs/plans/zen-openrouter-live-verification/{filename}"
@@ -746,3 +748,89 @@ def test_substituted_prices_refused_without_dispatch(tmp_path, filename):
         )
     assert board.calls == 0
     assert not (tmp_path / "ledger.json").exists()
+
+
+@pytest.mark.parametrize(
+    "filename,ledger_name,results_name",
+    [
+        ("manifest.rerun-gemma.json", "ledger-rerun-gemma.json", "results-rerun-gemma.json"),
+        ("manifest.rerun-openai.json", "ledger-rerun-openai.json", "results-rerun-openai.json"),
+        (
+            "manifest.rerun-anthropic.json",
+            "ledger-rerun-anthropic.json",
+            "results-rerun-anthropic.json",
+        ),
+    ],
+)
+def test_rerun_manifests_bound_to_specs(filename, ledger_name, results_name):
+    manifest_path = (
+        Path(__file__).resolve().parents[2]
+        / f"docs/plans/zen-openrouter-live-verification/{filename}"
+    )
+    manifest_data = json.loads(manifest_path.read_text())
+    summary = budget.validate_manifest(manifest_data)
+    assert summary["cases"] == ["openrouter-nonstream", "openrouter-stream"]
+    assert manifest_data["zen_model"] == ""
+    assert manifest_data["openrouter_embedding_model"] == ""
+    ledger_file, results_file = stage.RUN_FILES[summary["run"]]
+    assert (ledger_file, results_file) == (ledger_name, results_name)
+
+
+def test_rerun_passes_with_null_reasoning_envelopes(tmp_path):
+    manifest_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs/plans/zen-openrouter-live-verification/manifest.rerun-openai.json"
+    )
+    manifest_data = json.loads(manifest_path.read_text())
+
+    class NullReasoningUpstream(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            body = json.loads(request.content.decode())
+            stream = body.get("stream") is True
+            if stream:
+                payload = (
+                    b'data: {"choices":[{"delta":{"content":"ready","reasoning":null},"finish_reason":"stop"}]}\n\n'
+                    b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n'
+                    b"data: [DONE]\n\n"
+                )
+            else:
+                payload = json.dumps(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "ready",
+                                    "reasoning": None,
+                                },
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {
+                            "prompt_tokens": 10,
+                            "completion_tokens": 5,
+                            "total_tokens": 15,
+                        },
+                    }
+                ).encode()
+            return httpx.Response(200, content=payload)
+
+        async def aclose(self):
+            pass
+
+    def factory():
+        return NullReasoningUpstream()
+
+    results = stage.execute_stage(
+        manifest_data,
+        stage_dir=tmp_path,
+        zen_credential="synthetic-zen-credential",
+        openrouter_credential="synthetic-or-credential",
+        transport_factory=factory,
+    )
+    assert [item["case_id"] for item in results["attempts"]] == [
+        "openrouter-nonstream",
+        "openrouter-stream",
+    ]
+    assert all(item["status"] == "passed" for item in results["attempts"])
+    assert all(item["settlement_matches"] for item in results["attempts"])

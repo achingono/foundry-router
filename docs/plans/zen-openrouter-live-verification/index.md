@@ -18,6 +18,7 @@ Live upstream compatibility is not established by the mocked implementation in [
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Direct-probe amendment (Planned live diagnosis; independent review gate cleared)](amendment-direct-probe.md)
 - [Reasoning-tolerance amendment (Implemented locally; independent review gate cleared)](amendment-reasoning-tolerance.md)
+- [Rerun amendment (proposed, pending review)](amendment-openrouter-reruns.md)
 - [Independent reasoning-tolerance commit review](review-reasoning-tolerance-df2c22f.md)
 - [Independent direct-probe commit review](review-direct-probe-607da09.md)
 - [Independent paid-models commit review](review-paid-models-6d5a799.md)

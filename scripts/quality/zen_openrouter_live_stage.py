@@ -26,6 +26,9 @@ from zen_openrouter_live_budget import (
     RUN_ID_OPENROUTER,
     RUN_ID_OR_ANTHROPIC,
     RUN_ID_OR_OPENAI,
+    RUN_ID_RERUN_ANTHROPIC,
+    RUN_ID_RERUN_GEMMA,
+    RUN_ID_RERUN_OPENAI,
     RUN_ID_ZEN_PAID,
     RunLedger,
     locked,
@@ -56,6 +59,9 @@ RUN_FILES = {
     RUN_ID_ZEN_PAID: ("ledger-zen-paid.json", "results-zen-paid.json"),
     RUN_ID_OR_OPENAI: ("ledger-or-openai.json", "results-or-openai.json"),
     RUN_ID_OR_ANTHROPIC: ("ledger-or-anthropic.json", "results-or-anthropic.json"),
+    RUN_ID_RERUN_GEMMA: ("ledger-rerun-gemma.json", "results-rerun-gemma.json"),
+    RUN_ID_RERUN_OPENAI: ("ledger-rerun-openai.json", "results-rerun-openai.json"),
+    RUN_ID_RERUN_ANTHROPIC: ("ledger-rerun-anthropic.json", "results-rerun-anthropic.json"),
 }
 MAX_DEBIT_USD = 1000
 

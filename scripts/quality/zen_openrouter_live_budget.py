@@ -24,6 +24,9 @@ RUN_ID_OPENROUTER = "zen-openrouter-live-2026-10-11-openrouter"
 RUN_ID_ZEN_PAID = "zen-openrouter-live-2026-10-11-zen-paid"
 RUN_ID_OR_OPENAI = "zen-openrouter-live-2026-10-11-openrouter-openai"
 RUN_ID_OR_ANTHROPIC = "zen-openrouter-live-2026-10-11-openrouter-anthropic"
+RUN_ID_RERUN_GEMMA = "zen-openrouter-live-2026-10-11-rerun-gemma"
+RUN_ID_RERUN_OPENAI = "zen-openrouter-live-2026-10-11-rerun-openai"
+RUN_ID_RERUN_ANTHROPIC = "zen-openrouter-live-2026-10-11-rerun-anthropic"
 MAX_LEDGER_BYTES = 65536
 MAX_MANIFEST_BYTES = 65536
 MAX_DISPATCHES = 5
@@ -52,6 +55,9 @@ RUN_CASES: dict[str, tuple[str, ...]] = {
     RUN_ID_ZEN_PAID: ("zen-nonstream", "zen-stream"),
     RUN_ID_OR_OPENAI: ("openrouter-nonstream", "openrouter-stream"),
     RUN_ID_OR_ANTHROPIC: ("openrouter-nonstream", "openrouter-stream"),
+    RUN_ID_RERUN_GEMMA: ("openrouter-nonstream", "openrouter-stream"),
+    RUN_ID_RERUN_OPENAI: ("openrouter-nonstream", "openrouter-stream"),
+    RUN_ID_RERUN_ANTHROPIC: ("openrouter-nonstream", "openrouter-stream"),
 }
 
 # Immutable reviewed model/price authorization for paid runs. Paid manifests
@@ -77,6 +83,30 @@ RUN_SPECS: dict[str, dict[str, Any]] = {
         "output_per_million": 0.6,
     },
     RUN_ID_OR_ANTHROPIC: {
+        "cases": ["openrouter-nonstream", "openrouter-stream"],
+        "zen_model": "",
+        "openrouter_model": "anthropic/claude-haiku-4.5",
+        "openrouter_embedding_model": "",
+        "input_per_million": 1.0,
+        "output_per_million": 5.0,
+    },
+    RUN_ID_RERUN_GEMMA: {
+        "cases": ["openrouter-nonstream", "openrouter-stream"],
+        "zen_model": "",
+        "openrouter_model": "google/gemma-4-26b-a4b-it:free",
+        "openrouter_embedding_model": "",
+        "input_per_million": 1000.0,
+        "output_per_million": 1000.0,
+    },
+    RUN_ID_RERUN_OPENAI: {
+        "cases": ["openrouter-nonstream", "openrouter-stream"],
+        "zen_model": "",
+        "openrouter_model": "openai/gpt-4o-mini",
+        "openrouter_embedding_model": "",
+        "input_per_million": 0.15,
+        "output_per_million": 0.6,
+    },
+    RUN_ID_RERUN_ANTHROPIC: {
         "cases": ["openrouter-nonstream", "openrouter-stream"],
         "zen_model": "",
         "openrouter_model": "anthropic/claude-haiku-4.5",
