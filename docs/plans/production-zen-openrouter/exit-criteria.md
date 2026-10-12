@@ -9,11 +9,11 @@
 - [ ] Existing production auth preserved, staging auth isolated, provider policy and current price provenance verified.
 - [ ] Per-account budgets/quotas reviewed, staging allocation disjoint, fresh seed procedure covers existing Azure groups too.
 - [ ] Reviewed maintenance/drain procedure prevents concurrent writers and revision overlap; ingress unchanged.
-- [ ] New immutable six-case manifests, durable identities and execution harness reviewed with offline bounds/no-replay checks before any inference.
+- [x] Immutable six-case manifests, durable identities and execution harness reviewed with offline bounds/no-replay checks.
 - [x] [SV-1 state reconciliation](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff) independently verified closed.
-- [ ] Remaining SV-6 evidence-scope binding resolved and independently re-reviewed; staging-write/dispatch gate cleared (currently not cleared).
+- [x] [SV-6/SV-8 final review](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09) complete; independent harness review gate cleared. Other execution gates below remain open.
 - [x] Reviewer accepts [scoped public/admin deployment acceptance](amendment-black-box-acceptance.md) at plan level.
-- [ ] Revised evidence scope, immutable manifests and strict promotion checks implemented/reviewed; no upstream Boolean can stand in for evidence.
+- [x] Revised evidence scope, immutable manifests and strict promotion checks implemented/reviewed; unsupported upstream claims are refused.
 
 ## Execution gates
 

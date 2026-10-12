@@ -32,7 +32,8 @@ controls. Execution evidence is required to close each risk.
   immutable-secret deployment mechanism and named approvers remain pending.
 - The reviewer accepts the [scoped public/admin acceptance amendment](amendment-black-box-acceptance.md)
   at plan level. Independent provider/billing equivalence is not claimed.
-  SV-1 reconciliation is independently closed. SV-6 evidence-scope binding
-  remains open; untagged historical records and unsupported upstream flags must
-  not be accepted as the revised contract.
+  All harness findings, including SV-1 reconciliation, SV-6 scope binding and
+  SV-8 dispatch accounting, are independently closed in
+  [82c7d09](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09).
+  Untagged historical records and unsupported upstream flags are refused.
   Operator execution and production approvals remain separate.

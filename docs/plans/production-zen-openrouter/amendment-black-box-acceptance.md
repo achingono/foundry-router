@@ -1,8 +1,9 @@
 # Amendment: scoped black-box deployment acceptance
 
-Date: 2026-10-12. Status: **Planned**; reviewer accepts this narrower contract
-at plan level. Implementation and independent harness re-review are pending.
-No staging write, production deployment or paid dispatch is approved here.
+Date: 2026-10-12. Status: **Implemented locally** and independently reviewed in
+[82c7d09](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09). Live
+execution remains **Planned**. No staging write, production deployment or paid
+dispatch is approved here; separate execution gates remain.
 
 ## Decision and rationale
 
@@ -54,12 +55,14 @@ rollback, state and approval gates remain unchanged.
 - [x] Reviewer narrowing decision and residual evidence limits recorded.
 - [x] SV-1 reconciliation and result-coherence gaps independently verified in
       [08221ff](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff).
-- [ ] Harness/manifests bind this evidence scope and production gating validates
+- [x] Harness/manifests bind this evidence scope and production gating validates
       it; no fabricated upstream flags can satisfy the gate.
-- [ ] Actual resume, crash, corrupted-result and scoped production-positive/
+- [x] Actual resume, crash, corrupted-result and scoped production-positive/
       production-negative paths covered offline with canonical manifests present.
-- [ ] Revised harness independently reviewed; all separate operator/release gates met.
+- [x] Revised harness independently reviewed in `82c7d09`.
+- [ ] All separate operator/release/maintenance gates met before execution.
 
-The decision permits preparing the narrowed implementation. It does not clear
-the current `08221ff` harness: evidence-scope binding is still missing and
-SV-8 remains partial. Staging/production execution is not cleared.
+The amendment and harness review gates are cleared for the committed six-case
+scope. This is deployment acceptance based on public/admin evidence, not
+independent provider or billing verification. Actual staging/production execution
+still requires the separate plan gates and operator approvals.

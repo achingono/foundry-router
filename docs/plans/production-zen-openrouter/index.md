@@ -4,12 +4,12 @@
 The draft has been revised at planning level; no staging or production change,
 secret provisioning, image rollout or live dispatch is authorized by this record.
 Execution prerequisites and operator approvals remain open. The
-[latest harness review](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff)
-closes SV-1 as well as the five previously closed Majors; SV-6 remains open
-and SV-8 is partial. Its review gate
-is not cleared before staging writes or live dispatch. The reviewer accepts a
-[narrower deployment-acceptance contract](amendment-black-box-acceptance.md)
-at plan level; implementation and re-review remain pending.
+[final harness review](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09)
+closes all seven Majors and the Suggestion; the independent harness review gate
+is cleared for the six committed cases under the
+[narrowed deployment-acceptance contract](amendment-black-box-acceptance.md).
+This does not clear the separate staging/production execution gates or establish
+independent provider/billing evidence.
 
 ## Companion documents
 

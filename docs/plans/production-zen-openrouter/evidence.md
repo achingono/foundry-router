@@ -1,11 +1,12 @@
 # Enablement evidence
 
-**Planned.** No staging/production writes or live inference were performed by the
-reviewer. Independent plan review is complete; revised-scope acceptance,
-implementation/preparation checks and execution approvals remain pending.
-The harness review gate is not cleared: SV-6 evidence-scope binding remains
-open; SV-8 is partial. SV-1 and the five other Majors are closed. Narrowed deployment acceptance is
-accepted at plan level, with implementation/re-review pending.
+**Deployment planned; harness implemented locally.** No staging/production
+writes or live inference were performed by the reviewer. Independent plan and
+harness review are complete; environment preparation and execution approvals
+remain pending.
+The independent harness review gate is cleared for `82c7d09`: all seven Major
+findings and SV-8 are closed under the narrowed public/admin acceptance contract.
+Actual-environment, release, maintenance and operator execution gates remain open.
 
 | Item | Reference | Notes |
 | --- | --- | --- |
@@ -21,3 +22,4 @@ accepted at plan level, with implementation/re-review pending.
 | Harness follow-up (2026-10-12) | [Review of febe207](review-staging-harness-9a763c7.md#follow-up-review-of-febe207) | SV-2/3/4/5/7 closed; SV-1 and SV-6 remain open; SV-8 partial. 57 focused tests passed, plus independent state, mutation, bounds, stream and debit checks. No live requests |
 | Narrowing decision (2026-10-12) | [Scoped acceptance amendment](amendment-black-box-acceptance.md) | Reviewer accepts deployed public/admin acceptance without independent provider/billing claims; six-case budget and operator gates unchanged. Implementation/re-review pending; no execution clearance |
 | Harness second follow-up (2026-10-12) | [Review of 08221ff](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff) | SV-1 closed; SV-6 remains partial because scope is not bound and legacy/true-upstream-flag records are accepted. SV-8 remains partial; its claimed marker/harvesting fix is absent. 43 tests plus independent state, scope, replay and bounds checks. No live changes |
+| Harness final follow-up (2026-10-12) | [Review of 82c7d09](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09) | SV-6/SV-8 closed; all prior findings remain closed. Independent harness review gate cleared for the six scoped cases. 48 tests plus independent scope/legacy/promotion/replay and entry-failure probes passed. No live requests or staging writes |

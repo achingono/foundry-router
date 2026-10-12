@@ -9,13 +9,14 @@ implementation. Only review/status documentation was edited.
 
 ## Disposition
 
-**Harness review gate not cleared.** The
-[review of 08221ff](#follow-up-review-of-08221ff) closes SV-1. SV-2, SV-3,
-SV-4, SV-5 and SV-7 remain closed. SV-6 remains a partial Major; SV-8 remains
-a partial, non-blocking Suggestion. Earlier findings/dispositions are historical
-and superseded by the latest follow-up. The
-[narrowed acceptance contract](amendment-black-box-acceptance.md) is approved
-at plan level, but evidence-scope binding is not yet implemented.
+**Independent harness review gate cleared for `82c7d09`.** The
+[final follow-up](#follow-up-review-of-82c7d09) closes SV-6 and SV-8; SV-1
+through SV-5 and SV-7 retain their previous closed dispositions. All seven
+Majors and the Suggestion are resolved for the reviewed six-case harness and
+committed manifests under the
+[narrowed public/admin acceptance contract](amendment-black-box-acceptance.md).
+Earlier findings/dispositions are historical and superseded by this follow-up.
+This is not deployment approval or independent provider/billing verification.
 No staging writes, production changes or live requests were performed. The
 separate operator/release/maintenance gates in the plan remain open as well.
 
@@ -432,3 +433,73 @@ and failure halting still protect the request budget.
   evidence trust and resource bounds. Full suite, coverage, Ruff/mypy, Docker
   and static scanning were not rerun for this review. The conditional scan
   script is absent. Plan links, whitespace and final documentation diff checked.
+
+## Follow-up review of 82c7d09
+
+Date: 2026-10-12.
+Reviewed commit: `82c7d09bb92e7f883e2cee88052ca97259a00b6e`.
+Scope: all five changed files, both committed manifests, scope validation on
+resume/promotion, inference-entry failure handling and prior reproductions.
+Only review/status documentation was edited.
+
+**SV-6 and SV-8 closed. Independent harness review gate cleared.** No new
+Critical or Major findings were identified in this scoped follow-up. The other
+findings remain closed, including the corrected SV-3 disposition. Clearance is
+for four staging plus two Zen production cases under the immutable manifests
+and USD 0.01 aggregate configured-price allowance. All actual-environment,
+release, maintenance, account, monitoring and operator approval gates remain.
+
+### SV-6 — Closed
+
+Both manifests, the persisted manifest fingerprint and each result now bind
+`evidence_scope` to `deployed-public-admin-v1`. Manifest and result validators
+require that identifier; result validation also requires
+`independent_upstream_observed` to be exactly false. Resume and production
+prerequisites retain the full state/coherence reconciliation and consume these
+validators. Historical artifacts are rejected rather than silently upgraded.
+
+Independent verification:
+
+- Seven mutations covering missing/wrong scope in manifests, fingerprints and
+  results, plus a true upstream-observation flag, were refused at their relevant
+  validation/resume/promotion entry points with no additional inference calls.
+- Generated real old-format artifacts using the actual `08221ff` implementation
+  against a fake app. The new code refused resume and production prerequisites
+  even with the current canonical staging manifest present. Saved old results
+  remained byte-for-byte unchanged and no successors were sent.
+- A valid scoped run passed four staging and two production cases with the
+  explicit production flag. All result scopes matched and upstream flags stayed
+  false. Repeating the completed production run sent no additional requests.
+
+This verifies deployed public/admin acceptance eligibility only. It does not
+establish raw provider usage, independent translation correctness, authoritative
+billing, or OpenRouter streaming support. Those limitations remain explicit.
+
+### SV-8 — Closed for the harness request paths
+
+The entry marker now ignores health/admin setup paths and marks the inference
+path. The harness uses that path only for its inference POST. ValueError branches
+now harvest entry before returning, including body-bound and encoded-response
+rejections, alongside the existing timeout/transport branches.
+
+Independent fake-response probes exercised oversized-body, encoded-response and
+post-entry read-timeout failures. Each retained `dispatched=true`, recorded the
+appropriate failed category and stopped after one inference call; another
+invocation refused without replay. Instrumented response streams were closed on
+bound/encoding rejection. Liveness, readiness and admin GETs left entry false.
+`dispatched` remains conservative router-request entry evidence, not proof of
+provider egress or receipt.
+
+### Verification and limits
+
+- 48 staging-harness tests passed through the repository virtual environment.
+- Independent scope/legacy-state, scoped positive/promotion/replay and dispatch
+  failure probes above passed. All used temporary directories, fake transports
+  and synthetic credentials; no actual historical ledgers or secrets were read.
+- The repository deep-review focus was applied to the scoped evidence/state and
+  transport boundaries. Full suite, coverage, Ruff/format, mypy and Docker were
+  not rerun by this reviewer; implementation-reported checks remain separate.
+  The conditional SonarQube script is absent.
+- Plan links, whitespace and final documentation diff were checked. No runtime
+  code/tests, deployment settings or actual account state were changed. No live
+  request or staging write was performed.
