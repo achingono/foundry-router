@@ -1,8 +1,9 @@
 # Live verification evidence
 
-Paid-model live verification remains **Planned**; no paid-amendment dispatches
-are recorded. Its independent review gate is cleared as documented below.
-Historical Run A/B attempts and halts are retained separately. Offline harness
+Live verification is **Partially implemented**: the historical outcomes below
+include Zen success, OpenRouter halts and completed direct probes. The fresh
+OpenRouter reruns remain **Planned**, with their independent review gate cleared.
+Historical attempts and halts are retained separately. Offline harness
 verification does not establish live compatibility or provider billing.
 
 | Item | Reference | Notes |
@@ -40,10 +41,12 @@ verification does not establish live compatibility or provider billing.
 | Embeddings live scope (2026-10-11) | Zen docs endpoint table; OpenRouter `/api/v1/models` catalog (458 models) | Closed as untestable: Zen exposes no embeddings surface; the catalog lists no embedding model. Mocked embeddings verification stands; live embeddings reopens only on a new surface or catalog entry |
 | Direct-probe amendment | [Amendment](amendment-direct-probe.md) plus redacted probe script | Independently reviewed and cleared; executed 2026-10-11 |
 | Direct probes (2026-10-11) | Local-only `results-probe.json`; structural summary below | All three dispatched once; no content, secret, or credential bytes recorded |
-| Rerun amendment | [Amendment](amendment-openrouter-reruns.md) plus 3 committed manifests | Proposed, pending independent review: fresh run identities reusing approved models/prices against the fixed translator; halted runs stay closed || `probe-gemma` / `probe-openai` / `probe-anthropic` | gemma-4-26b-free, gpt-4o-mini, haiku-4.5 | All HTTP 200, finish `stop`, text content (5–6 bytes), valid usage |
+| Rerun amendment | [Amendment](amendment-openrouter-reruns.md) plus 3 committed manifests | Planned live verification; independent review gate cleared for fresh identities with approved models/prices against the fixed translator; halted runs stay closed |
+| `probe-gemma` / `probe-openai` / `probe-anthropic` | gemma-4-26b-free, gpt-4o-mini, haiku-4.5 | All HTTP 200, finish `stop`, text content (5–6 bytes), valid usage |
 | Diagnosis | Structural comparison only | Every assistant message carries an extra `reasoning` field (top-level extras `provider`/`service_tier` are ignored by translation). The strict adapter allow-lists message keys to `{role, content, tool_calls, refusal}` and rejects the envelope on the unknown `reasoning` key → sanitized public 502 despite valid usage. Systematic across all three models, not a model quirk |
 | Proposed fix (separate amendment) | Not implemented | Decide `reasoning` policy (e.g. tolerate explicit null, reject content-bearing values) with regression coverage; requires reviewed runtime amendment before any code change or live rerun |
 | Direct-probe review (2026-10-11) | [Independent review of 607da09](review-direct-probe-607da09.md) | Initial review: three Majors on replay, eager buffering and structural evidence. 14 tests passed; offline reproductions confirmed the gaps. Follow-up disposition below supersedes the original open statuses |
 | Direct-probe follow-up review (2026-10-11) | [Review of 7f0c207](review-direct-probe-607da09.md#follow-up-review-of-7f0c207) | At `7f0c207`: DP-2 closed, DP-1/DP-3 partially addressed (subsequently closed below). 22 tests passed; offline probes reproduced deleted-state replay, pre-header dispatch misreporting and unchecked outer-envelope growth beyond the saved-result limit. Not cleared for live probes; no live traffic sent |
 | Direct-probe final follow-up (2026-10-11) | [Review of 8164ead](review-direct-probe-607da09.md#final-follow-up-review-of-8164ead) | DP-1/DP-3 closed; DP-2 remains closed. 27 tests passed; independent deleted-state, pre-header timeout, unexpected-root and oversized-outcome probes passed offline. Independent review gate cleared; no live traffic sent |
 | Reasoning-tolerance review (2026-10-11) | [Independent review of df2c22f](review-reasoning-tolerance-df2c22f.md) | Local implementation review gate cleared: no Critical/Major findings; two non-blocking diagnostic/exception Suggestions. 135 focused/regression tests passed, plus independent fragmented-stream equivalence and rejection probes. No live reruns; new reviewed identities required for halted OpenRouter cases |
+| Rerun amendment review (2026-10-11) | [Independent review of 3322f30 and 5f00cb1](review-openrouter-reruns-3322f30.md) | No Critical/Major findings; review gate cleared for the three committed manifests. 140 tests passed; all three null-reasoning pairs, replay/isolation and independent-halt probes passed offline; 18 manifest mutations refused before ledger creation/transport. No live dispatches sent |

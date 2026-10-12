@@ -1,10 +1,10 @@
 # Zen and OpenRouter live verification
 
-**Planned.** No live dispatches have been made; no runtime code changes are
-proposed in this phase. [Independent plan review](review.md) is complete; its
-findings are addressed at the planning level. Harness implementation, offline
-validation and implementation review remain required before any live request.
-Live upstream compatibility is not established by the mocked implementation in [the backends plan](../opencode-zen-openrouter/index.md).
+**Partially implemented.** Harness and amendment reviews are recorded in the
+[evidence](evidence.md), alongside historical Zen success, OpenRouter halts and
+direct-probe outcomes. The three fresh OpenRouter reruns remain **Planned**;
+their [independent review gate](review-openrouter-reruns-3322f30.md) is cleared.
+Offline verification does not establish live compatibility for those reruns.
 
 ## Companion documents
 
@@ -18,7 +18,8 @@ Live upstream compatibility is not established by the mocked implementation in [
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Direct-probe amendment (Planned live diagnosis; independent review gate cleared)](amendment-direct-probe.md)
 - [Reasoning-tolerance amendment (Implemented locally; independent review gate cleared)](amendment-reasoning-tolerance.md)
-- [Rerun amendment (proposed, pending review)](amendment-openrouter-reruns.md)
+- [Rerun amendment (Planned live verification; independent review gate cleared)](amendment-openrouter-reruns.md)
+- [Independent OpenRouter rerun commit review](review-openrouter-reruns-3322f30.md)
 - [Independent reasoning-tolerance commit review](review-reasoning-tolerance-df2c22f.md)
 - [Independent direct-probe commit review](review-direct-probe-607da09.md)
 - [Independent paid-models commit review](review-paid-models-6d5a799.md)

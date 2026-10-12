@@ -1,7 +1,9 @@
 # Amendment: OpenRouter reruns against the reasoning fix
 
-Date: 2026-10-11. Status: proposed, pending independent review. No live
-dispatches under this amendment yet.
+Date: 2026-10-11. Status: **Planned** live verification; independent review
+gate cleared for the three committed manifests. See the
+[independent review](review-openrouter-reruns-3322f30.md). No live dispatches
+under this amendment yet.
 
 ## Background
 
@@ -22,6 +24,10 @@ nonstream/streaming pair with separate canonical durable files:
 | `...-rerun-openai` | [manifest.rerun-openai.json](manifest.rerun-openai.json) | `openai/gpt-4o-mini` | $0.15 / $0.60 |
 | `...-rerun-anthropic` | [manifest.rerun-anthropic.json](manifest.rerun-anthropic.json) | `anthropic/claude-haiku-4.5` | $1.00 / $5.00 |
 
+Gemma’s $1000/$1000 values are synthetic test prices for local accounting on a
+free model; they are not provider prices or charges. The paid-model values are
+configured estimates carried forward from the approved manifests.
+
 All harness guarantees carry over unchanged (reserve-before-egress, halt on
 failure, reconciliation, independent observation, redacted evidence, out-of-band
 credentials, immutable per-run specs). Runs execute in the listed order; any
@@ -38,8 +44,8 @@ diagnostic evidence under the same contract.
 
 ## Exit criteria delta
 
-- [ ] Independent review of this amendment and its implementation.
-- [ ] All three rerun manifests bound to their specifications (committed).
+- [x] Independent review of this amendment and its implementation.
+- [x] All three rerun manifests bound to their specifications (committed).
 - [ ] Each rerun passes both cases with usage/settlement evidence and zero
       retained reservations, or its halt is recorded with no further egress.
 - [ ] Billing, quota/admission, Table, and production remain gated.
