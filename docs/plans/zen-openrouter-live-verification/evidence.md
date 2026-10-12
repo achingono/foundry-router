@@ -30,7 +30,10 @@ verification does not establish live compatibility or provider billing.
 | `openrouter-nonstream` | google/gemma-4-26b-a4b-it:free | Public 502 / provider 200 in 1.257s; independently observed usage 7 in / 1 out, public usage absent; $0.00 debit; run halted per contract |
 | `openrouter-stream` | Unreserved | Never dispatched |
 | Paid-models amendment | [Amendment](amendment-paid-models.md) plus 3 committed manifests | Operator-approved: Zen gpt-5.4-mini ($0.75/$4.50), OR gpt-4o-mini ($0.15/$0.60), OR claude-haiku-4.5 ($1.00/$5.00); configured list-price estimates for local accounting; paid-amendment review gate cleared; no live dispatches yet |
-| Live execution paid runs (2026-10-11) | Local-only ledgers/results; numeric summary below | Operator-authorized; credentials out of band, never recorded |
+| Live execution reruns (2026-10-11) | Local-only ledgers/results; numeric summary below | Operator-authorized under the reviewed rerun amendment; credentials out of band, never recorded |
+| All three nonstream cases | gemma-free, gpt-4o-mini, haiku-4.5 | Passed: public/provider 200, usage matched (7/1, 13/2, 13/4), settlement reconciled, zero retained reservations. Reasoning fix verified live for non-streaming translation |
+| All three stream cases | Same models | Failed identically: public/provider 200, observed usage present (7/1, 13/2, 13/4), public usage absent, terminated false, $0.00. Each run halted with 2 dispatches |
+| Pattern | Nine live OpenRouter cases total | Non-streaming fully established; streaming fails systematically with completed public bodies but no terminal usage. Consistent with content-bearing `reasoning` stream deltas tripping decoder strictness (nonstream `reasoning` is null and passes). No retry, probe, or substitution without a reviewed amendment |
 | `zen-paid` nonstream/stream | `gpt-5.4-mini` (Zen) | Both passed: public/provider 200, usage 12/5 each, debits $0.0000315 each, zero retained reservations. First live proof of the Zen pass-through path |
 | `or-openai` nonstream | `openai/gpt-4o-mini` | Public 502 / provider 200; observed usage 13/2, public usage absent; $0.00; halted, stream untouched |
 | `or-anthropic` nonstream | `anthropic/claude-haiku-4.5` | Public 502 / provider 200; observed usage 13/4, public usage absent; $0.00; halted, stream untouched |
