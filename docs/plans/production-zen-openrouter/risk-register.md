@@ -30,3 +30,8 @@ controls. Execution evidence is required to close each risk.
   they are local accounting estimates.
 - Operator scope acceptance, maintenance window, quiescence method, actual
   immutable-secret deployment mechanism and named approvers remain pending.
+- Production promotion additionally requires either validated independent
+  upstream evidence (unavailable to black-box checks, so the harness gate
+  stays closed) or a separately reviewed amendment accepting the narrower
+  admin-delta plus public-usage evidence contract. Pending operator/reviewer
+  decision; no silent weakening in code.

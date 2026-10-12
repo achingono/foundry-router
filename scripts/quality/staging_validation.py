@@ -50,7 +50,10 @@ HTTP_STATUS_MAX = 599
 MAX_SECRET_STRING = 256
 MAX_RETRY_DELAY_SECONDS = 3600
 MAX_REQUEST_BYTES = 4096
-SETTLEMENT_TOLERANCE_USD = 2e-6
+# Admin canonical balances are unrounded floats: float64 subtraction on
+# ~1e3-magnitude balances carries error well below 1e-9, so the tolerance
+# derives from arithmetic precision, not display rounding.
+SETTLEMENT_TOLERANCE_USD = 1e-9
 
 STAGING_CASES = (
     "staging-zen-nonstream",
@@ -69,6 +72,86 @@ RUN_FILES = {
     STAGING_RUN_ID: ("ledger-staging.json", "results-staging.json"),
     PRODUCTION_RUN_ID: ("ledger-production.json", "results-production.json"),
 }
+
+# Immutable reviewed case specifications. Manifests must match their run's
+# spec exactly; substitution is refused even when otherwise shape-valid.
+RUN_SPECS = {
+    STAGING_RUN_ID: (
+        {
+            "id": "staging-zen-nonstream",
+            "pool": "gpt-5.4-mini-zen",
+            "operation": "responses",
+            "stream": False,
+            "provider": "opencode_zen",
+            "deployment": "gpt-5.4-mini",
+            "input_per_million": 0.75,
+            "output_per_million": 4.5,
+        },
+        {
+            "id": "staging-zen-stream",
+            "pool": "gpt-5.4-mini-zen",
+            "operation": "responses",
+            "stream": True,
+            "provider": "opencode_zen",
+            "deployment": "gpt-5.4-mini",
+            "input_per_million": 0.75,
+            "output_per_million": 4.5,
+        },
+        {
+            "id": "staging-openai-nonstream",
+            "pool": "gpt-4o-mini-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "openai/gpt-4o-mini",
+            "input_per_million": 0.15,
+            "output_per_million": 0.6,
+        },
+        {
+            "id": "staging-haiku-nonstream",
+            "pool": "claude-haiku-4.5-or",
+            "operation": "responses",
+            "stream": False,
+            "provider": "openrouter",
+            "deployment": "anthropic/claude-haiku-4.5",
+            "input_per_million": 1.0,
+            "output_per_million": 5.0,
+        },
+    ),
+    PRODUCTION_RUN_ID: (
+        {
+            "id": "production-zen-nonstream",
+            "pool": "gpt-5.4-mini-zen",
+            "operation": "responses",
+            "stream": False,
+            "provider": "opencode_zen",
+            "deployment": "gpt-5.4-mini",
+            "input_per_million": 0.75,
+            "output_per_million": 4.5,
+        },
+        {
+            "id": "production-zen-stream",
+            "pool": "gpt-5.4-mini-zen",
+            "operation": "responses",
+            "stream": True,
+            "provider": "opencode_zen",
+            "deployment": "gpt-5.4-mini",
+            "input_per_million": 0.75,
+            "output_per_million": 4.5,
+        },
+    ),
+}
+
+CASE_SPEC_KEYS = (
+    "id",
+    "pool",
+    "operation",
+    "stream",
+    "provider",
+    "deployment",
+    "input_per_million",
+    "output_per_million",
+)
 
 ERROR_CATEGORIES = {
     "transport_failure",
@@ -136,22 +219,15 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
     ):
         raise ValueError("Invalid staging manifest")
     total = 0.0
-    for case in cases:
-        if (
-            not isinstance(case, dict)
-            or not isinstance(case.get("id"), str)
-            or not isinstance(case.get("pool"), str)
-            or not case["pool"].strip()
-            or case.get("operation") != "responses"
-            or not isinstance(case.get("stream"), bool)
-            or not isinstance(case.get("provider"), str)
-            or not case["provider"].strip()
-            or not isinstance(case.get("deployment"), str)
-            or not case["deployment"].strip()
-            or not _strict_positive_number(case.get("input_per_million"))
-            or not _strict_positive_number(case.get("output_per_million"))
-        ):
+    spec = RUN_SPECS[run]
+    if len(cases) != len(spec):
+        raise ValueError("Invalid staging manifest")
+    for case, expected in zip(cases, spec, strict=True):
+        if not isinstance(case, dict) or set(case) != set(CASE_SPEC_KEYS):
             raise ValueError("Invalid staging case")
+        for key in CASE_SPEC_KEYS:
+            if case[key] != expected[key]:
+                raise ValueError("Invalid staging case")
         total += (
             PREFLIGHT_INPUT_TOKENS * float(case["input_per_million"])
             + PREFLIGHT_OUTPUT_TOKENS * float(case["output_per_million"])
@@ -170,15 +246,35 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
 
 
 def manifest_fingerprint(manifest: dict[str, Any]) -> dict[str, Any]:
-    # The fixed prompt text stays out of persisted state by redaction policy;
-    # run identity, environment, cases, bounds, and allowance bind the run.
+    # Only the exact reviewed case keys persist; unknown keys are dropped,
+    # never copied into durable state.
     return {
         "run": manifest["run"],
         "environment": manifest["environment"],
-        "cases": [{key: case[key] for key in sorted(case)} for case in manifest["cases"]],
+        "cases": [{key: case[key] for key in CASE_SPEC_KEYS} for case in manifest["cases"]],
         "max_output_tokens": manifest["max_output_tokens"],
         "allowance_usd": manifest["allowance_usd"],
     }
+
+
+def combined_preflight_estimate(*manifests: Any) -> float:
+    """Conservative six-case-style estimate across runs against one allowance."""
+    total = 0.0
+    for manifest in manifests:
+        summary = validate_manifest(manifest)
+        _ = summary
+        for case in manifest["cases"]:
+            total += (
+                PREFLIGHT_INPUT_TOKENS * float(case["input_per_million"])
+                + PREFLIGHT_OUTPUT_TOKENS * float(case["output_per_million"])
+            ) / 1_000_000
+    return total
+
+
+def validate_run_pair(staging_manifest: Any, production_manifest: Any) -> None:
+    """Both runs together must fit the single aggregate test allowance."""
+    if combined_preflight_estimate(staging_manifest, production_manifest) > ALLOWANCE_USD:
+        raise ValueError("Combined estimate exceeds allowance")
 
 
 class StagingLedger:
@@ -397,46 +493,71 @@ def load_validation_results(path: Path, manifest: dict[str, Any], *, data: Any =
     return data
 
 
-async def _read_json_response(response: httpx.Response) -> dict | None:
+MAX_SETUP_BYTES = 65536
+
+
+async def _read_bounded_json(  # noqa: PLR0913 -- fixed reader contract
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: dict | None = None,
+    json_body: Any = None,
+    max_bytes: int = MAX_SETUP_BYTES,
+) -> tuple[int, dict | None]:
+    """Stream with header policy and byte bound; close on every exit."""
+    async with client.stream(method, url, headers=headers, json=json_body) as response:
+        status = response.status_code
+        if response.headers.get("content-encoding", "identity").lower() != "identity":
+            raise ValueError("Encoded validation response rejected")
+        if status != HTTP_OK:
+            return status, None
+        chunks = bytearray()
+        async for chunk in response.aiter_bytes():
+            if len(chunks) + len(chunk) > max_bytes:
+                raise ValueError("Validation response bound exceeded")
+            chunks.extend(chunk)
     try:
-        payload = response.json()
-    except ValueError:
-        return None
-    return payload if isinstance(payload, dict) else None
+        payload = load_bounded_json(bytes(chunks).decode("utf-8"), max_bytes=max_bytes)
+    except (ValueError, UnicodeError):
+        return status, None
+    return status, payload if isinstance(payload, dict) else None
 
 
 async def _check_health(client: httpx.AsyncClient) -> None:
     try:
         async with asyncio.timeout(ADMIN_TIMEOUT_SECONDS):
-            live = await client.get("/health/live")
-            ready = await client.get("/health/ready")
-    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError) as exc:
+            live_status, _ = await _read_bounded_json(client, "GET", "/health/live")
+            ready_status, body = await _read_bounded_json(client, "GET", "/health/ready")
+    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError) as exc:
         raise ValidationSetupError("Validation health checks failed") from exc
-    if live.status_code != HTTP_OK:
+    if live_status != HTTP_OK:
         raise ValidationSetupError("Validation liveness failed")
-    body = await _read_json_response(ready)
-    if ready.status_code != HTTP_OK or body is None or body.get("ready") is not True:
+    if ready_status != HTTP_OK or body is None or body.get("ready") is not True:
         raise ValidationSetupError("Validation readiness failed")
 
 
 async def _read_admin(client: httpx.AsyncClient, admin_key: str) -> dict | None:
     try:
         async with asyncio.timeout(ADMIN_TIMEOUT_SECONDS):
-            response = await client.get("/admin/status", headers={"x-admin-key": admin_key})
-    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError):
+            _, admin = await _read_bounded_json(
+                client, "GET", "/admin/status", headers={"x-admin-key": admin_key}
+            )
+    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError):
         return None
-    if response.status_code != HTTP_OK:
-        return None
-    return await _read_json_response(response)
+    return admin
 
 
-def _resolve_group(admin: dict, pool: str) -> tuple[str, dict, dict] | None:
-    """Resolve pool to its backend config and credit group from admin evidence."""
+def _resolve_group(admin: dict, pool: str) -> tuple[str, dict, dict, str] | None:
+    """Resolve pool to its sole backend config and credit group from admin evidence."""
     try:
         models = admin["models"]
         backends = admin["backends"]
         groups = admin["credit_groups"]
-        backend_id = next(iter(models[pool]["backends"]))
+        members = models[pool]["backends"]
+        if not isinstance(members, dict) or len(members) != 1:
+            return None
+        backend_id = next(iter(members))
         config = backends[backend_id]
         group = config["credit_group"]
         live = groups[group]["live"]
@@ -444,7 +565,7 @@ def _resolve_group(admin: dict, pool: str) -> tuple[str, dict, dict] | None:
         return None
     if not isinstance(live, dict):
         return None
-    return group, config, live
+    return group, config, live, backend_id
 
 
 def _live_numbers(live: dict) -> tuple[float, int, float] | None:
@@ -513,44 +634,129 @@ def _public_completed(public: Any) -> bool:
     )
 
 
-async def _read_stream_terminal(
+async def _read_stream_terminal(  # noqa: PLR0912 -- fixed framing checklist
     client: httpx.AsyncClient, caller_key: str, body: dict
 ) -> tuple[int, dict]:
-    """Read router SSE to a single terminal response; failures yield no terminal."""
-    wire = bytearray()
+    """Read router SSE to a single terminal response; failures yield no terminal.
+
+    Frames split incrementally at the earliest boundary with per-frame and
+    total bounds; a nonempty trailing residual fails. Only an unambiguous
+    completed terminal counts: failed, incomplete, contradictory, malformed,
+    or missing terminals yield no terminal.
+    """
+    observed = 0
+    pending = bytearray()
+    terminal: dict = {}
+    terminal_kinds: list[str] = []
+    invalid = False
     async with client.stream(
         "POST", "/openai/v1/responses", headers={"api-key": caller_key}, json=body
     ) as response:
         if response.status_code != HTTP_OK:
             return response.status_code, {}
+        if response.headers.get("content-encoding", "identity").lower() != "identity":
+            raise ValueError("Encoded validation response rejected")
         async for chunk in response.aiter_bytes():
-            if len(wire) + len(chunk) > MAX_RESPONSE_BYTES:
+            observed += len(chunk)
+            if observed > MAX_RESPONSE_BYTES:
                 raise ValueError("Validation stream bound exceeded")
-            wire.extend(chunk)
+            pending.extend(chunk)
+            while True:
+                event, rest = _split_sse_frame(bytes(pending))
+                if event is None:
+                    break
+                pending = bytearray(rest)
+                if len(event) > MAX_FRAME_BYTES:
+                    raise ValueError("Validation stream bound exceeded")
+                kind, parsed = _classify_sse_frame(event)
+                if kind == "malformed":
+                    invalid = True
+                elif kind == "event":
+                    event_type = parsed.get("type")
+                    if event_type in {"response.failed", "error"}:
+                        return HTTP_OK, {"failed": True}
+                    if event_type in {"response.completed", "response.incomplete"}:
+                        terminal_kinds.append(event_type)
+                        if event_type == "response.completed":
+                            terminal = _terminal_response(parsed)
+            if len(pending) > MAX_FRAME_BYTES:
+                raise ValueError("Validation stream bound exceeded")
+        if pending.strip():
+            return HTTP_OK, {}
+    if invalid or not terminal or terminal_kinds != ["response.completed"]:
+        return HTTP_OK, {}
+    return HTTP_OK, terminal
+
+
+def _split_sse_frame(buffer: bytes) -> tuple[bytes | None, bytes]:
+    """Earliest event boundary; same semantics as the router splitter."""
+    candidates = [(buffer.find(d), d) for d in (b"\r\n\r\n", b"\n\n")]
+    found = [(index, delimiter) for index, delimiter in candidates if index >= 0]
+    if not found:
+        return None, buffer
+    index, delimiter = min(found)
+    return buffer[: index + len(delimiter)], buffer[index + len(delimiter) :]
+
+
+def _classify_sse_frame(frame: bytes) -> tuple[str, Any]:
+    """Classify one frame: event, empty, or malformed.
+
+    Terminality is decided by the caller from parsed event types, so failed,
+    incomplete, and contradictory terminals are distinguishable. Only a data
+    payload that is exactly ``[DONE]`` is skipped as a terminator echo;
+    markers inside content or comments never count.
+    """
     try:
-        text = bytes(wire).decode("utf-8")
+        text = frame.decode("utf-8")
     except UnicodeDecodeError:
-        return 200, {}
-    terminal: dict = {}
+        return "malformed", None
+    data_lines = []
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped.startswith("data:"):
+        if not stripped or stripped.startswith(":"):
             continue
-        payload = stripped[5:].strip()
-        if not payload or payload == "[DONE]":
+        if ":" not in stripped:
             continue
-        try:
-            event = load_bounded_json(payload, max_bytes=MAX_FRAME_BYTES)
-        except (ValueError, TypeError):
-            return 200, {}
-        if not isinstance(event, dict):
+        field, _, value = stripped.partition(":")
+        field = field.strip()
+        if field == "data":
+            data_lines.append(value.strip())
+        elif field in {"event", "id", "retry"}:
             continue
-        if event.get("type") in {"response.failed", "error"}:
-            return 200, {"failed": True}
-        if event.get("type") in {"response.completed", "response.incomplete"}:
-            response_body = event.get("response")
-            terminal = response_body if isinstance(response_body, dict) else {}
-    return 200, terminal
+        else:
+            continue
+    if not data_lines:
+        return "empty", None
+    payload = "\n".join(data_lines)
+    if payload == "[DONE]":
+        return "empty", None
+    try:
+        event = load_bounded_json(payload, max_bytes=MAX_FRAME_BYTES)
+    except (ValueError, TypeError):
+        return "malformed", None
+    if not isinstance(event, dict):
+        return "malformed", None
+    return "event", event
+
+
+def _terminal_response(event: dict) -> dict:
+    response_body = event.get("response")
+    return dict(response_body) if isinstance(response_body, dict) else {}
+
+
+class _EntryMarker(httpx.AsyncBaseTransport):
+    """Records transport entry: a timeout afterwards is still a dispatch."""
+
+    def __init__(self, transport: httpx.AsyncBaseTransport):
+        self.transport = transport
+        self.entered = False
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.entered = True
+        return await self.transport.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self.transport.aclose()
 
 
 async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fixed validation contract
@@ -593,6 +799,12 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
         validate_result(result, manifest)
         return result
 
+    def harvest() -> None:
+        # Router receipt is unknown after entry; preserve the conservative fact.
+        result["dispatched"] = marker.entered or result["dispatched"]
+
+    marker = _EntryMarker(transport)
+
     body = {
         "model": case["pool"],
         "input": manifest.get("prompt", PROMPT),
@@ -607,7 +819,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
     try:
         async with asyncio.timeout(manifest.get("case_timeout_seconds", CASE_TIMEOUT_SECONDS)):
             async with httpx.AsyncClient(
-                transport=transport,
+                transport=marker,
                 timeout=CASE_TIMEOUT_SECONDS,
                 trust_env=False,
                 base_url=base_url,
@@ -617,13 +829,21 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 admin = await _read_admin(client, admin_key)
                 _require_setup(admin is not None, "Validation admin evidence unavailable")
                 resolved = _resolve_group(admin, case["pool"])
-                _require_setup(resolved is not None, "Validation pool has no credit group")
-                _group, config, live = resolved
+                _require_setup(resolved is not None, "Validation pool binding unavailable")
+                _group, config, live, _backend = resolved
                 _require_setup(
                     config.get("provider") == case["provider"]
                     and config.get("deployment") == case["deployment"],
                     "Validation backend identity mismatch",
                 )
+                _require_setup(
+                    config.get("provider") in {"opencode_zen", "openrouter"},
+                    "Validation requires a single-shot provider path",
+                )
+                # Single member plus a single-shot provider path (Zen/OpenRouter
+                # forward single-shot regardless of retry_attempts, proven by
+                # unit tests) is the effective one-dispatch evidence. Deployed
+                # retry settings are recorded, never altered.
                 _require_setup(
                     config.get("supported_operations") == ["responses"],
                     "Validation backend operation mismatch",
@@ -645,13 +865,14 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 if case["stream"]:
                     status, public = await _read_stream_terminal(client, caller_key, body)
                 else:
-                    response = await client.post(
+                    status, public = await _read_bounded_json(
+                        client,
+                        "POST",
                         "/openai/v1/responses",
                         headers={"api-key": caller_key},
-                        json=body,
+                        json_body=body,
+                        max_bytes=MAX_RESPONSE_BYTES,
                     )
-                    status = response.status_code
-                    public = await _read_json_response(response)
                     if public is None:
                         public = {}
                 result["dispatched"] = True
@@ -688,6 +909,9 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
                 ) / 1_000_000
                 debit = before - after
                 result["synthetic_debit_usd"] = round(debit, 9)
+                if expected > 0 and debit == 0:
+                    # A missing charge must never pass inside a tolerance.
+                    return finish("acceptance_mismatch")
                 result["settlement_matches"] = bool(
                     math.isclose(debit, expected, abs_tol=SETTLEMENT_TOLERANCE_USD)
                 )
@@ -698,12 +922,20 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
     except ValidationSetupError:
         raise
     except TimeoutError:
+        harvest()
         return finish("transport_failure")
+    except httpx.DecodingError:
+        harvest()
+        return finish("encoded_response")
     except ValueError as exc:
-        if "bound exceeded" in str(exc):
+        message = str(exc)
+        if "bound exceeded" in message:
             return finish("response_bound_exceeded")
+        if "Encoded validation response" in message:
+            return finish("encoded_response")
         return finish("transport_failure")
     except (OSError, RuntimeError, httpx.HTTPError):
+        harvest()
         return finish("transport_failure")
 
 
@@ -716,37 +948,49 @@ def _run_files(run: str, stage_dir: Path) -> tuple[Path, Path]:
     return stage_dir / ledger_name, stage_dir / results_name
 
 
+def _load_canonical_manifest(directory: Path, name: str) -> dict:
+    """Load and validate a committed manifest; execution never invents one."""
+    path = directory / name
+    if not path.exists() or path.stat().st_size > MAX_RESULTS_BYTES:
+        raise ValueError("Staging manifest unavailable")
+    manifest = load_bounded_json(path.read_text(), max_bytes=MAX_RESULTS_BYTES)
+    validate_manifest(manifest)
+    if manifest["run"] != STAGING_RUN_ID:
+        raise ValueError("Staging manifest unavailable")
+    return manifest
+
+
 def _staging_results_passed(stage_dir: Path) -> bool:
-    ledger_path, results_path = _run_files(STAGING_RUN_ID, stage_dir)
     try:
+        manifest = _load_canonical_manifest(stage_dir, "manifest.staging.json")
+        ledger_path, results_path = _run_files(STAGING_RUN_ID, stage_dir)
         ledger = StagingLedger(ledger_path, run=STAGING_RUN_ID)
         if any(case["outcome"] != "passed" for case in ledger._read()["cases"].values()):
             return False
-        if not results_path.exists() or results_path.stat().st_size > MAX_RESULTS_BYTES:
-            return False
-        data = load_bounded_json(results_path.read_text(), max_bytes=MAX_RESULTS_BYTES)
-        if (
-            not isinstance(data, dict)
-            or data.get("run") != STAGING_RUN_ID
-            or not isinstance(data.get("attempts"), list)
-        ):
-            return False
-        by_id = {item["case_id"]: item for item in data["attempts"] if isinstance(item, dict)}
-        if set(by_id) != set(STAGING_CASES):
-            return False
-        return all(
-            item.get("status") == "passed"
-            and item.get("http_status") == HTTP_OK
-            and isinstance(item.get("input_tokens"), int)
-            and isinstance(item.get("output_tokens"), int)
-            and item.get("usage_coherent") is True
-            and item.get("settlement_matches") is True
-            and item.get("reservations_cleared") is True
-            and item.get("error_category") is None
-            for item in by_id.values()
-        )
+        results = load_validation_results(results_path, manifest)
     except (OSError, ValueError):
         return False
+    if len(results["attempts"]) != len(STAGING_CASES):
+        return False
+    # Black-box checks cannot observe the provider hop: production requires
+    # validated independent upstream evidence, which this path never produces.
+    # The gate stays closed until a reviewed amendment narrows the contract.
+    if any(not item.get("independent_upstream_observed", False) for item in results["attempts"]):
+        return False
+    return all(
+        item["status"] == "passed"
+        and item["http_status"] == HTTP_OK
+        and isinstance(item["input_tokens"], int)
+        and isinstance(item["output_tokens"], int)
+        and item["input_tokens"] <= PREFLIGHT_INPUT_TOKENS
+        and item["output_tokens"] <= PREFLIGHT_OUTPUT_TOKENS
+        and item["usage_coherent"] is True
+        and item["terminated_ok"] is True
+        and item["settlement_matches"] is True
+        and item["reservations_cleared"] is True
+        and item["error_category"] is None
+        for item in results["attempts"]
+    )
 
 
 def execute_validation(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract
@@ -810,13 +1054,16 @@ def execute_validation(  # noqa: PLR0912, PLR0913 -- fail-closed phase contract
                 raise
             result["elapsed_seconds"] = round(time.monotonic() - started, 3)
             validate_result(result, manifest)
+            # Record the ledger outcome before persisting results: a crash
+            # between the writes leaves an outcome without a result, which
+            # resume reconciliation refuses instead of skipping.
+            ledger.record_outcome(case_id, failed=result["status"] != "passed")
             results["attempts"].append(result)
             load_validation_results(results_path, manifest, data=results)
             if _serialized_size(results) > MAX_RESULTS_BYTES:
                 raise ValueError("Validation results exceed bound")
             write_atomic(results_path, results)
             by_id[case_id] = result
-            ledger.record_outcome(case_id, failed=result["status"] != "passed")
             if result["status"] != "passed":
                 break
         return results
