@@ -49,14 +49,18 @@ def _log_translated_rejection(
     exc: BaseException, *, operation: str | None = None, backend_id: str | None = None
 ) -> None:
     """Debug-log sanitized rejected field names; never values or bodies."""
-    fields = getattr(exc, "fields", ())
-    if not fields:
+    try:
+        fields = getattr(exc, "fields", ())
+        names = list(fields) if isinstance(fields, tuple) else []
+    except Exception:
+        return
+    if not names:
         return
     _logger.debug(
         "translated_response_rejected",
         operation=operation,
         backend=backend_id,
-        fields=list(fields),
+        fields=names,
     )
 
 

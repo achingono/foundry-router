@@ -107,6 +107,23 @@ class TestContentBearingRejection:
     def test_rejection_is_value_error(self):
         assert issubclass(TranslatedRejectionError, ValueError)
 
+    def test_total_entries_bounded(self):
+        from foundry_router.api.adapters.openai_compatible import _rejection_fields
+
+        many = {f"field_{index}": None for index in range(20)}
+        fields = _rejection_fields(many, frozenset())
+        assert len(fields) <= 8
+        assert fields[-1] == "<unexpected-field>"
+
+    def test_exception_immutable(self):
+        import dataclasses
+
+        exc = TranslatedRejectionError("unsupported", fields=("reasoning",))
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            exc.fields = ()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            exc.message = "other"
+
 
 class TestGoogleUnchanged:
     def test_google_adapter_stays_strict_on_null_reasoning(self):
@@ -149,4 +166,21 @@ class TestRejectionLogging:
 
         monkeypatch.setattr(forwarding, "_logger", StubLogger())
         forwarding._log_translated_rejection(ValueError("plain"), operation="responses")
+        assert calls == []
+
+    def test_logger_never_raises_on_hostile_exception(self, monkeypatch):
+        calls = []
+
+        class StubLogger:
+            def debug(self, *args, **kwargs):
+                calls.append((args, kwargs))
+
+        monkeypatch.setattr(forwarding, "_logger", StubLogger())
+
+        class HostileError(Exception):
+            @property
+            def fields(self):
+                raise RuntimeError("boom")
+
+        forwarding._log_translated_rejection(HostileError(), operation="responses")
         assert calls == []

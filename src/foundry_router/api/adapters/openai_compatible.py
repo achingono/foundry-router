@@ -87,7 +87,8 @@ def _rejection_fields(mapping: Any, allowed: frozenset[str]) -> tuple[str, ...]:
     safe = [key for key in extra if isinstance(key, str) and _FIELD_NAME_PATTERN.fullmatch(key)]
     shown = safe[:_MAX_REJECTION_FIELDS]
     if len(shown) != len(extra):
-        shown = [*shown, "<unexpected-field>"]
+        # Keep the total bounded: the placeholder displaces the last name.
+        shown = [*shown[: _MAX_REJECTION_FIELDS - 1], "<unexpected-field>"]
     return tuple(shown)
 
 
