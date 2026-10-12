@@ -15,7 +15,11 @@ independent provider/billing evidence.
 The [staging evidence review](review-staging-evidence-be1f2c0.md) accepts all four
 case records under that contract. Production remains blocked on the recorded
 remaining infrastructure operational evidence and immutable release binding,
-plus corrected seeds/reserve policy and the existing operator gates. The release contract below
+plus fresh all-account seeds and the existing operator gates. The group reserve
+design is [reviewed for implementation](review-group-reserves-df5396c.md);
+the [implementation follow-up](review-group-reserves-f891d06.md#follow-up-review-of-48012df)
+closes GI-1/GI-2 and clears independent implementation review.
+New-release validation remains pending. The release contract below
 remains the reviewed baseline; staging deviations are recorded as SE-1, not
 implicitly approved by the case pass.
 
@@ -31,7 +35,10 @@ implicitly approved by the case pass.
 - [Independent staging evidence review](review-staging-evidence-be1f2c0.md)
 - [Independent staging harness review](review-staging-harness-9a763c7.md)
 - [Staging infrastructure amendment and review](amendment-staging-infrastructure.md)
-- [Per-group reserve policy amendment (draft)](amendment-per-backend-reserves.md)
+- [Per-group reserve policy amendment (reviewed)](amendment-per-backend-reserves.md)
+- [OpenRouter production roster amendment (draft)](amendment-openrouter-roster.md)
+- [Independent group reserve plan review](review-group-reserves-df5396c.md)
+- [Independent group reserve implementation review](review-group-reserves-f891d06.md)
 - [Scoped black-box acceptance amendment](amendment-black-box-acceptance.md)
 
 ## Decision and rollout scope
@@ -85,8 +92,10 @@ remain independent and reflect documented shared limits, never guessed capacity.
 ## Release and state contract
 
 - Keep memory state, one worker and one replica, existing ingress, identities,
-  registry, resources and unrelated settings. No infrastructure template or
-  resource additions are planned for production. The retrospective
+  registry, resources and unrelated settings. No resource additions are planned
+  for production. The [group reserve amendment](amendment-per-backend-reserves.md)
+  permits the narrowly scoped template/configuration work for local implementation;
+  it does not clear deployment or the new live validation gate. The retrospective
   [staging infrastructure amendment](amendment-staging-infrastructure.md) records
   the staging exception; it does not approve new production resources or reserve
   changes. Review any further scope change first.
