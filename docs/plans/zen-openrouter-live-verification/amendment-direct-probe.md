@@ -1,12 +1,13 @@
 # Amendment: bounded OpenRouter direct probes
 
-Date: 2026-10-11. Status: **Planned**; independent review complete with changes
-required before live execution. No live dispatches under this amendment yet.
+Date: 2026-10-11. Status: **Planned** for live diagnosis; the independent
+review gate is cleared. No live dispatches under this amendment yet.
 
-[Independent commit review](review-direct-probe-607da09.md) initially identified three Major findings. Follow-up review of `7f0c207`
-closes DP-2 (streaming response bounds). DP-1 remains open for lost initialized
-state and pre-header dispatch accounting; DP-3 remains open for complete results
-envelope/size validation. The amendment is not cleared for live probes.
+[Final follow-up review](review-direct-probe-607da09.md#final-follow-up-review-of-8164ead)
+verified `8164ead` and closes DP-1 and DP-3; DP-2 was already closed in `7f0c207`.
+All three findings are resolved for the fixed probes and canonical state. The
+three-request limit, out-of-band credentials and execution prerequisites remain
+in force.
 
 ## Background
 
@@ -48,7 +49,7 @@ touching halted router runs.
 
 - [x] Independent review of this amendment and the probe script recorded in the [review](review-direct-probe-607da09.md).
 - [x] DP-2 streaming bounds fixed and independently verified in `7f0c207`.
-- [ ] Remaining DP-1 and DP-3 gaps resolved and independently re-reviewed before any live probe.
+- [x] Remaining DP-1 and DP-3 gaps resolved and independently verified in `8164ead`.
 - [ ] Each model probed at most once with structural evidence and no content,
       secret, or credential bytes recorded.
 - [ ] Diagnosis recorded: adapter strictness vs provider contract, with any

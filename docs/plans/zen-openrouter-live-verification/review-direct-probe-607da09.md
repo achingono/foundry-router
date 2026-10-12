@@ -12,11 +12,13 @@ does not cover this new direct-provider execution path.
 
 ## Current disposition
 
-**Changes still required before direct live probes.** Follow-up review of
-`7f0c207e4418b6998401c27405bfa111b2d9e9e0` closes DP-2. DP-1 and DP-3 are
-partially addressed and remain open for the specific gaps below. No Critical
-findings were identified. All 22 focused tests pass. No live request or credential
-retrieval was performed by this reviewer.
+**Direct-probe amendment review gate cleared.** Follow-up review of
+`8164eadd0c67bb281b480567af608fbd0029e087` closes the remaining DP-1 and DP-3
+gaps; DP-2 remains closed. No unresolved Critical or Major findings remain in
+this scoped review. All 27 focused tests pass. The historical findings and
+partial dispositions below are retained; the final follow-up supersedes their
+open statuses. No live request or credential retrieval was performed by this
+reviewer.
 
 ## Initial disposition at 607da09
 
@@ -53,7 +55,7 @@ findings below are retained as history; follow-up statuses supersede them.
   and rerunning the same temporary directory dispatched all three requests:
   four total calls, with the first model sent twice. A separate fake transport
   timeout made one call but returned `dispatched: false`.
-- **Follow-up status:** Partially addressed in `7f0c207`; DP-1 remains open for lost initialized state and pre-header timeout accounting.
+- **Current status:** Closed in the final follow-up of `8164ead`; `7f0c207` had only partially addressed lost-state and pre-header accounting requirements.
 
 ### DP-2 — Major: Enforce response bounds while reading from transport
 
@@ -106,7 +108,7 @@ findings below are retained as history; follow-up statuses supersede them.
 - **Offline reproduction:** Setting `finish_reason` to a synthetic sensitive
   marker caused `classify_envelope` to return that exact marker, which survived
   JSON serialization. The CLI reads and prints that field without sanitization.
-- **Follow-up status:** Partially addressed in `7f0c207`; DP-3 remains open for outer-envelope schema and total serialized-size validation.
+- **Current status:** Closed in the final follow-up of `8164ead`; `7f0c207` had only partially addressed outer-envelope and total-size validation requirements.
 
 ## Verification and review limits
 
@@ -198,3 +200,38 @@ checks; preserve a safely reserved uncertain slot if recording an outcome fails.
 - Updated review/status documentation only. Relative plan links and whitespace
   checks passed. Full-suite, lint/type, coverage and Docker checks were not rerun
   for this scoped review; no new claims are made about those gates.
+
+## Final follow-up review of 8164ead
+
+Date: 2026-10-11. Reviewed commit:
+`8164eadd0c67bb281b480567af608fbd0029e087`. The same independent reviewer
+checked the remaining fixes, regression tests and resulting execution paths.
+
+- **DP-1 closed:** Initialization now creates a separate durable identity under
+  the stage lock. Missing initialized results or identity refuses execution.
+  Intent remains durably reserved before transport, and a reserved slot without
+  an outcome still blocks replay. The transport-entry marker conservatively
+  preserves dispatch on pre-header exceptions; absent response headers no longer
+  imply no request was sent.
+- **DP-3 closed:** The loader requires exactly the three outer keys, validates
+  reservation/outcome consistency in both directions, and checks the serialized
+  envelope. Intent and outcome writes have whole-record size checks. The earlier
+  finish-reason classification, model binding and per-attempt schema checks remain
+  in place. Failed outcome persistence retains the reserved uncertain slot.
+- **Verification:** All 27 direct-probe tests passed using the repository virtual
+  environment. Additional independent, temporary probes confirmed: deleting
+  initialized results refuses without any fourth dispatch; a transport-entered
+  pre-header timeout reports dispatch; an unknown root field is rejected; and an
+  oversized outcome is refused while a bounded intent remains and restart cannot
+  replay it. DP-2 oversized-stream and encoding-before-body checks also passed in
+  the focused suite.
+- **Disposition:** All three reported findings are closed for the fixed three
+  direct probes and their canonical state. This clears the independent review
+  gate; it does not claim live diagnosis, compatibility, measured provider cost,
+  production readiness, or permission to replay/reset historical router runs.
+  The amendment's request limits and other execution prerequisites still apply.
+- **Review limits:** No new runtime changes, credential retrieval or live requests.
+  Existing live results/ledgers were not read or modified; verification used fake
+  transports and temporary directories. Only review/status documents changed.
+  Plan links and whitespace checks passed. The reported full-suite/Ruff results
+  were not independently rerun; no new coverage, type-check or Docker claim is made.
