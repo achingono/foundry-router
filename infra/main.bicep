@@ -158,6 +158,12 @@ param minReplicas int = 0
 @minValue(1)
 param maxReplicas int = 1
 
+@description('Flat safety reserve held back per credit group, as a decimal string. Defaults to the production value; smaller environments override it.')
+param minCreditReserveUsd string = '10.0'
+
+@description('Percentage-of-allowance safety reserve per credit group, as a decimal string. Defaults to the production value; smaller environments override it.')
+param minCreditReservePercent string = '5.0'
+
 @description('Log Analytics workspace name.')
 param logAnalyticsWorkspaceName string = '${appName}-logs-${environment}'
 
@@ -372,6 +378,8 @@ var routerConfig RouterConfig = {
   }
   modelAliases: modelAliases
   ingressIpSecurityRestrictions: ingressIpSecurityRestrictions
+  minCreditReserveUsd: minCreditReserveUsd
+  minCreditReservePercent: minCreditReservePercent
 }
 
 module containerApp './modules/containers/router.bicep' = {

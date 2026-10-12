@@ -110,8 +110,8 @@ resource router 'Microsoft.App/containerApps@2023-04-01-preview' = {
             { name: 'FOUNDRY_GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS', value: '30' }
             { name: 'FOUNDRY_RETRY_ATTEMPTS', value: string(config.?retryAttempts ?? 2) }
             { name: 'FOUNDRY_RESERVATION_MAX_AGE_SECONDS', value: string(config.?reservationMaxAgeSeconds ?? 900) }
-            { name: 'FOUNDRY_MIN_CREDIT_RESERVE_USD', value: '10.0' }
-            { name: 'FOUNDRY_MIN_CREDIT_RESERVE_PERCENT', value: '5.0' }
+            { name: 'FOUNDRY_MIN_CREDIT_RESERVE_USD', value: config.?minCreditReserveUsd ?? '10.0' }
+            { name: 'FOUNDRY_MIN_CREDIT_RESERVE_PERCENT', value: config.?minCreditReservePercent ?? '5.0' }
             { name: 'FOUNDRY_CLIENT_API_KEYS_JSON', secretRef: '${config.secretNamePrefix}-client-keys' }
             { name: 'FOUNDRY_ADMIN_API_KEYS_JSON', secretRef: '${config.secretNamePrefix}-admin-keys' }
             { name: 'FOUNDRY_BACKENDS_JSON', secretRef: '${config.secretNamePrefix}-backends-json' }

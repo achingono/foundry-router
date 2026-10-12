@@ -83,6 +83,10 @@ type RouterConfig = {
   @minValue(5)
   @maxValue(900)
   reservationMaxAgeSeconds: int?
+  // Decimal reserves travel as strings: this template pins Bicep v0.47.16,
+  // which has no float type. The app validates them as non-negative numbers.
+  minCreditReserveUsd: string?
+  minCreditReservePercent: string?
 }
 
 @export()
