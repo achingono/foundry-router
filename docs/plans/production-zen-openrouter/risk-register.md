@@ -30,8 +30,8 @@ controls. Execution evidence is required to close each risk.
   they are local accounting estimates.
 - Operator scope acceptance, maintenance window, quiescence method, actual
   immutable-secret deployment mechanism and named approvers remain pending.
-- Production promotion additionally requires either validated independent
-  upstream evidence (unavailable to black-box checks, so the harness gate
-  stays closed) or a separately reviewed amendment accepting the narrower
-  admin-delta plus public-usage evidence contract. Pending operator/reviewer
-  decision; no silent weakening in code.
+- The reviewer accepts the [scoped public/admin acceptance amendment](amendment-black-box-acceptance.md)
+  at plan level. Independent provider/billing equivalence is not claimed.
+  SV-1 reconciliation and the scoped SV-6 promotion implementation/re-review
+  remain open; a saved upstream Boolean is not observer evidence or approval.
+  Operator execution and production approvals remain separate.

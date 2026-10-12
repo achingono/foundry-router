@@ -82,11 +82,13 @@ Resume only verified completed state; reserved-without-outcome blocks dispatch.
 No production case runs before all staging cases pass and the operator approves
 promotion. Existing historical runs remain closed.
 
-For each case require public/provider success, completion and valid usage;
-compare independent upstream observation where supported with public usage and
-canonical group debit at configured prices, and verify zero retained
-reservations/inflight credit. If deployed observation cannot support that proof,
-record the limitation and leave the gate open rather than calling HTTP 200 a pass.
+Under the [scoped acceptance amendment](amendment-black-box-acceptance.md),
+require public success, completion and valid usage for each case; reconcile
+canonical group debit with that public usage at configured prices, and verify
+zero retained reservations/inflight credit. Label this deployed public/admin
+acceptance, with independent upstream observation false. It does not establish
+raw provider usage or billing equivalence. The amended harness/manifests and
+strict promotion/state checks require implementation review before dispatch.
 Streaming additionally requires complete frames, terminal `response.completed`
 usage, clean EOF and no failure event. Record metadata/counts only, never bodies,
 prompts, output values or credentials. Verify settlement while unrelated account

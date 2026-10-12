@@ -9,9 +9,13 @@ implementation. Only review/status documentation was edited.
 
 ## Disposition
 
-**Harness review gate not cleared.** Seven Major findings below remain open.
-One additional dispatch-evidence Suggestion is recorded. All 21 existing offline
-tests passed; independent fake-app reproductions confirmed the missing controls.
+**Harness review gate not cleared.** After the
+[follow-up review of febe207](#follow-up-review-of-febe207), SV-2, SV-3, SV-4,
+SV-5 and SV-7 are closed. SV-1 and SV-6 remain open; SV-8 is partially addressed.
+The findings below describe the original review and are superseded by the
+follow-up dispositions. The reviewer also accepts a
+[narrower deployment-acceptance contract](amendment-black-box-acceptance.md)
+at plan level; its implementation and re-review are pending.
 No staging writes, production changes or live requests were performed. The
 separate operator/release/maintenance gates in the plan remain open as well.
 
@@ -80,8 +84,10 @@ separate operator/release/maintenance gates in the plan remain open as well.
 - **The Issue:** Setup takes the first backend from a pool and only records
   retry settings. It does not require exactly one backend or an effective
   one-attempt policy. HTTPX retries=0 applies only to the harness-to-router hop.
-  The native Zen forwarding path can retry the provider when configured for
-  multiple attempts; additional pool members can also allow other selections.
+  **Correction from the follow-up:** Zen bypasses the generic retry loop and
+  already uses a dedicated single-shot path; the original contrary claim was
+  incorrect. Additional pool members can allow other selections on eligible
+  failover, which was the valid scope of this finding.
 - **Why Static Analysis Missed It:** The limit crosses two HTTP clients and the
   router's routing/retry policy; a fake app with one response per POST hides it.
 - **Impact:** One reserved validation case can consume multiple paid provider
@@ -94,8 +100,9 @@ separate operator/release/maintenance gates in the plan remain open as well.
   amendment. Test actual router behavior with retryable provider failures.
 - **Evidence:** A fake admin response advertising two members in every pool
   (including an extra Azure backend) and `retry_attempts=10` still passed all
-  four cases. Source confirms native forwarding loops up to configured attempts
-  on transport/retryable failures. The normal tests already accept attempts=2.
+  four cases. The normal tests accept attempts=2, which by itself is not a
+  defect for the dedicated Zen/OpenRouter paths. The original generic-retry-loop
+  attribution to Zen is withdrawn; see the follow-up verification.
 - **Disposition:** Open; blocking.
 
 ### SV-4 — Major: Bound nonstream and setup responses while reading
@@ -225,3 +232,114 @@ separate operator/release/maintenance gates in the plan remain open as well.
 - Plan relative links, whitespace and final documentation diff were checked.
   No source/tests, credentials, actual historical ledgers, deployed configuration
   or production state were changed. No live request or staging write was sent.
+
+## Follow-up review of febe207
+
+Date: 2026-10-12.
+Reviewed commit: `febe207681e9bd466059f85d2514aed92e590676`.
+Scope: all four changed files, prior independent reproductions, actual provider
+forwarding selection, result/promotion validation and the narrowing decision.
+Only review/status documentation was edited.
+
+### Disposition
+
+**Not cleared for staging writes or live dispatch.** Five Majors are closed;
+SV-1 and SV-6 remain open and SV-8 remains a non-blocking partial fix. The
+[black-box acceptance amendment](amendment-black-box-acceptance.md) resolves the
+reviewer's policy decision, but matching implementation/re-review is required.
+
+| Finding | Status | Review conclusion |
+| --- | --- | --- |
+| SV-1 | Partially addressed; Major remains open | Reordered writes block the newly created missing-result crash case, but there is still no complete reconciliation or success-coherence check before skipping results |
+| SV-2 | Closed for committed specifications | Exact case keys/values prevent model/mode/price substitution; fixed six-case estimate is USD 0.0051456 |
+| SV-3 | Closed; original explanation corrected | Single-member pools plus dedicated Zen/OpenRouter single-shot paths meet the scoped attempt policy without changing deployed retry settings |
+| SV-4 | Closed | Setup and inference reads now stream with identity-encoding checks, bounds and response context cleanup |
+| SV-5 | Closed for reported framing failures | Incremental frames, residual rejection and unique completed terminal checks reject the prior invalid streams |
+| SV-6 | Partially addressed; Major remains open pending scoped implementation | Ordinary black-box results now block promotion; an unsubstantiated true upstream flag still unlocks the path |
+| SV-7 | Closed for configured prices and tested balances | Tighter tolerance and explicit zero-debit rejection distinguish the smallest tested paid charges |
+| SV-8 | Partially addressed; Suggestion remains | Timeout paths harvest entry, but body-bound/header-policy ValueErrors do not; marker also includes setup GETs |
+
+### Remaining SV-1 gaps and test limitations
+
+`execute_validation` still skips any case found in `by_id` without reconciling
+its ledger slot. A failed/halted ledger with passing results can return the
+passing results, and a saved result beside an unresolved ledger outcome allows
+successors. Reordering future writes does not validate historical/interrupted or
+corrupted state. `validate_result` still does not require provider/deployment to
+match the case, enforce token caps on general resume, or recompute saved debit
+coherence from the usage and prices.
+
+Independent evidence:
+
+- Generated the exact old crash state with `9a763c7` and a fake transport by
+  interrupting `record_outcome` after result persistence. `febe207` resumed it
+  and dispatched three successors while the first ledger outcome stayed `None`.
+- After a fake complete run, set the first ledger outcome to failed **and**
+  `halted=true`, leaving that ledger internally valid. Resume returned all
+  passing results. The new contradictory-ledger test only changes outcome to
+  failed while leaving halted false, so it tests the ledger's own validation,
+  not cross-file reconciliation.
+- With the canonical staging manifest present, saved results whose upstream flag
+  was true but provider/deployment were null and debit was zero still allowed
+  two production fake calls. Complete model/usage/debit/ledger validation must
+  apply equally to resume and production prerequisites.
+
+Required fix remains whole-prefix reconciliation in both directions, before any
+skip/return/dispatch, plus one strict success-coherence validator at all entry
+points. Test internally valid but contradictory files and actual cross-version
+crash state, not only individually invalid ledger objects.
+
+### SV-6 and narrowing decision
+
+The default producer sets the upstream flag false, which now stops normal
+production execution. That is useful fail-closed behavior, but checking a saved
+Boolean is not validated independent evidence. Copying the committed staging
+manifest into the temporary state directory and setting the flags true allowed
+production execution without any observer artifact. The current negative tests
+omit that canonical manifest, so they can pass because prerequisite loading
+fails before reaching the intended evidence assertion.
+
+The reviewer accepts the narrower contract in the amendment: validate deployed
+public behavior and local admin-accounting consistency, label that scope, and
+make no independent provider/billing claim. Implement that scope explicitly in
+the immutable manifests/results and promotion checks, keep the upstream flag
+false, and retain strict state validation and explicit operator approval. This
+is a planning decision, not clearance for the current promotion path.
+
+### SV-8 remaining evidence issue
+
+A nonstream POST received by the fake router and then rejected for exceeding
+1 MiB now correctly fails and halts, but records `dispatched=false`. The
+ValueError branches do not call `harvest`. `_EntryMarker` also records every
+health/admin GET, not specifically the inference POST. Restrict the marker to
+the inference request and preserve entry/header facts on every return/exception;
+keep router-request entry distinct from proof of upstream egress.
+
+### Closed findings and independent verification
+
+- 41 staging-harness tests passed; 16 actual-router provider integration/transport
+  tests passed, for 57 total.
+- Twenty-eight independent case mutations (pool, provider, deployment, mode,
+  input/output price and extra keys across all four staging cases) were refused.
+  `validate_run_pair` is currently exercised by tests rather than called by the
+  executor; exact immutable prices keep the committed six-case total within
+  USD 0.01. Do not describe a general runtime pair-loader as implemented.
+- Verified the provider dispatch selection precedes the generic retry loop.
+  Zen already took `_forward_zen_non_streaming`/`_forward_zen_streaming`; the
+  earlier review's contrary retry explanation was wrong. Existing provider
+  integration tests cover Zen ambiguous failure and separate-backend 429
+  failover; one-member enforcement removes that additional target.
+- Independent body-bound reproduction now halts after the first oversized
+  response instead of passing. Bounded setup, encoding and cleanup source paths
+  were inspected. SV-8 describes the remaining dispatch-fact limitation.
+- Valid SSE terminal structures agreed across coalesced, one-byte, seven-byte
+  and 64-byte delivery. Unterminated, duplicated, incomplete, malformed and
+  failed-event variants were rejected with instrumented response closure.
+- One-input/one-output charges passed with real fake-account debits; the prior
+  OpenAI zero-debit case now fails. The USD 1e-9 tolerance is a fixed bound for
+  the tested magnitude, not a dynamically derived ULP calculation for arbitrary
+  account balances. Larger/less precise balances may fail conservatively.
+- All checks used temporary state, synthetic keys and fake transports. No live
+  requests, actual historical ledger reads, secret access or deployed changes.
+  Full suite/coverage, Ruff/mypy, Docker and Sonar were not rerun by the reviewer;
+  the conditional scan script is absent. Plan links, whitespace and diff checked.

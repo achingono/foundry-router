@@ -4,8 +4,11 @@
 The draft has been revised at planning level; no staging or production change,
 secret provisioning, image rollout or live dispatch is authorized by this record.
 Execution prerequisites and operator approvals remain open. The
-[harness review of 9a763c7](review-staging-harness-9a763c7.md) found seven open
-Majors; its review gate is not cleared before staging writes or live dispatch.
+[follow-up harness review](review-staging-harness-9a763c7.md#follow-up-review-of-febe207)
+closes five Majors; SV-1/SV-6 remain open and SV-8 is partial. Its review gate
+is not cleared before staging writes or live dispatch. The reviewer accepts a
+[narrower deployment-acceptance contract](amendment-black-box-acceptance.md)
+at plan level; implementation and re-review remain pending.
 
 ## Companion documents
 
@@ -17,6 +20,7 @@ Majors; its review gate is not cleared before staging writes or live dispatch.
 - [Evidence](evidence.md)
 - [Independent review](review.md)
 - [Independent staging harness review](review-staging-harness-9a763c7.md)
+- [Scoped black-box acceptance amendment](amendment-black-box-acceptance.md)
 
 ## Decision and rollout scope
 
