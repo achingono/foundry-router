@@ -3,7 +3,9 @@
 **Planned.** Independent plan review is recorded in [review.md](review.md).
 The draft has been revised at planning level; no staging or production change,
 secret provisioning, image rollout or live dispatch is authorized by this record.
-Execution prerequisites and operator approvals remain open.
+Execution prerequisites and operator approvals remain open. The
+[harness review of 9a763c7](review-staging-harness-9a763c7.md) found seven open
+Majors; its review gate is not cleared before staging writes or live dispatch.
 
 ## Companion documents
 
@@ -14,6 +16,7 @@ Execution prerequisites and operator approvals remain open.
 - [Risk register](risk-register.md)
 - [Evidence](evidence.md)
 - [Independent review](review.md)
+- [Independent staging harness review](review-staging-harness-9a763c7.md)
 
 ## Decision and rollout scope
 

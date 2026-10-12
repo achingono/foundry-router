@@ -10,6 +10,7 @@
 - [ ] Per-account budgets/quotas reviewed, staging allocation disjoint, fresh seed procedure covers existing Azure groups too.
 - [ ] Reviewed maintenance/drain procedure prevents concurrent writers and revision overlap; ingress unchanged.
 - [ ] New immutable six-case manifests, durable identities and execution harness reviewed with offline bounds/no-replay checks before any inference.
+- [ ] [Harness findings SV-1–SV-7](review-staging-harness-9a763c7.md) resolved and independently re-reviewed; staging-write/dispatch gate cleared (currently not cleared).
 
 ## Execution gates
 

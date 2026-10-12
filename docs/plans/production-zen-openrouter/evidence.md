@@ -3,6 +3,7 @@
 **Planned.** No staging/production writes or live inference were performed by the
 reviewer. Independent plan review is complete; revised-scope acceptance,
 implementation/preparation checks and execution approvals remain pending.
+The harness review gate is not cleared: seven Major findings remain open.
 
 | Item | Reference | Notes |
 | --- | --- | --- |
@@ -14,3 +15,4 @@ implementation/preparation checks and execution approvals remain pending.
 | Release and execution prerequisites | [Exit criteria](exit-criteria.md) | Actual environment baseline, image, secret-selection mechanism, maintenance, manifests/harness and operator approvals pending |
 | Staging harness | `scripts/quality/staging_validation.py`, `tests/unit/test_staging_validation.py` | 21 offline checks: manifest/allowance binding, full pass with settlement reconciliation, halt/replay/corruption guards, usage caps, cleanup, production gating, setup-error blocking, redaction |
 | Staging/production changes | None | No secrets provisioned; no revisions deployed; harness review and execution gates open |
+| Independent harness review (2026-10-11) | [Review of 9a763c7](review-staging-harness-9a763c7.md) | Seven open Majors: state/promotion validation, immutable case/aggregate-budget binding, upstream attempt limits, response bounds, SSE framing, missing independent proof and settlement tolerance. One dispatch-evidence Suggestion. 21 tests passed; independent fake-app reproductions confirmed gaps. No live requests or staging writes |
