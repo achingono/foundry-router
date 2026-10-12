@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Mapping  # noqa: TC003 -- Pydantic resolves at runtime
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Annotated, Literal
 from urllib.parse import unquote, urlsplit
 
@@ -593,7 +595,13 @@ class Settings(BaseSettings):
         exclude=True,
     )
     reconciliation_overrides_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
-    credit_group_reserves: dict[str, GroupReservePolicy] = Field(
+    credit_group_membership: Mapping[str, str] = Field(default_factory=dict, exclude=True)
+    metered_group_ids: frozenset[str] = Field(default_factory=frozenset, exclude=True)
+    credit_group_reserves: Mapping[str, GroupReservePolicy] = Field(
+        default_factory=dict,
+        exclude=True,
+    )
+    effective_reserve_policies: Mapping[str, GroupReservePolicy] = Field(
         default_factory=dict,
         exclude=True,
     )
@@ -983,14 +991,27 @@ class Settings(BaseSettings):
                 )
             self.reconciliation_overrides_usd[backend_id] = amount_float
 
-        # Parse per-credit-group reserve overrides (absent groups inherit app-wide)
+        # Parse per-credit-group reserve overrides (absent groups inherit app-wide).
+        # Membership, metered IDs and effective policies are frozen here so
+        # request-path lookups never rescan backends.
         membership = credit_membership(self)
         metered_groups = metered_credit_groups(self)
         non_metered_groups = set(membership.values()) - metered_groups
-        self.credit_group_reserves = parse_group_reserves(
-            self.credit_group_reserves_json,
-            metered_groups,
-            non_metered_groups,
+        self.credit_group_membership = MappingProxyType(dict(membership))
+        self.metered_group_ids = frozenset(metered_groups)
+        self.credit_group_reserves = MappingProxyType(
+            parse_group_reserves(
+                self.credit_group_reserves_json,
+                metered_groups,
+                non_metered_groups,
+            )
+        )
+        inherited = GroupReservePolicy(
+            min_credit_reserve_usd=float(self.min_credit_reserve_usd),
+            min_credit_reserve_percent=float(self.min_credit_reserve_percent),
+        )
+        self.effective_reserve_policies = MappingProxyType(
+            {group: self.credit_group_reserves.get(group, inherited) for group in metered_groups}
         )
 
         # Phase 11: conditional state-backend validation (memory ignores storage fields
@@ -1101,13 +1122,16 @@ class Settings(BaseSettings):
     def resolve_reserve_policy(self, credit_group: str) -> GroupReservePolicy:
         """Resolve the effective reserve pair for one canonical metered group.
 
-        Unknown IDs never silently inherit the app-wide settings.
+        Served from the startup-frozen cache; unknown IDs never silently
+        inherit the app-wide settings. Configuration drifted after startup
+        (test fixtures) takes one fresh scan and the app-wide pair, since
+        overrides are validated against startup membership.
         """
-        policy = self.credit_group_reserves.get(credit_group)
-        if policy is not None:
-            return policy
-        membership = credit_membership(self)
-        if credit_group not in set(membership.values()):
+        try:
+            return self.effective_reserve_policies[credit_group]
+        except KeyError:
+            pass
+        if credit_group not in set(credit_membership(self).values()):
             raise ValueError("Unknown credit group has no reserve policy")
         if credit_group not in metered_credit_groups(self):
             raise ValueError("Non-metered credit group has no reserve policy")

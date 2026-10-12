@@ -191,10 +191,47 @@ def test_entry_count_bound_refused() -> None:
         parse_group_reserves(raw, {f"g{i}" for i in range(1025)}, set())
 
 
+def test_post_startup_backend_takes_app_wide_pair() -> None:
+    from foundry_router.config import BackendConfig
+
+    settings = mixed_settings()
+    first = settings.backends["zen"]
+    settings.backends["late"] = BackendConfig(
+        **{**first.model_dump(), "credit_group": "late-g", "quota_group": "late-g"}
+    )
+    assert settings.resolve_reserve_policy("late-g") == GroupReservePolicy(10.0, 5.0)
+    with pytest.raises(ValueError):
+        settings.resolve_reserve_policy("ghost")
+
+
 def test_resolver_rejects_unknown_id() -> None:
     settings = mixed_settings()
     with pytest.raises(ValueError):
         settings.resolve_reserve_policy("ghost")
+
+
+def test_resolve_performs_no_backend_scans(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = mixed_settings()
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("request-path backend scan")
+
+    monkeypatch.setattr("foundry_router.config.credit_membership", _boom)
+    monkeypatch.setattr("foundry_router.config.metered_credit_groups", _boom)
+    assert settings.resolve_reserve_policy(ZEN_GROUP) == GroupReservePolicy(10.0, 5.0)
+    assert settings.resolve_reserve_policy(AZURE_GROUP) == GroupReservePolicy(10.0, 5.0)
+
+
+def test_parsed_maps_are_read_only() -> None:
+    settings = mixed_settings(
+        credit_group_reserves_json=json.dumps({ZEN_GROUP: OVERRIDE}),
+    )
+    with pytest.raises(TypeError):
+        settings.credit_group_reserves[ZEN_GROUP] = GroupReservePolicy(1.0, 1.0)
+    with pytest.raises(TypeError):
+        settings.effective_reserve_policies[ZEN_GROUP] = GroupReservePolicy(1.0, 1.0)
+    with pytest.raises(TypeError):
+        settings.credit_group_membership["zen"] = ZEN_GROUP
 
 
 def test_validation_errors_carry_no_values() -> None:
@@ -323,6 +360,32 @@ async def test_scalar_reserve_path_carries_resolved_policy() -> None:
     assert await run_model(settings, store, "z") == 200
     assert store.reserve_calls[0]["min_credit_reserve_usd"] == 0.05
     assert store.reserve_calls[0]["min_credit_reserve_percent"] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_selection_scans_membership_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    import foundry_router.routing as routing_module
+
+    calls: list[int] = []
+    original = routing_module.credit_membership
+
+    def counting(settings: Settings) -> dict[str, str]:
+        calls.append(1)
+        return original(settings)
+
+    monkeypatch.setattr(routing_module, "credit_membership", counting)
+    settings = mixed_settings()
+    await select_candidate_backend(
+        settings,
+        "z",
+        operation="responses",
+        body={"input": "abc", "max_output_tokens": 5},
+        request_id="r",
+        health_store=InMemoryHealthStore(),
+        credit_store=InMemoryCreditStore(),
+        logger=SimpleNamespace(info=lambda *_a, **_k: None),
+    )
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
