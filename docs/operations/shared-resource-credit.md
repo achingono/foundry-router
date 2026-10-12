@@ -92,7 +92,11 @@ credit failures propagate at completion and cannot trigger failover or replace d
 
 `/admin/status.credit_groups` is the canonical unique account view. Backend entries retain their
 compatibility live view and add `credit_group`; never sum those duplicated backend balances.
-Use `foundry_router_credit_group_available_usd{credit_group}` for account-level metrics. The
+Each group entry also exposes its effective `reserve_policy` (`min_credit_reserve_usd`,
+`min_credit_reserve_percent`, `source: inherited|override`); admin reads each distinct
+effective policy once per request under a common timestamp, so mixed-policy balances stay
+consistent without per-backend rereads. A failed group read fails the diagnostic request
+rather than reporting partial balances. Use `foundry_router_credit_group_available_usd{credit_group}` for account-level metrics. The
 existing `foundry_router_credit_available_usd{backend}` is nonadditive. Request/cost metrics remain
 backend-labelled. Opt-in multi-worker OTLP aggregation is implemented locally; deployed
 collector acceptance remains unverified. See [observability](observability.md).

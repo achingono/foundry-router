@@ -62,6 +62,7 @@ limitations; no production rollout or cross-restart persistence is claimed.
 | Requirement | Implementation | Evidence |
 | --- | --- | --- |
 | Safe canonical credit namespace; optional backend-default groups and canonical Settings keys | `src/foundry_router/credit_groups.py`, `config/` | `tests/unit/test_shared_resource_credit.py` |
+| Per-group reserve overrides with app-wide inheritance; fail-closed unknown/non-metered keys | `config/group_reserves.py`, `config/`, `routing/`, `api/routes/admin.py`, `api/google_sealing.py` | `tests/unit/test_group_reserves.py` (38 checks; 100% new-module coverage); implementation review and live validation pending per [amendment](../plans/production-zen-openrouter/amendment-per-backend-reserves.md) |
 | Combined cross-model capacity, group cycles/reservations, immutable ownership and legacy defaults | `credit.py`, `state/table.py` | Shared-credit unit tests; Azurite cross-model contention/settlement/restart test |
 | Typed finalization failure; no second egress after failed release; independent quota/telemetry cleanup | `routing/`, `forwarding/`, `api/common.py` | Failover, cancellation, streaming and settlement-failure regressions |
 | Unique routable-group readiness, canonical admin/metric views and reconciliation counts | `api/routes/`, `metrics/`, `reconciliation/`, `main.py` | Shared-credit diagnostics/readiness/reconciliation tests |

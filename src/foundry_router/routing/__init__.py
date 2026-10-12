@@ -29,7 +29,7 @@ from foundry_router.credit import (
     estimate_request_cost,
     score_credit_assessment,
 )
-from foundry_router.credit_groups import CreditStoreError
+from foundry_router.credit_groups import CreditStoreError, credit_membership, resolve_credit_group
 from foundry_router.forwarding import BackendRequestResult
 from foundry_router.health import (
     COOLDOWN_STATES,
@@ -530,6 +530,13 @@ async def select_candidate_backend(
         backend_id: (getattr(settings.backends[backend_id], "quota_group", None) or backend_id)
         for backend_id in ranked_candidates
     }
+    # Resolve credit-group membership once per selection; every metered
+    # candidate reuses it instead of recomputing the full backend map.
+    credit_membership_map = credit_membership(settings)
+    credit_group_by_backend = {
+        backend_id: resolve_credit_group(credit_membership_map, backend_id)
+        for backend_id in ranked_candidates
+    }
     # D6 option B: routing evaluates the same per-replica effective limits the
     # store enforces, so the re-sync below cannot silently revert the share.
     effective_limits = configured_quota_limits(settings)
@@ -727,10 +734,11 @@ async def select_candidate_backend(
             )
         elif hasattr(credit_store, "assess_with_context"):
             # Use bundled context when available; retain scalar args for test doubles.
+            group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             ctx = CreditAssessmentContext(
                 reserve_policy=CreditReservePolicy(
-                    min_credit_reserve_usd=settings.min_credit_reserve_usd,
-                    min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                    min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
+                    min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 ),
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
@@ -738,11 +746,12 @@ async def select_candidate_backend(
                 backend_id, estimate.estimated_cost_usd, ctx
             )
         else:
+            group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             assessment = await credit_store.assess(
                 backend_id,
                 estimate.estimated_cost_usd,
-                min_credit_reserve_usd=settings.min_credit_reserve_usd,
-                min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
+                min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
         candidate_detail = {
@@ -830,10 +839,11 @@ async def select_candidate_backend(
                         charged_cost_usd=None,
                     )
         elif hasattr(credit_store, "try_assign_with_context"):
+            group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             ctx2 = CreditAssessmentContext(
                 reserve_policy=CreditReservePolicy(
-                    min_credit_reserve_usd=settings.min_credit_reserve_usd,
-                    min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                    min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
+                    min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 ),
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
@@ -841,12 +851,13 @@ async def select_candidate_backend(
                 request_id, backend_id, estimate.estimated_cost_usd, ctx2
             )
         else:
+            group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             reserved = await credit_store.try_assign_reservation(
                 request_id,
                 backend_id,
                 estimate.estimated_cost_usd,
-                min_credit_reserve_usd=settings.min_credit_reserve_usd,
-                min_credit_reserve_percent=settings.min_credit_reserve_percent,
+                min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
+                min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
         if reserved:

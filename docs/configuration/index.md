@@ -99,6 +99,26 @@ See [migration and operations](../operations/shared-resource-credit.md) before r
 Incomplete Table group initialization/config merge raises a typed failure and blocks routing;
 failed Settings are not cached and can be retried unchanged after storage recovery.
 
+### Per-Credit-Group Reserve Overrides (Implemented)
+
+`FOUNDRY_CREDIT_GROUP_RESERVES_JSON` is an optional object mapping canonical metered
+credit-group IDs to `{min_credit_reserve_usd, min_credit_reserve_percent}` pairs
+(for example `{"zen-production": {"min_credit_reserve_usd": 0.05, "min_credit_reserve_percent": 5.0}}`).
+It defaults to `{}`. Groups absent from the map inherit the app-wide
+`FOUNDRY_MIN_CREDIT_RESERVE_USD` / `FOUNDRY_MIN_CREDIT_RESERVE_PERCENT` settings;
+there is no partial inheritance — an override must contain exactly both fields.
+The effective reserve formula is unchanged:
+`max(flat reserve, cycle allowance * percent / 100)`, applied per group balance.
+
+Keys must be canonical metered credit groups: unknown groups and overrides for
+non-metered groups fail startup. Numeric zero is a valid override and never falls
+through to inheritance. Malformed input, duplicate keys, unknown fields,
+non-numeric values, non-finite or negative numbers, and percentages above 100 are
+rejected with sanitized errors. `/admin/status` exposes each group's effective
+pair and whether it is `inherited` or `overridden`, so mixed policies are
+verifiable without relying on readiness alone. Bicep exposes optional nonsecret
+`creditGroupReserves` (default `{}`) through root/typed/container wiring.
+
 ## Google AI Studio Keys
 
 Each Google AI Studio API key is configured as a separate backend with

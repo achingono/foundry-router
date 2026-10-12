@@ -146,6 +146,7 @@ Table resources, role assignments and endpoint settings are emitted only when `s
 | `FOUNDRY_TABLE_CREDIT_NAME` | `tablePrefix` + `credit` | `Settings.table_credit_name` | app-derived |
 | `FOUNDRY_RATE_LIMIT_REPLICA_SHARE` | `maxReplicas` | `Settings.rate_limit_replica_share` | `1` |
 | `FOUNDRY_MODEL_ALIASES_JSON` | `modelAliases` object parameter (root/typed) | `Settings.model_aliases` | `{}` |
+| `FOUNDRY_CREDIT_GROUP_RESERVES_JSON` | `creditGroupReserves` object parameter (root/typed) | `Settings.credit_group_reserves` | `{}` |
 
 `maxReplicas > 1` requires `stateBackend: table`; `maxReplicas` is at least 1. Per-replica in-memory provider quota limits are divided by `maxReplicas`, so actual usage below capacity underuses quota. Protected emergency fallback and brief revision overlap remain documented exceptions. `activeRevisionsMode: 'Single'` limits active traffic revisions, but old and new revisions can overlap briefly during rollout.
 

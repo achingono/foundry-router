@@ -95,6 +95,9 @@ param tablePrefix string = replace(appName, '-', '')
 @description('Optional logical model aliases as an object mapping alias names to canonical model IDs. Serialized into FOUNDRY_MODEL_ALIASES_JSON; empty by default with no new resources.')
 param modelAliases object = {}
 
+@description('Optional per-credit-group reserve overrides as an object mapping canonical metered credit groups to {min_credit_reserve_usd, min_credit_reserve_percent} pairs. Serialized into FOUNDRY_CREDIT_GROUP_RESERVES_JSON; absent groups inherit app-wide reserves.')
+param creditGroupReserves object = {}
+
 @description('Ingress IP restrictions preserved during deployment. An empty array removes all IP restrictions. Use consistent Allow or Deny actions as required by Container Apps.')
 param ingressIpSecurityRestrictions IngressIpSecurityRestriction[] = []
 
@@ -377,6 +380,7 @@ var routerConfig RouterConfig = {
     creditTableName: creditTableName
   }
   modelAliases: modelAliases
+  creditGroupReserves: creditGroupReserves
   ingressIpSecurityRestrictions: ingressIpSecurityRestrictions
   minCreditReserveUsd: minCreditReserveUsd
   minCreditReservePercent: minCreditReservePercent

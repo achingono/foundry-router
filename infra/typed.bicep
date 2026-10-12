@@ -105,6 +105,9 @@ param alertEmailAddress string
 @description('Optional logical model aliases as an object mapping alias names to canonical model IDs.')
 param modelAliases object = {}
 
+@description('Optional per-credit-group reserve overrides; absent groups inherit app-wide reserves.')
+param creditGroupReserves object = {}
+
 @description('Ingress IP restrictions preserved during deployment. An empty array removes all IP restrictions.')
 param ingressIpSecurityRestrictions IngressIpSecurityRestriction[] = []
 
@@ -137,6 +140,7 @@ module deployment './main.bicep' = {
     storageResourceGroupName: state.backend == 'table' ? (state.account.mode == 'existing' ? state.account.resourceGroup : resourceGroup().name) : resourceGroup().name
     tablePrefix: state.backend == 'table' ? (state.?tablePrefix ?? tablePrefix) : tablePrefix
     modelAliases: modelAliases
+    creditGroupReserves: creditGroupReserves
     ingressIpSecurityRestrictions: ingressIpSecurityRestrictions
     imageRepository: imageRepository
     imageTag: imageTag

@@ -2,12 +2,49 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 
 from foundry_router.auth import verify_admin_auth
 from foundry_router.credit_groups import credit_membership, metered_credit_groups
+
+
+async def _credit_snapshots_by_policy(
+    settings: Any, credit_store: Any, groups: list[str]
+) -> dict[str, Any]:
+    """Read each distinct effective reserve policy once, then merge.
+
+    Groups sharing a policy are read together under one common timestamp.
+    A failed read fails the diagnostic request; no partial balances merge.
+    """
+    now = datetime.now(UTC)
+    subsets: dict[tuple[float, float], list[str]] = {}
+    for group in groups:
+        policy = settings.resolve_reserve_policy(group)
+        key = (policy.min_credit_reserve_usd, policy.min_credit_reserve_percent)
+        subsets.setdefault(key, []).append(group)
+    merged: dict[str, Any] = {}
+    for (reserve_usd, reserve_percent), subset in subsets.items():
+        snapshots = await credit_store.live_snapshot(
+            subset,
+            min_credit_reserve_usd=reserve_usd,
+            min_credit_reserve_percent=reserve_percent,
+            now_utc=now,
+        )
+        merged.update(snapshots)
+    return merged
+
+
+def _reserve_policy_view(settings: Any, group: str) -> dict[str, Any]:
+    """Effective reserve pair and provenance for one canonical metered group."""
+    policy = settings.resolve_reserve_policy(group)
+    return {
+        "min_credit_reserve_usd": policy.min_credit_reserve_usd,
+        "min_credit_reserve_percent": policy.min_credit_reserve_percent,
+        "source": "override" if group in settings.credit_group_reserves else "inherited",
+    }
 
 
 async def _rate_limit_snapshots_by_backend(settings: Any, rate_limit_store: Any) -> dict[str, Any]:
@@ -159,11 +196,7 @@ def build_router(
         await credit_store.sync_from_settings(settings)
         aliases = credit_membership(settings)
         groups = sorted(metered_credit_groups(settings))
-        credit_snapshots = await credit_store.live_snapshot(
-            groups,
-            min_credit_reserve_usd=settings.min_credit_reserve_usd,
-            min_credit_reserve_percent=settings.min_credit_reserve_percent,
-        )
+        credit_snapshots = await _credit_snapshots_by_policy(settings, credit_store, groups)
         rate_limit_snapshots = await _rate_limit_snapshots_by_backend(settings, rate_limit_store)
 
         return {
@@ -175,6 +208,7 @@ def build_router(
                     "initial_estimated_remaining_usd": settings.backend_initial_estimated_remaining_usd.get(
                         group
                     ),
+                    "reserve_policy": _reserve_policy_view(settings, group),
                     "live": {
                         "credit_state": snapshot.state,
                         "available_credit_usd": snapshot.available_credit_usd,
@@ -230,10 +264,8 @@ def build_router(
         health_snapshots = await health_store.snapshot_backend_health(backend_ids)
         await credit_store.sync_from_settings(settings)
         aliases = credit_membership(settings)
-        credit_snapshots = await credit_store.live_snapshot(
-            sorted(metered_credit_groups(settings)),
-            min_credit_reserve_usd=settings.min_credit_reserve_usd,
-            min_credit_reserve_percent=settings.min_credit_reserve_percent,
+        credit_snapshots = await _credit_snapshots_by_policy(
+            settings, credit_store, sorted(metered_credit_groups(settings))
         )
         rate_limit_snapshots = await _rate_limit_snapshots_by_backend(settings, rate_limit_store)
         payload = await metrics_store.render_prometheus(

@@ -26,8 +26,13 @@ from foundry_router.config.google_state import (
     GoogleStateKeys,
     parse_state_keys,
 )
+from foundry_router.config.group_reserves import GroupReservePolicy, parse_group_reserves
 from foundry_router.config.model_aliases import parse_model_aliases
-from foundry_router.credit_groups import credit_membership, validate_credit_group
+from foundry_router.credit_groups import (
+    credit_membership,
+    metered_credit_groups,
+    validate_credit_group,
+)
 
 MAX_COMPATIBLE_MODEL_BYTES = 512
 MAX_TABLE_QUOTA_AGE_SECONDS = 3600
@@ -390,6 +395,16 @@ class Settings(BaseSettings):
         validation_alias="FOUNDRY_MIN_CREDIT_RESERVE_PERCENT",
     )
 
+    # Per-credit-group reserve overrides (JSON string)
+    credit_group_reserves_json: str = Field(
+        default="{}",
+        validation_alias="FOUNDRY_CREDIT_GROUP_RESERVES_JSON",
+        description=(
+            "Optional JSON object mapping canonical metered credit groups to "
+            "{min_credit_reserve_usd, min_credit_reserve_percent} pairs"
+        ),
+    )
+
     # Retry policy
     retry_attempts: Annotated[int, Field(ge=0, le=10)] = Field(
         default=2,
@@ -578,6 +593,10 @@ class Settings(BaseSettings):
         exclude=True,
     )
     reconciliation_overrides_usd: dict[str, float] = Field(default_factory=dict, exclude=True)
+    credit_group_reserves: dict[str, GroupReservePolicy] = Field(
+        default_factory=dict,
+        exclude=True,
+    )
 
     @field_validator("google_state_keys_json")
     @classmethod
@@ -964,6 +983,16 @@ class Settings(BaseSettings):
                 )
             self.reconciliation_overrides_usd[backend_id] = amount_float
 
+        # Parse per-credit-group reserve overrides (absent groups inherit app-wide)
+        membership = credit_membership(self)
+        metered_groups = metered_credit_groups(self)
+        non_metered_groups = set(membership.values()) - metered_groups
+        self.credit_group_reserves = parse_group_reserves(
+            self.credit_group_reserves_json,
+            metered_groups,
+            non_metered_groups,
+        )
+
         # Phase 11: conditional state-backend validation (memory ignores storage fields
         # so existing Settings(...) fixtures keep passing).
         if self.state_backend == "table" or self.rate_limit_backend == "table":
@@ -1068,6 +1097,24 @@ class Settings(BaseSettings):
             if backend.endpoint.host:
                 hostnames.add(backend.endpoint.host)
         return hostnames
+
+    def resolve_reserve_policy(self, credit_group: str) -> GroupReservePolicy:
+        """Resolve the effective reserve pair for one canonical metered group.
+
+        Unknown IDs never silently inherit the app-wide settings.
+        """
+        policy = self.credit_group_reserves.get(credit_group)
+        if policy is not None:
+            return policy
+        membership = credit_membership(self)
+        if credit_group not in set(membership.values()):
+            raise ValueError("Unknown credit group has no reserve policy")
+        if credit_group not in metered_credit_groups(self):
+            raise ValueError("Non-metered credit group has no reserve policy")
+        return GroupReservePolicy(
+            min_credit_reserve_usd=float(self.min_credit_reserve_usd),
+            min_credit_reserve_percent=float(self.min_credit_reserve_percent),
+        )
 
 
 @lru_cache(maxsize=1)

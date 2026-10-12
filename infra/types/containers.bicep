@@ -76,6 +76,7 @@ type RouterConfig = {
   registry: RouterRegistryConfig
   state: RouterStateConfig
   modelAliases: object
+  creditGroupReserves: object?
   ingressIpSecurityRestrictions: IngressIpSecurityRestriction[]
   @minValue(0)
   @maxValue(10)

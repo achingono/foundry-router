@@ -73,11 +73,18 @@ def backend_fingerprint(settings: Settings, backend_id: str, model: str) -> str:
     value["pricing"] = pricing.model_dump(mode="json") if pricing is not None else None
     value["quota_limits"] = settings.quota_group_rate_limits.get(backend.quota_group or "", {})
     value["quota_replica_share"] = settings.rate_limit_replica_share
+    if backend.credit_metered:
+        group_policy = settings.resolve_reserve_policy(backend.credit_group or backend_id)
+        reserve_usd = group_policy.min_credit_reserve_usd
+        reserve_percent = group_policy.min_credit_reserve_percent
+    else:
+        reserve_usd = settings.min_credit_reserve_usd
+        reserve_percent = settings.min_credit_reserve_percent
     value["credit_policy"] = {
         "cycle_start": settings.backend_cycle_start_day.get(backend.credit_group or ""),
         "cycle_allowance": settings.backend_cycle_allowance_usd.get(backend.credit_group or ""),
-        "reserve_usd": settings.min_credit_reserve_usd,
-        "reserve_percent": settings.min_credit_reserve_percent,
+        "reserve_usd": reserve_usd,
+        "reserve_percent": reserve_percent,
     }
     return framed_digest("context", value, max_bytes=131072)
 
