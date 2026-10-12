@@ -2,9 +2,10 @@
 
 **Partially implemented.** Harness and amendment reviews are recorded in the
 [evidence](evidence.md), alongside historical Zen success, OpenRouter halts and
-direct-probe outcomes. The three fresh OpenRouter reruns remain **Planned**;
-their [independent review gate](review-openrouter-reruns-3322f30.md) is cleared.
-Offline verification does not establish live compatibility for those reruns.
+direct-probe outcomes. The three OpenRouter reruns passed nonstreaming and
+halted on streaming, as recorded in the evidence. Streaming direct probes remain
+**Planned**; their [independent review](review-streaming-probe-5e95aea.md) found
+three open Majors, so the live-dispatch gate is not cleared.
 
 ## Companion documents
 
@@ -17,9 +18,10 @@ Offline verification does not establish live compatibility for those reruns.
 - [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Direct-probe amendment (Planned live diagnosis; independent review gate cleared)](amendment-direct-probe.md)
-- [Streaming-probe amendment (proposed, pending review)](amendment-streaming-probe.md)
+- [Streaming-probe amendment (Planned; review gate not cleared)](amendment-streaming-probe.md)
 - [Reasoning-tolerance amendment (Implemented locally; independent review gate cleared)](amendment-reasoning-tolerance.md)
 - [Rerun amendment (Planned live verification; independent review gate cleared)](amendment-openrouter-reruns.md)
+- [Independent streaming-probe commit review](review-streaming-probe-5e95aea.md)
 - [Independent OpenRouter rerun commit review](review-openrouter-reruns-3322f30.md)
 - [Independent reasoning-tolerance commit review](review-reasoning-tolerance-df2c22f.md)
 - [Independent direct-probe commit review](review-direct-probe-607da09.md)
