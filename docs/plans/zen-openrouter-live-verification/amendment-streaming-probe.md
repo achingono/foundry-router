@@ -1,12 +1,14 @@
 # Amendment: streaming direct probes
 
 Date: 2026-10-11. Status: **Planned** live diagnosis; independent review
-gate **not cleared**. No live dispatches under this amendment yet.
+gate **cleared** for the three fixed streaming probes. No live dispatches
+under this amendment yet.
 
-The [independent review of 5e95aea](review-streaming-probe-5e95aea.md) found
-three open Majors: compatibility with prior results (SP-1), SSE evidence
-classification (SP-2), and chunk-dependent frame bounds (SP-3). Fixes and
-independent re-review are required before live dispatch.
+The [follow-up review of 0addac3](review-streaming-probe-5e95aea.md#follow-up-review-of-0addac3)
+closed all three initial Majors: compatibility with prior results (SP-1), SSE
+evidence classification (SP-2), and chunk-dependent frame bounds (SP-3). The
+existing reservation, no-replay, credential and response-bound gates remain
+in force; historical outcomes and halted router runs stay preserved.
 
 ## Background
 
@@ -43,7 +45,7 @@ guessing.
 ## Exit criteria delta
 
 - [x] Independent review of this amendment and the streaming probe code recorded.
-- [ ] SP-1, SP-2 and SP-3 resolved and independently re-reviewed; dispatch gate cleared.
+- [x] SP-1, SP-2 and SP-3 resolved and independently re-reviewed; dispatch gate cleared.
 - [ ] Each model streamed at most once with structural evidence and no content,
       secret, or credential bytes recorded.
 - [ ] Diagnosis recorded: reasoning deltas vs missing terminal usage, with any

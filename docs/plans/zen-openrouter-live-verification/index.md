@@ -4,8 +4,9 @@
 [evidence](evidence.md), alongside historical Zen success, OpenRouter halts and
 direct-probe outcomes. The three OpenRouter reruns passed nonstreaming and
 halted on streaming, as recorded in the evidence. Streaming direct probes remain
-**Planned**; their [independent review](review-streaming-probe-5e95aea.md) found
-three open Majors, so the live-dispatch gate is not cleared.
+**Planned**; their [follow-up review](review-streaming-probe-5e95aea.md#follow-up-review-of-0addac3)
+closed all three findings and cleared the independent review gate for the three
+fixed probes. Offline review does not establish a live streaming outcome.
 
 ## Companion documents
 
@@ -18,7 +19,7 @@ three open Majors, so the live-dispatch gate is not cleared.
 - [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Direct-probe amendment (Planned live diagnosis; independent review gate cleared)](amendment-direct-probe.md)
-- [Streaming-probe amendment (Planned; review gate not cleared)](amendment-streaming-probe.md)
+- [Streaming-probe amendment (Planned; independent review gate cleared)](amendment-streaming-probe.md)
 - [Reasoning-tolerance amendment (Implemented locally; independent review gate cleared)](amendment-reasoning-tolerance.md)
 - [Rerun amendment (Planned live verification; independent review gate cleared)](amendment-openrouter-reruns.md)
 - [Independent streaming-probe commit review](review-streaming-probe-5e95aea.md)

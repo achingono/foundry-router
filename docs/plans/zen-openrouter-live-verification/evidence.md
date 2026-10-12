@@ -3,7 +3,8 @@
 Live verification is **Partially implemented**: the historical outcomes below
 include Zen success, OpenRouter nonstreaming rerun success, streaming halts and
 completed nonstream direct probes. Streaming direct probes remain **Planned**,
-with three open Major review findings and the live-dispatch gate not cleared.
+with all three Major review findings closed and the independent review gate
+cleared for the three fixed probes.
 Historical attempts and halts are retained separately. Offline harness
 verification does not establish live compatibility or provider billing.
 
@@ -54,4 +55,5 @@ verification does not establish live compatibility or provider billing.
 | Direct-probe final follow-up (2026-10-11) | [Review of 8164ead](review-direct-probe-607da09.md#final-follow-up-review-of-8164ead) | DP-1/DP-3 closed; DP-2 remains closed. 27 tests passed; independent deleted-state, pre-header timeout, unexpected-root and oversized-outcome probes passed offline. Independent review gate cleared; no live traffic sent |
 | Reasoning-tolerance review (2026-10-11) | [Independent review of df2c22f](review-reasoning-tolerance-df2c22f.md) | Local implementation review gate cleared: no Critical/Major findings; two non-blocking diagnostic/exception Suggestions. 135 focused/regression tests passed, plus independent fragmented-stream equivalence and rejection probes. No live reruns; new reviewed identities required for halted OpenRouter cases |
 | Rerun amendment review (2026-10-11) | [Independent review of 3322f30 and 5f00cb1](review-openrouter-reruns-3322f30.md) | No Critical/Major findings; review gate cleared for the three committed manifests. 140 tests passed; all three null-reasoning pairs, replay/isolation and independent-halt probes passed offline; 18 manifest mutations refused before ledger creation/transport. No live dispatches sent |
-| Streaming-probe review (2026-10-11) | [Independent review of 5e95aea](review-streaming-probe-5e95aea.md) | Gate not cleared: three Majors on legacy result compatibility, SSE evidence classification and chunk-dependent frame bounds. 33 probe tests plus 140 harness/translation tests passed; independent offline reproductions confirmed all three gaps. No live dispatches sent |
+| Streaming-probe review (2026-10-11) | [Independent review of 5e95aea](review-streaming-probe-5e95aea.md) | Initial review: three Majors on legacy result compatibility, SSE evidence classification and chunk-dependent frame bounds, subsequently closed below. 33 probe tests plus 140 harness/translation tests passed; independent offline reproductions confirmed all three gaps. No live dispatches sent |
+| Streaming-probe follow-up (2026-10-11) | [Independent review of 0addac3](review-streaming-probe-5e95aea.md#follow-up-review-of-0addac3) | SP-1/SP-2/SP-3 closed; independent review gate cleared for three fixed stream probes. 41 probe tests passed, plus independent legacy resume/replay, six state mutations, termination/malformed-data and chunking/bound checks. No live requests sent |
