@@ -78,7 +78,7 @@ class FakeApp(httpx.AsyncBaseTransport):
                     "provider": config["provider"],
                     "deployment": config["deployment"],
                     "credit_group": config["credit_group"],
-                    "supported_operations": ["responses"],
+                    "supported_operations": config.get("supported_operations", ["responses"]),
                     "live": {},
                 }
                 for backend_id, config in self.backends.items()
@@ -1310,6 +1310,18 @@ def test_roster_backend_id_change_halts(tmp_path):
     app = roster_app(
         manifest,
         rebind_after_first={pool: {"backend_id": "backend-swap"}},
+    )
+    results = run_roster(tmp_path, manifest, app)
+    assert results["attempts"][0]["status"] == "failed"
+    assert len(app.calls) == 1
+
+
+def test_roster_operation_change_halts(tmp_path):
+    manifest = roster_manifest()
+    pool = manifest["cases"][0]["pool"]
+    app = roster_app(
+        manifest,
+        rebind_after_first={pool: {"supported_operations": ["responses", "embeddings"]}},
     )
     results = run_roster(tmp_path, manifest, app)
     assert results["attempts"][0]["status"] == "failed"
