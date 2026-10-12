@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "run": "production-zen-openrouter-2026-10-11",
+  "environment": "production",
+  "prompt": "Reply with the word ready.",
+  "max_output_tokens": 128,
+  "case_timeout_seconds": 120,
+  "max_response_bytes": 1048576,
+  "max_frame_bytes": 262144,
+  "allowance_usd": 0.01,
+  "cases": [
+    {
+      "id": "production-zen-nonstream",
+      "pool": "gpt-5.4-mini-zen",
+      "operation": "responses",
+      "stream": false,
+      "provider": "opencode_zen",
+      "deployment": "gpt-5.4-mini",
+      "input_per_million": 0.75,
+      "output_per_million": 4.5
+    },
+    {
+      "id": "production-zen-stream",
+      "pool": "gpt-5.4-mini-zen",
+      "operation": "responses",
+      "stream": true,
+      "provider": "opencode_zen",
+      "deployment": "gpt-5.4-mini",
+      "input_per_million": 0.75,
+      "output_per_million": 4.5
+    }
+  ]
+}

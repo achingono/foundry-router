@@ -12,4 +12,5 @@ implementation/preparation checks and execution approvals remain pending.
 | Review verification | Repository source and canonical docs | Checked backend capabilities, translated-stream failure behavior, credit ownership, memory handoff and template secret binding; no tests or live requests needed for this documentation review |
 | Documentation checks | Revised plan | Relative links, whitespace and final diff checked |
 | Release and execution prerequisites | [Exit criteria](exit-criteria.md) | Actual environment baseline, image, secret-selection mechanism, maintenance, manifests/harness and operator approvals pending |
-| Staging/production changes | None by reviewer | No credentials retrieved, secrets changed, revisions deployed, ingress changed or historical ledgers accessed |
+| Staging harness | `scripts/quality/staging_validation.py`, `tests/unit/test_staging_validation.py` | 21 offline checks: manifest/allowance binding, full pass with settlement reconciliation, halt/replay/corruption guards, usage caps, cleanup, production gating, setup-error blocking, redaction |
+| Staging/production changes | None | No secrets provisioned; no revisions deployed; harness review and execution gates open |
