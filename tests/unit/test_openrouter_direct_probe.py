@@ -165,11 +165,13 @@ def test_execute_runs_each_model_once_and_never_replays(tmp_path, monkeypatch):
         return FakeUpstream(handler)
 
     results = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
-    assert [item["probe_id"] for item in results["attempts"]] == [p for p, _ in probe.PROBES]
-    assert len(calls) == 3
+    assert [item["probe_id"] for item in results["attempts"]] == [
+        p for p, _ in (*probe.PROBES, *probe.STREAM_PROBES)
+    ]
+    assert len(calls) == 6
     rerun = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
-    assert len(rerun["attempts"]) == 3
-    assert len(calls) == 3
+    assert len(rerun["attempts"]) == 6
+    assert len(calls) == 6
     dumped = (tmp_path / "results-probe.json").read_text()
     assert "synthetic-key" not in dumped
     assert "ready" not in dumped
@@ -352,11 +354,11 @@ def test_deleted_results_after_init_refuses(tmp_path, monkeypatch):
         return FakeUpstream(handler)
 
     probe.execute_probes(credential="synthetic-key", transport_factory=factory)
-    assert len(calls) == 3
+    assert len(calls) == 6
     (tmp_path / "results-probe.json").unlink()
     with pytest.raises(ValueError):
         probe.execute_probes(credential="synthetic-key", transport_factory=factory)
-    assert len(calls) == 3
+    assert len(calls) == 6
 
 
 def test_deleted_identity_refuses(tmp_path, monkeypatch):
@@ -412,3 +414,124 @@ def test_oversized_envelope_write_blocked(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         probe.execute_probes(credential="synthetic-key", transport_factory=factory)
     assert len(calls) == 1
+
+
+def stream_transport(frames):
+    async def handler(_request):
+        async def chunks():
+            for frame in frames:
+                yield frame
+
+        return httpx.Response(200, content=chunks())
+
+    return FakeUpstream(handler)
+
+
+def sse(*events):
+    return b"".join(event + b"\n\n" for event in events)
+
+
+async def test_stream_reasoning_deltas_classified_without_values():
+    frames = [
+        sse(b'data: {"choices":[{"delta":{"role":"assistant"}}]}'),
+        sse(b'data: {"choices":[{"delta":{"reasoning":"synthetic-secret-thoughts"}}]}'),
+        sse(b'data: {"choices":[{"delta":{"content":"ready"},"finish_reason":"stop"}]}'),
+        sse(
+            b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+        ),
+        b"data: [DONE]\n\n",
+    ]
+    transport = stream_transport(frames)
+    result = await probe.run_stream_probe(
+        "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+    )
+    assert result["kind"] == "stream"
+    assert result["dispatched"] is True
+    assert result["error_category"] is None
+    structure = result["structure"]
+    assert structure["reasoning_delta_seen"] is True
+    assert structure["reasoning_delta_bytes"] == len(b"synthetic-secret-thoughts")
+    assert structure["text_delta_bytes"] == len(b"ready")
+    assert structure["done_seen"] is True
+    assert structure["truncated"] is False
+    assert structure["usage_valid"] is True
+    assert structure["finish_reasons"] == ["stop"]
+    assert b"synthetic-secret-thoughts" not in json.dumps(result).encode()
+
+
+async def test_stream_truncation_flagged():
+    frames = [
+        sse(b'data: {"choices":[{"delta":{"content":"partial"}}]}'),
+        b'data: {"choices":[{"delta":{"content":"cut',
+    ]
+    transport = stream_transport(frames)
+    result = await probe.run_stream_probe(
+        "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+    )
+    assert result["structure"]["truncated"] is True
+    assert result["structure"]["done_seen"] is False
+
+
+async def test_stream_missing_done_without_truncation():
+    frames = [
+        sse(b'data: {"choices":[{"delta":{"content":"ready"},"finish_reason":"stop"}]}'),
+        sse(
+            b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}'
+        ),
+    ]
+    transport = stream_transport(frames)
+    result = await probe.run_stream_probe(
+        "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+    )
+    assert result["structure"]["done_seen"] is False
+    assert result["structure"]["truncated"] is False
+    assert result["structure"]["usage_valid"] is True
+
+
+async def test_stream_oversized_terminates_early(monkeypatch):
+    yielded = []
+
+    async def handler(_request):
+        async def chunks():
+            for _ in range(10):
+                yielded.append(1)
+                yield b"x" * 16
+
+        return httpx.Response(200, content=chunks())
+
+    transport = FakeUpstream(handler)
+    monkeypatch.setattr(probe, "MAX_BODY_BYTES", 32)
+    result = await probe.run_stream_probe(
+        "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+    )
+    assert result["error_category"] == "response_bound_exceeded"
+    assert len(yielded) < 10
+
+
+async def test_stream_model_binding_mismatch_rejected():
+    transport = stream_transport([])
+    with pytest.raises(ValueError):
+        await probe.run_stream_probe("probe-gemma-stream", "other/model", "k", transport)
+    assert transport.calls == 0
+
+
+def test_execute_covers_streams_without_replay(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    calls = []
+
+    def factory():
+        async def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, content=json.dumps(envelope()).encode())
+
+        return FakeUpstream(handler)
+
+    results = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(results["attempts"]) == 6
+    kinds = {item["probe_id"]: item["kind"] for item in results["attempts"]}
+    assert kinds["probe-openai"] == "nonstream"
+    assert kinds["probe-openai-stream"] == "stream"
+    assert len(calls) == 6
+    rerun = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(rerun["attempts"]) == 6
+    assert len(calls) == 6

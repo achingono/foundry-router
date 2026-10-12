@@ -17,6 +17,7 @@ Offline verification does not establish live compatibility for those reruns.
 - [OpenRouter-only amendment (proposed, pending review)](amendment-openrouter.md)
 - [Paid-models amendment (Planned live verification; independent review gate cleared)](amendment-paid-models.md)
 - [Direct-probe amendment (Planned live diagnosis; independent review gate cleared)](amendment-direct-probe.md)
+- [Streaming-probe amendment (proposed, pending review)](amendment-streaming-probe.md)
 - [Reasoning-tolerance amendment (Implemented locally; independent review gate cleared)](amendment-reasoning-tolerance.md)
 - [Rerun amendment (Planned live verification; independent review gate cleared)](amendment-openrouter-reruns.md)
 - [Independent OpenRouter rerun commit review](review-openrouter-reruns-3322f30.md)

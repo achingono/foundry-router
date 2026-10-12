@@ -36,6 +36,7 @@ PROMPT = "Reply with the word ready."
 MAX_COMPLETION_TOKENS = 128
 PROBE_TIMEOUT_SECONDS = 120
 MAX_BODY_BYTES = 1024 * 1024
+MAX_FRAME_BYTES = 256 * 1024
 MAX_REQUEST_BYTES = 4096
 
 PROBES: tuple[tuple[str, str], ...] = (
@@ -43,6 +44,16 @@ PROBES: tuple[tuple[str, str], ...] = (
     ("probe-openai", "openai/gpt-4o-mini"),
     ("probe-anthropic", "anthropic/claude-haiku-4.5"),
 )
+
+STREAM_PROBES: tuple[tuple[str, str], ...] = (
+    ("probe-gemma-stream", "google/gemma-4-26b-a4b-it:free"),
+    ("probe-openai-stream", "openai/gpt-4o-mini"),
+    ("probe-anthropic-stream", "anthropic/claude-haiku-4.5"),
+)
+
+ALL_PROBE_IDS = {probe for probe, _ in (*PROBES, *STREAM_PROBES)}
+PROBE_MODELS = dict((*PROBES, *STREAM_PROBES))
+MAX_STREAM_EVENTS = 4096
 
 CONTENT_KINDS = {
     "missing",
@@ -209,11 +220,10 @@ def classify_envelope(payload: Any) -> dict[str, Any]:  # noqa: PLR0911, PLR0912
     return summary
 
 
-PROBE_MODELS = dict(PROBES)
-
 RESULT_KEYS = {
     "probe_id",
     "model",
+    "kind",
     "http_status",
     "dispatched",
     "elapsed_seconds",
@@ -273,8 +283,15 @@ def validate_probe_result(result: Any) -> None:  # noqa: PLR0912 -- bounded evid
         ERROR_CATEGORIES | {None}
     ):
         raise ValueError("Invalid probe error category")
+    if result.get("kind") not in {"nonstream", "stream"}:
+        raise ValueError("Invalid probe kind")
     structure = result.get("structure")
     if structure is None:
+        return
+    if result["kind"] == "stream":
+        _validate_stream_structure(structure)
+        if len(json.dumps(result).encode("utf-8")) > MAX_ATTEMPT_BYTES:
+            raise ValueError("Invalid probe result size")
         return
     if not isinstance(structure, dict) or set(structure) != STRUCTURE_KEYS:
         raise ValueError("Invalid probe structure")
@@ -317,8 +334,188 @@ def validate_probe_result(result: Any) -> None:  # noqa: PLR0912 -- bounded evid
         raise ValueError("Invalid probe result size")
 
 
+def _validate_stream_structure(structure: Any) -> None:
+    if not isinstance(structure, dict) or set(structure) != STRUCTURE_STREAM_KEYS:
+        raise ValueError("Invalid probe structure")
+    if (
+        type(structure.get("event_count")) is not int
+        or not 0 <= structure["event_count"] <= MAX_STREAM_EVENTS
+    ):
+        raise ValueError("Invalid probe event count")
+    key_sets = structure.get("delta_key_sets")
+    if (
+        not isinstance(key_sets, list)
+        or len(key_sets) > MAX_STREAM_EVENTS
+        or any(
+            not isinstance(entry, list)
+            or len(entry) > MAX_FIELD_NAMES
+            or any(
+                not isinstance(name, str)
+                or len(name.encode("utf-8", "ignore")) > MAX_FIELD_NAME_BYTES
+                for name in entry
+            )
+            for entry in key_sets
+        )
+    ):
+        raise ValueError("Invalid probe delta keys")
+    if type(structure.get("reasoning_delta_seen")) is not bool:
+        raise ValueError("Invalid probe reasoning flag")
+    for name in ("reasoning_delta_bytes", "text_delta_bytes"):
+        value = structure.get(name)
+        if type(value) is not int or not 0 <= value <= MAX_BODY_BYTES:
+            raise ValueError("Invalid probe delta bytes")
+    reasons = structure.get("finish_reasons")
+    if (
+        not isinstance(reasons, list)
+        or len(reasons) > MAX_STREAM_EVENTS
+        or any(reason not in FINISH_REASONS for reason in reasons)
+    ):
+        raise ValueError("Invalid probe finish reasons")
+    for name in ("unexpected_finish_seen", "done_seen", "truncated"):
+        if type(structure.get(name)) is not bool:
+            raise ValueError("Invalid probe stream flag")
+    usage = structure.get("usage")
+    if usage is not None and (
+        not isinstance(usage, dict)
+        or set(usage) != {"prompt_tokens", "completion_tokens", "total_tokens"}
+        or any(type(usage[name]) is not int or usage[name] < 0 for name in usage)
+    ):
+        raise ValueError("Invalid probe usage")
+    if (
+        type(structure.get("usage_valid")) is not bool
+        or type(structure.get("metadata_valid")) is not bool
+    ):
+        raise ValueError("Invalid probe validity flags")
+
+
+STRUCTURE_STREAM_KEYS = {
+    "event_count",
+    "delta_key_sets",
+    "reasoning_delta_seen",
+    "reasoning_delta_bytes",
+    "text_delta_bytes",
+    "finish_reasons",
+    "unexpected_finish_seen",
+    "done_seen",
+    "truncated",
+    "usage",
+    "usage_valid",
+    "metadata_valid",
+}
+
+
+def _split_sse_frame(buffer: bytes) -> tuple[bytes | None, bytes]:
+    """Earliest event boundary; same semantics as the router's splitter."""
+    candidates = [(buffer.find(d), d) for d in (b"\r\n\r\n", b"\n\n")]
+    found = [(index, delimiter) for index, delimiter in candidates if index >= 0]
+    if not found:
+        return None, buffer
+    index, delimiter = min(found)
+    return buffer[: index + len(delimiter)], buffer[index + len(delimiter) :]
+
+
+def _stream_event_payload(frame: bytes) -> dict[str, Any] | None:
+    """One parsed data event, or None for keepalives, [DONE], and malformed frames."""
+    text = frame.decode("utf-8", "ignore")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            event = load_bounded_json(data, max_bytes=MAX_FRAME_BYTES)
+        except (ValueError, TypeError):
+            return None
+        if isinstance(event, dict):
+            return event
+    return None
+
+
 def _serialized_size(data: Any) -> int:
     return len(json.dumps(data).encode("utf-8"))
+
+
+def _check_envelope_size(data: Any) -> None:
+    if _serialized_size(data) > MAX_RESULTS_BYTES:
+        raise ValueError("Probe record exceeds bound")
+
+
+def new_stream_state() -> dict[str, Any]:
+    return {
+        "event_count": 0,
+        "delta_key_sets": [],
+        "reasoning_delta_seen": False,
+        "reasoning_delta_bytes": 0,
+        "text_delta_bytes": 0,
+        "finish_reasons": [],
+        "unexpected_finish_seen": False,
+        "done_seen": False,
+        "truncated": False,
+        "usage": None,
+        "usage_valid": False,
+        "metadata_valid": True,
+    }
+
+
+def classify_stream_frame(frame: bytes, state: dict[str, Any]) -> None:  # noqa: PLR0912 -- fixed per-frame checklist
+    """Fold one raw frame into structural stream state; values never retained."""
+    if len(frame) > MAX_FRAME_BYTES:
+        state["metadata_valid"] = False
+        return
+    text = frame.decode("utf-8", "ignore")
+    if "[DONE]" in text:
+        state["done_seen"] = True
+    event = _stream_event_payload(frame)
+    if event is None:
+        return
+    if state["event_count"] >= MAX_STREAM_EVENTS:
+        state["metadata_valid"] = False
+        return
+    state["event_count"] += 1
+    choices = event.get("choices")
+    choice = choices[0] if isinstance(choices, list) and len(choices) == 1 else None
+    usage = event.get("usage")
+    if usage is not None:
+        counts = _strict_ints(usage, "prompt_tokens", "completion_tokens", "total_tokens")
+        if counts is None:
+            state["metadata_valid"] = False
+        else:
+            state["usage"] = {
+                "prompt_tokens": counts[0],
+                "completion_tokens": counts[1],
+                "total_tokens": counts[2],
+            }
+            state["usage_valid"] = counts[2] == counts[0] + counts[1]
+    if not isinstance(choice, dict):
+        if choices:
+            state["metadata_valid"] = False
+        return
+    delta = choice.get("delta")
+    if isinstance(delta, dict):
+        names, ok = _bounded_names(sorted(str(key) for key in delta))
+        if not ok:
+            state["metadata_valid"] = False
+        elif names not in state["delta_key_sets"]:
+            state["delta_key_sets"].append(names)
+        reasoning = delta.get("reasoning")
+        if isinstance(reasoning, str):
+            state["reasoning_delta_seen"] = True
+            state["reasoning_delta_bytes"] += len(reasoning.encode("utf-8", "ignore"))
+        content = delta.get("content")
+        if isinstance(content, str):
+            state["text_delta_bytes"] += len(content.encode("utf-8", "ignore"))
+    finish = choice.get("finish_reason")
+    if finish is None:
+        pass
+    elif isinstance(finish, str) and finish in FINISH_REASONS:
+        if finish not in state["finish_reasons"]:
+            state["finish_reasons"].append(finish)
+    elif isinstance(finish, str):
+        state["unexpected_finish_seen"] = True
+    else:
+        state["metadata_valid"] = False
 
 
 def _check_envelope_size(data: Any) -> None:
@@ -343,7 +540,7 @@ def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
         raise ValueError("Invalid probe results")
     _check_envelope_size(data)
     seen = set()
-    allowed = {probe for probe, _ in PROBES}
+    allowed = {probe for probe, _ in (*PROBES, *STREAM_PROBES)}
     reserved = data["reserved"]
     if any(probe not in allowed for probe in reserved) or len(set(reserved)) != len(reserved):
         raise ValueError("Invalid probe reservations")
@@ -411,6 +608,7 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
     result: dict[str, Any] = {
         "probe_id": probe_id,
         "model": model,
+        "kind": "nonstream",
         "http_status": None,
         "dispatched": False,
         "elapsed_seconds": 0.0,
@@ -475,6 +673,93 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
     return finish(None)
 
 
+def build_stream_body(model: str) -> dict[str, Any]:
+    body = build_body(model)
+    body["stream"] = True
+    body["stream_options"] = {"include_usage": True}
+    return body
+
+
+async def run_stream_probe(  # noqa: PLR0911, PLR0912 -- fixed outcome checklist
+    probe_id: str, model: str, credential: str, transport: httpx.AsyncBaseTransport
+) -> dict[str, Any]:
+    """One bounded direct stream; returns structural evidence only."""
+    if PROBE_MODELS.get(probe_id) != model:
+        raise ValueError("Probe/model binding mismatch")
+    started = time.monotonic()
+    result: dict[str, Any] = {
+        "probe_id": probe_id,
+        "model": model,
+        "kind": "stream",
+        "http_status": None,
+        "dispatched": False,
+        "elapsed_seconds": 0.0,
+        "structure": None,
+        "error_category": None,
+    }
+
+    def finish(category: str | None) -> dict[str, Any]:
+        result["error_category"] = category
+        result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        validate_probe_result(result)
+        return result
+
+    body = build_stream_body(model)
+    raw_body = json.dumps(body).encode()
+    if len(raw_body) > MAX_REQUEST_BYTES:
+        return finish("request_bound_exceeded")
+    marker = _EntryMarker(transport)
+    state = new_stream_state()
+    try:
+        async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient(
+                transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
+            ) as client:
+                async with client.stream(
+                    "POST",
+                    PROBE_URL,
+                    headers={
+                        "authorization": "Bearer " + credential,
+                        "accept-encoding": "identity",
+                        "content-type": "application/json",
+                    },
+                    content=raw_body,
+                ) as response:
+                    result["dispatched"] = True
+                    result["http_status"] = response.status_code
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        return finish("encoded_response")
+                    if response.status_code != HTTPStatus.OK:
+                        return finish(None)
+                    observed = 0
+                    pending = bytearray()
+                    try:
+                        async for chunk in response.aiter_bytes():
+                            observed += len(chunk)
+                            if observed > MAX_BODY_BYTES:
+                                return finish("response_bound_exceeded")
+                            pending.extend(chunk)
+                            if len(pending) > MAX_FRAME_BYTES:
+                                return finish("response_bound_exceeded")
+                            while True:
+                                event, rest = _split_sse_frame(bytes(pending))
+                                if event is None:
+                                    break
+                                pending = bytearray(rest)
+                                if len(event) > MAX_FRAME_BYTES:
+                                    return finish("response_bound_exceeded")
+                                classify_stream_frame(event, state)
+                    except (OSError, RuntimeError, httpx.HTTPError, ValueError):
+                        return finish("transport_failure")
+                    if pending.strip():
+                        state["truncated"] = True
+    except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError):
+        result["dispatched"] = marker.entered
+        return finish("transport_failure")
+    result["structure"] = state
+    return finish(None)
+
+
 def execute_probes(
     *,
     stage_dir: Path | None = None,
@@ -494,7 +779,7 @@ def execute_probes(
         factory = transport_factory or (
             lambda: httpx.AsyncHTTPTransport(trust_env=False, retries=0)
         )
-        for probe_id, model in PROBES:
+        for probe_id, model in (*PROBES, *STREAM_PROBES):
             if probe_id in recorded:
                 continue
             # Durably reserve the slot before egress; a crash or failed write
@@ -502,7 +787,8 @@ def execute_probes(
             results["reserved"].append(probe_id)
             _check_envelope_size(results)
             write_atomic(results_path, results)
-            outcome = asyncio.run(run_probe(probe_id, model, credential, factory()))
+            runner = run_stream_probe if probe_id.endswith("-stream") else run_probe
+            outcome = asyncio.run(runner(probe_id, model, credential, factory()))
             validate_probe_result(outcome)
             results["attempts"].append(outcome)
             load_probe_results(results_path, data=results)
@@ -527,16 +813,26 @@ def main() -> int:
     except (OSError, ValueError, RuntimeError):
         print(json.dumps({"status": "refused_or_interrupted", "probes": "unknown"}))
         return 2
-    summary = {
-        item["probe_id"]: {
+    summary = {}
+    for item in results["attempts"]:
+        structure = item["structure"] or {}
+        entry = {
             "http_status": item["http_status"],
-            "finish_reason": (item["structure"] or {}).get("finish_reason"),
-            "content_kind": (item["structure"] or {}).get("content_kind"),
-            "usage_valid": (item["structure"] or {}).get("usage_valid"),
+            "finish_reason": structure.get("finish_reason"),
+            "content_kind": structure.get("content_kind"),
+            "usage_valid": structure.get("usage_valid"),
             "error_category": item["error_category"],
         }
-        for item in results["attempts"]
-    }
+        if item.get("kind") == "stream":
+            entry.update(
+                {
+                    "event_count": structure.get("event_count"),
+                    "reasoning_delta_seen": structure.get("reasoning_delta_seen"),
+                    "done_seen": structure.get("done_seen"),
+                    "truncated": structure.get("truncated"),
+                }
+            )
+        summary[item["probe_id"]] = entry
     print(json.dumps({"probe": "openrouter-direct", "results": summary}, indent=2, sort_keys=True))
     return 0
 
