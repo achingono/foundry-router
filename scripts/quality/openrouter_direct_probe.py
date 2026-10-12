@@ -414,23 +414,44 @@ def _split_sse_frame(buffer: bytes) -> tuple[bytes | None, bytes]:
     return buffer[: index + len(delimiter)], buffer[index + len(delimiter) :]
 
 
-def _stream_event_payload(frame: bytes) -> dict[str, Any] | None:
-    """One parsed data event, or None for keepalives, [DONE], and malformed frames."""
-    text = frame.decode("utf-8", "ignore")
+def _parse_frame(frame: bytes) -> tuple[str, Any]:
+    """Classify one raw frame: event, done, empty, or malformed.
+
+    Only a data payload that is exactly ``[DONE]`` counts as termination;
+    markers inside content or comments never do. Malformed data is reported
+    distinctly from harmless keepalives so callers can fail validation.
+    """
+    try:
+        text = frame.decode("utf-8")
+    except UnicodeDecodeError:
+        return "malformed", None
+    data_lines = []
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped.startswith("data:"):
+        if not stripped or stripped.startswith(":"):
             continue
-        data = stripped[5:].strip()
-        if not data or data == "[DONE]":
+        if ":" not in stripped:
             continue
-        try:
-            event = load_bounded_json(data, max_bytes=MAX_FRAME_BYTES)
-        except (ValueError, TypeError):
-            return None
-        if isinstance(event, dict):
-            return event
-    return None
+        field, _, value = stripped.partition(":")
+        field = field.strip()
+        if field == "data":
+            data_lines.append(value.strip())
+        elif field in {"event", "id", "retry"}:
+            continue
+        else:
+            continue
+    if not data_lines:
+        return "empty", None
+    payload = "\n".join(data_lines)
+    if payload == "[DONE]":
+        return "done", None
+    try:
+        event = load_bounded_json(payload, max_bytes=MAX_FRAME_BYTES)
+    except (ValueError, TypeError):
+        return "malformed", None
+    if isinstance(event, dict):
+        return "event", event
+    return "malformed", None
 
 
 def _serialized_size(data: Any) -> int:
@@ -464,11 +485,14 @@ def classify_stream_frame(frame: bytes, state: dict[str, Any]) -> None:  # noqa:
     if len(frame) > MAX_FRAME_BYTES:
         state["metadata_valid"] = False
         return
-    text = frame.decode("utf-8", "ignore")
-    if "[DONE]" in text:
+    kind, event = _parse_frame(frame)
+    if kind == "done":
         state["done_seen"] = True
-    event = _stream_event_payload(frame)
-    if event is None:
+        return
+    if kind == "malformed":
+        state["metadata_valid"] = False
+        return
+    if kind != "event" or event is None:
         return
     if state["event_count"] >= MAX_STREAM_EVENTS:
         state["metadata_valid"] = False
@@ -544,7 +568,8 @@ def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
     reserved = data["reserved"]
     if any(probe not in allowed for probe in reserved) or len(set(reserved)) != len(reserved):
         raise ValueError("Invalid probe reservations")
-    for attempt in data["attempts"]:
+    for raw_attempt in data["attempts"]:
+        attempt = _with_legacy_kind(raw_attempt)
         validate_probe_result(attempt)
         if attempt["probe_id"] in seen:
             raise ValueError("Duplicate probe result")
@@ -561,6 +586,22 @@ def load_probe_results(path: Path, *, data: Any = None) -> dict[str, Any]:
 
 def _identity_path(results_path: Path) -> Path:
     return results_path.with_name(results_path.name + IDENTITY_SUFFIX)
+
+
+# Probe IDs that predate the kind field; only these may gain an inferred kind,
+# and only as nonstream. Anything else without a kind is rejected.
+LEGACY_NONSTREAM_PROBES = {probe for probe, _ in PROBES}
+
+
+def _with_legacy_kind(attempt: Any) -> Any:
+    """Infer kind for exact historical nonstream outcomes; never rewrite bytes."""
+    if not isinstance(attempt, dict) or "kind" in attempt:
+        return attempt
+    if attempt.get("probe_id") not in LEGACY_NONSTREAM_PROBES:
+        raise ValueError("Invalid probe result")
+    inferred = dict(attempt)
+    inferred["kind"] = "nonstream"
+    return inferred
 
 
 def ensure_probe_initialized(results_path: Path) -> None:
@@ -739,8 +780,6 @@ async def run_stream_probe(  # noqa: PLR0911, PLR0912 -- fixed outcome checklist
                             if observed > MAX_BODY_BYTES:
                                 return finish("response_bound_exceeded")
                             pending.extend(chunk)
-                            if len(pending) > MAX_FRAME_BYTES:
-                                return finish("response_bound_exceeded")
                             while True:
                                 event, rest = _split_sse_frame(bytes(pending))
                                 if event is None:
@@ -749,6 +788,11 @@ async def run_stream_probe(  # noqa: PLR0911, PLR0912 -- fixed outcome checklist
                                 if len(event) > MAX_FRAME_BYTES:
                                     return finish("response_bound_exceeded")
                                 classify_stream_frame(event, state)
+                            # Bound only the residual incomplete frame: the
+                            # buffer above may hold several individually valid
+                            # frames depending on transport chunking.
+                            if len(pending) > MAX_FRAME_BYTES:
+                                return finish("response_bound_exceeded")
                     except (OSError, RuntimeError, httpx.HTTPError, ValueError):
                         return finish("transport_failure")
                     if pending.strip():

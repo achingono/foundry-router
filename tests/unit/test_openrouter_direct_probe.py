@@ -535,3 +535,161 @@ def test_execute_covers_streams_without_replay(tmp_path, monkeypatch):
     rerun = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
     assert len(rerun["attempts"]) == 6
     assert len(calls) == 6
+
+
+def legacy_attempt(probe_id, model):
+    return {
+        "probe_id": probe_id,
+        "model": model,
+        "http_status": 200,
+        "dispatched": True,
+        "elapsed_seconds": 0.1,
+        "structure": None,
+        "error_category": None,
+    }
+
+
+def test_legacy_results_resume_streams_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "STAGE_DIR", tmp_path)
+    models = {
+        "probe-gemma": "google/gemma-4-26b-a4b-it:free",
+        "probe-openai": "openai/gpt-4o-mini",
+        "probe-anthropic": "anthropic/claude-haiku-4.5",
+    }
+    before = {
+        "probe": "openrouter-direct",
+        "reserved": ["probe-gemma", "probe-openai", "probe-anthropic"],
+        "attempts": [legacy_attempt(pid, model) for pid, model in models.items()],
+    }
+    (tmp_path / "results-probe.json").write_text(json.dumps(before))
+    (tmp_path / "results-probe.json.identity").write_text(
+        json.dumps({"probe": "openrouter-direct"})
+    )
+    calls = []
+
+    def factory():
+        async def handler(_request):
+            calls.append(1)
+            return httpx.Response(200, content=b"data: [DONE]\n\n")
+
+        return FakeUpstream(handler)
+
+    results = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert [item["probe_id"] for item in results["attempts"][3:]] == [
+        "probe-gemma-stream",
+        "probe-openai-stream",
+        "probe-anthropic-stream",
+    ]
+    assert len(calls) == 3
+    # Historical bytes are never rewritten with inferred kinds.
+    reloaded = json.loads((tmp_path / "results-probe.json").read_text())
+    assert all("kind" not in item for item in reloaded["attempts"][:3])
+    rerun = probe.execute_probes(credential="synthetic-key", transport_factory=factory)
+    assert len(rerun["attempts"]) == 6
+    assert len(calls) == 3
+
+
+def test_legacy_stream_id_without_kind_rejected(tmp_path):
+    attempt = {
+        "probe_id": "probe-gemma-stream",
+        "model": "google/gemma-4-26b-a4b-it:free",
+        "http_status": 200,
+        "dispatched": True,
+        "elapsed_seconds": 0.1,
+        "structure": None,
+        "error_category": None,
+    }
+    with pytest.raises(ValueError):
+        probe.load_probe_results(
+            tmp_path / "missing.json",
+            data={"probe": "openrouter-direct", "reserved": [], "attempts": [attempt]},
+        )
+
+
+def test_marker_in_content_and_comments_not_terminal():
+    state = probe.new_stream_state()
+    probe.classify_stream_frame(
+        b': comment with [DONE] marker\ndata: {"choices":[{"delta":{"content":"a [DONE] b"}}]}\n\n',
+        state,
+    )
+    assert state["done_seen"] is False
+    assert state["metadata_valid"] is True
+    assert state["text_delta_bytes"] == len(b"a [DONE] b")
+
+
+def test_malformed_frame_with_real_terminator():
+    state = probe.new_stream_state()
+    probe.classify_stream_frame(b"data: {broken json\n\n", state)
+    assert state["metadata_valid"] is False
+    probe.classify_stream_frame(b"data: [DONE]\n\n", state)
+    assert state["done_seen"] is True
+    assert state["metadata_valid"] is False
+
+
+def test_invalid_utf8_frame_rejected():
+    state = probe.new_stream_state()
+    probe.classify_stream_frame(b"data: \xff\xfe invalid \n\n", state)
+    assert state["metadata_valid"] is False
+    assert state["done_seen"] is False
+
+
+def test_legit_terminator_with_crlf():
+    state = probe.new_stream_state()
+    probe.classify_stream_frame(b"data: [DONE]\r\n\r\n", state)
+    assert state["done_seen"] is True
+    assert state["metadata_valid"] is True
+
+
+async def test_coalesced_and_fragmented_streams_agree(monkeypatch):
+    frames = [
+        b'data: {"choices":[{"delta":{"content":"ab"},"finish_reason":"stop"}]}\n\n',
+        b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}\n\n',
+        b"data: [DONE]\n\n",
+    ]
+    wire = b"".join(frames)
+    # Individual frames fit a small cap, but their coalesced chunk does not:
+    # the bound must apply to the residual incomplete frame, not the buffer.
+    monkeypatch.setattr(probe, "MAX_FRAME_BYTES", 120)
+
+    async def run_with(chunks):
+        async def handler(_request):
+            async def stream():
+                for chunk in chunks:
+                    yield chunk
+
+            return httpx.Response(200, content=stream())
+
+        transport = FakeUpstream(handler)
+        return await probe.run_stream_probe(
+            "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+        )
+
+    coalesced = await run_with([wire])
+    fragmented = await run_with([wire[i : i + 7] for i in range(0, len(wire), 7)])
+    assert coalesced["error_category"] is None
+    assert fragmented["error_category"] is None
+    assert coalesced["structure"] == fragmented["structure"]
+    assert coalesced["structure"]["done_seen"] is True
+    assert coalesced["structure"]["usage_valid"] is True
+
+
+async def test_genuinely_oversized_frame_terminates_early(monkeypatch):
+    yielded = []
+    big_event = b'data: {"choices":[{"delta":{"content":"' + b"y" * 300 + b'"}}]}\n\n'
+
+    async def handler(_request):
+        async def stream():
+            yielded.append(1)
+            yield big_event
+            yielded.append(1)
+            yield b"data: [DONE]\n\n"
+
+        return httpx.Response(200, content=stream())
+
+    transport = FakeUpstream(handler)
+    monkeypatch.setattr(probe, "MAX_FRAME_BYTES", 64)
+    result = await probe.run_stream_probe(
+        "probe-openai-stream", "openai/gpt-4o-mini", "synthetic-key", transport
+    )
+    assert result["error_category"] == "response_bound_exceeded"
+    assert len(yielded) == 1
