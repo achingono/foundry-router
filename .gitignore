@@ -131,3 +131,7 @@ screenshots/
 !/docs/plans/production-zen-openrouter/manifest.production.json
 !/docs/plans/production-zen-openrouter/manifest.roster.json
 !/docs/plans/production-zen-openrouter/catalog-openrouter-excerpt-2026-10-12.json
+
+!/docs/plans/production-zen-openrouter/manifest.roster-remaining.json
+!/docs/plans/production-zen-openrouter/manifest.roster-final.json
+!/docs/plans/openrouter-production-two/manifest.json

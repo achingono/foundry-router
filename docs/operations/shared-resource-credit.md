@@ -116,7 +116,14 @@ still runs. See the [reconciliation plan](../plans/azure-cost-reconciliation/ind
 
 ## Production Gate
 
-Production deploys twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; a follow-up bounded run verified admission rejections and single-pool settlement with both dispatches served by the pool's fs-openclaw backend. Production stays memory/one. Live upstream 429/5xx failover, remaining-pool coverage, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
+The staging roster harness and group-specific reserve deployment have fresh
+[completion evidence](../plans/production-zen-openrouter/completion-2026-10-12.md).
+That historical roster run halted after two passes and one HTTP 502; it did not qualify production. The later two-model rollout below records separate acceptance.
+Preserve consumed identities/results and require a reviewed bounded amendment
+before more inference. Current admin quietness does not establish historical
+failed-request settlement.
+
+The earlier production baseline deployed twelve backends, six pools and two credit accounts using operator inputs. All six pools passed production nonstream/stream Responses through fs-swarm with usage-matched local debit; a follow-up bounded run verified admission rejections and single-pool settlement with both dispatches served by the pool's fs-openclaw backend. The later OpenRouter rollout below expands this to fourteen backends, eight pools and three credit accounts, with fs-openclaw disabled. Production stays memory/one. Live upstream 429/5xx failover, remaining-pool coverage, authoritative reconciliation and Table cut-over remain unverified. Prices and credit values are local estimates, not authoritative balances.
 
 See [implementation evidence](../plans/shared-resource-credit/evidence.md).
 
@@ -125,3 +132,11 @@ attempt IDs during failover while credit/telemetry retain logical request identi
 after possible dispatch now settles the full credit estimate and retains quota usage on
 uncaught cancellation/exception; only confirmed non-dispatch permits zero-charge release.
 This conservative recovery also applies when credit state remains in memory.
+
+The [skip-DeepSeek continuation](../plans/roster-skip-deepseek/evidence.md) retained staging deployment but could not validate MiMo/Spark due intermittent health timeouts before inference. Preserve the unresolved continuation slot; no further attempt is authorized by that amendment.
+
+For the accepted new OpenRouter staging roster, use [`gpt-6-luna-or` and `claude-haiku-5.5-or`](../plans/passed-openrouter-staging/accepted-models.md) with non-streaming Responses. The selection is not an enforced runtime allow-list; other configured staging pools remain.
+
+Pool `streaming_enabled:false` rejects Responses stream requests before quota/credit admission and provider preparation; aliases inherit the canonical pool policy. Set this only for pools qualified for nonstream use. This does not stop all intake or isolate shared account wallets.
+
+The [two-model OpenRouter production rollout](../plans/openrouter-production-two/deployment-evidence.md) is deployed: `gpt-6-luna-or` and `claude-haiku-5.5-or` accept non-streaming Responses only. The existing six Azure pools and aliases were retained; the disabled fs-openclaw group has zero allowance. Staging is stopped for the exclusive OpenRouter handoff; do not restart its stale credit allocation. Production remains memory/one. Four new staging/production checks passed; the operator controls intake reopening.

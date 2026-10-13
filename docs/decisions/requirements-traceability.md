@@ -39,7 +39,16 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 ### OpenCode Zen and OpenRouter backends
 
-**Implemented with mocked verification**; live upstream support remains **Planned**.
+The staging roster harness is **Implemented** and the staging router deployed, with partial live
+acceptance: two passes, failed third case, two unattempted successors. Immutable
+release/policy binding, mixed reserve diagnostics and halt/no-replay behavior
+are covered by 69 offline checks. See
+[completion evidence](../plans/production-zen-openrouter/completion-2026-10-12.md)
+for exact scope and remaining gates.
+
+**Implemented with mocked verification and partial live public/admin acceptance**.
+The later two-model OpenRouter release below is deployed and accepted for non-streaming
+Responses; production qualification of the other roster models remains **Planned**.
 
 | Requirement | Implementation | Evidence |
 | --- | --- | --- |
@@ -312,3 +321,11 @@ Signed enablement remains **Partially implemented** pending resource and live ga
 | Google compatible aggregate usage conservation | Implemented; corrected scoped local Responses against Google passed | Google usage normalization | [Correction plan](../plans/google-compatible-usage-integrity/index.md); actual Responses nonstream/stream settlement and coherent snapshot tests |
 
 | Google unmetered pre-output failure handling | Implemented locally; production canary withheld | Default-off backend flag, routing-owned two-distinct-backend cap, per-dispatch quota and no retry after public SSE; [canary evidence](../plans/google-38-production-canary/evidence.md) retains live503 gate failures |
+
+The [skip-DeepSeek staging continuation](../plans/roster-skip-deepseek/evidence.md) is implemented with80 focused checks and81.41% harness coverage; both execution attempts stopped before inference due health timeouts. MiMo/Spark live acceptance remains Planned.
+
+The [passed-model staging selection](../plans/passed-openrouter-staging/evidence.md) accepts Luna/Haiku historical nonstream public/admin evidence and fresh read-only bindings/health. That staging selection did not qualify production or streaming; the later production release below records separate non-streaming acceptance.
+
+Per-pool strict boolean `streaming_enabled` is Implemented locally with direct/alias zero-admission negative tests and nonstream/default-stream regressions. The [two-model production plan](../plans/openrouter-production-two/activities.md) records the reviewed rollout; completed acceptance is recorded below.
+
+The [two-model production release](../plans/openrouter-production-two/deployment-evidence.md) is Implemented and deployed with an alias-safe streaming restriction before admission and four passing non-streaming staging/production checks. Wallet handoff, zero credit for the disabled account, coherent versioned secrets and baseline preservation were verified. OpenRouter streaming, Table and provider failover gates remain open.

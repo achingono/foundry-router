@@ -1,0 +1,49 @@
+{
+  "run": "openrouter-production-two-2026-10-12",
+  "image_digest": "sha256:ee24fc37d9198a7824937339337468a355b937a57b53c03d79b05138355c8b57",
+  "cases": [
+    {
+      "id": "staging-0",
+      "pool": "gpt-6-luna-or",
+      "deployment": "openai/gpt-6-luna",
+      "provider": "openrouter",
+      "operation": "responses",
+      "stream": false,
+      "input_per_million": 0.1,
+      "output_per_million": 0.5
+    },
+    {
+      "id": "staging-1",
+      "pool": "claude-haiku-5.5-or",
+      "deployment": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter",
+      "operation": "responses",
+      "stream": false,
+      "input_per_million": 0.1,
+      "output_per_million": 0.5
+    },
+    {
+      "id": "production-0",
+      "pool": "gpt-6-luna-or",
+      "deployment": "openai/gpt-6-luna",
+      "provider": "openrouter",
+      "operation": "responses",
+      "stream": false,
+      "input_per_million": 0.1,
+      "output_per_million": 0.5
+    },
+    {
+      "id": "production-1",
+      "pool": "claude-haiku-5.5-or",
+      "deployment": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter",
+      "operation": "responses",
+      "stream": false,
+      "input_per_million": 0.1,
+      "output_per_million": 0.5
+    }
+  ],
+  "streaming_enabled": false,
+  "evidence_scope": "deployed-public-admin-v1",
+  "aggregate_estimate_usd": 0.00654336
+}
