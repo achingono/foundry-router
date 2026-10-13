@@ -382,3 +382,7 @@ JSON depth is bounded to 16. Invalid/empty/partial/currency-mismatched responses
 local estimates. No request-path billing I/O, automatic RBAC grants or infrastructure changes.
 See the [contract and evidence](../plans/azure-cost-reconciliation/index.md). Azure live
 acceptance remains unverified.
+
+## Per-pool streaming policy
+
+Each `FOUNDRY_MODELS_JSON` pool accepts `streaming_enabled` (strict boolean,default`true`). Set it to`false` for nonstream-only Responses pools. Aliases inherit the resolved pool policy. A stream request is rejected before provider preparation or quota/credit admission; other pools retain their own policy. Admin model diagnostics reports the effective flag. Example: `{"logical":{"backends":{"backend":1.0},"streaming_enabled":false}}`.

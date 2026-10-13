@@ -148,6 +148,8 @@ def build_router(
             )
         canonical_body = canonical_request_copy(body, resolution.resolved_model)
         pool = settings.models[resolution.resolved_model]
+        if canonical_body.get("stream") is True and not pool.streaming_enabled:
+            return api_error(400, "Streaming is disabled for this model", "streaming_not_supported")
         work_lease = None
         output_lease = None
         output_transferred = False

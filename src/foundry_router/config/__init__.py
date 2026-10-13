@@ -277,6 +277,7 @@ class ModelBackendPool(BaseModel):
 
     backends: dict[str, float] = Field(default_factory=dict)
     continuation_policy: Literal["unsigned", "bound_history_required"] = "unsigned"
+    streaming_enabled: bool = Field(default=True, strict=True)
 
     @field_validator("backends")
     @classmethod

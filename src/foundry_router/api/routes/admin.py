@@ -238,6 +238,7 @@ def build_router(
             "models": {
                 name: {
                     "backends": pool.backends,
+                    "streaming_enabled": pool.streaming_enabled,
                 }
                 for name, pool in settings.models.items()
             },

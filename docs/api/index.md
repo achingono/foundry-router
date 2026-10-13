@@ -739,3 +739,5 @@ continuation remains separately gated. Requests with tools, structured/media fea
 continuation state keep strict provider-state rejection; generic compatible providers do not
 inherit this Google policy. Usage and SSE text boundaries remain unchanged. Exact live
 acceptance is recorded in the [phase evidence](../plans/google-compatible-signature-text/evidence.md).
+
+When a resolved model pool sets `streaming_enabled:false`, Responses with `stream:true` returnHTTP400 with error type `streaming_not_supported` before quota/credit admission or upstream dispatch. Omitted or false stream remains available. Aliases use the target pool policy.

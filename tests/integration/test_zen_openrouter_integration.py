@@ -342,3 +342,76 @@ def test_openrouter_reasoning_content_rejected(monkeypatch):
         json={"model": "logical", "input": "synthetic"},
     )
     assert response.status_code == 502
+
+
+@respx.mock
+@pytest.mark.parametrize("model", ["logical", "alias"])
+def test_pool_streaming_disabled_before_admission(monkeypatch, model):
+    settings = openrouter_settings()
+    settings.models["logical"].streaming_enabled = False
+    settings.model_aliases = {"alias": "logical"}
+    settings.backends["or_a"].credit_metered = True
+    settings.backend_cycle_start_day = {"or_a": 1}
+    settings.backend_cycle_allowance_usd = {"or_a": 100.0}
+    settings.backend_initial_estimated_remaining_usd = {"or_a": 100.0}
+    _wire(monkeypatch, settings)
+    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=chat_ok())
+    )
+    client = TestClient(app)
+    response = client.post(
+        "/openai/v1/responses",
+        headers={"api-key": "client-key"},
+        json={"model": model, "input": "synthetic", "stream": True},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["type"] == "streaming_not_supported"
+    assert route.call_count == 0
+    status = client.get("/admin/status", headers={"x-admin-key": "admin-key"}).json()
+    assert status["models"]["logical"]["streaming_enabled"] is False
+    assert status["credit_groups"]["or_a"]["live"]["active_reservations"] == 0
+    assert status["credit_groups"]["or_a"]["live"]["reserved_inflight_usd"] == 0
+    assert status["backends"]["or_a"]["live"]["rate_limit"]["rpm_used_60s"] == 0
+
+
+@respx.mock
+@pytest.mark.parametrize("stream", [False, None])
+def test_pool_streaming_disabled_allows_nonstream(monkeypatch, stream):
+    settings = openrouter_settings()
+    settings.models["logical"].streaming_enabled = False
+    _wire(monkeypatch, settings)
+    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=chat_ok())
+    )
+    body = {"model": "logical", "input": "synthetic"}
+    if stream is not None:
+        body["stream"] = stream
+    response = TestClient(app).post(
+        "/openai/v1/responses", headers={"api-key": "client-key"}, json=body
+    )
+    assert response.status_code == 200
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_streaming_policy_isolated_between_pools(monkeypatch):
+    settings = zen_settings()
+    from foundry_router.config import ModelBackendPool
+
+    settings.models["blocked"] = ModelBackendPool(backends={"zen_a": 1}, streaming_enabled=False)
+    _wire(monkeypatch, settings)
+    payload = b'data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}\n\n'
+    route = respx.post("https://opencode.ai/zen/v1/responses").mock(
+        return_value=httpx.Response(
+            200, content=payload, headers={"content-type": "text/event-stream"}
+        )
+    )
+    client = TestClient(app)
+    for model, status in [("blocked", 400), ("logical", 200)]:
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key"},
+            json={"model": model, "input": "synthetic", "stream": True},
+        )
+        assert response.status_code == status
+    assert route.call_count == 1

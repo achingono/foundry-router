@@ -122,6 +122,18 @@ class TestBackendConfig:
 
 
 class TestModelBackendPool:
+    @pytest.mark.parametrize("value", ["false", 0, 1, None])
+    def test_streaming_policy_requires_boolean(self, value) -> None:
+        with pytest.raises(ValidationError):
+            ModelBackendPool(backends={"backend_a": 1.0}, streaming_enabled=value)
+
+    def test_streaming_policy_default_and_override(self) -> None:
+        assert ModelBackendPool(backends={"backend_a": 1.0}).streaming_enabled is True
+        assert (
+            ModelBackendPool(backends={"backend_a": 1.0}, streaming_enabled=False).streaming_enabled
+            is False
+        )
+
     def test_valid_pool(self) -> None:
         pool = ModelBackendPool(backends={"backend_a": 1.0, "backend_b": 2.0})
         assert pool.backends == {"backend_a": 1.0, "backend_b": 2.0}
