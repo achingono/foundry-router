@@ -27,12 +27,36 @@ Status: **Halted on case 3 of 5 by design; no replay, no successor dispatch.**
 |---|---|---|
 | `roster-luna-nonstream` | passed, HTTP 200, policy (0.05, 5.0, override), settled, cleared | $0.0000037 |
 | `roster-haiku-nonstream` | passed, HTTP 200, policy (0.05, 5.0, override), settled, cleared | $0.0000042 |
-| `roster-deepseek-nonstream` | **failed**, HTTP 502 in 0.73s, `acceptance_mismatch`, dispatched | $0 |
+| `roster-deepseek-nonstream` | **failed**, HTTP 502 in 0.73s, `acceptance_mismatch`, dispatched | Unmeasured |
 | `roster-mimo-nonstream` | not attempted (halted ledger) | — |
 | `roster-spark-nonstream` | not attempted (halted ledger) | — |
 
-Total spend $0.0000079. The halted ledger refuses resume; any rerun needs a
-new reviewed identity. The 502 arrived in 0.73s (provider-side rejection
-propagated, not a timeout); diagnosis of the DeepSeek path and the rerun
-scope are open review items. No direct probes were sent; no credentials,
+The local estimated debit subtotal for the two passing cases is USD 0.0000079;
+this is not a provider billing total. The failed case returns before closing
+admin observation, so its persisted zero debit is an initialization default
+and its debit and cleanup are unverified by the case record. The HTTP 502 and
+0.73-second duration do not establish whether the cause was provider rejection,
+transport, router preparation or protocol validation. Diagnosis remains open.
+The halted ledger refuses resume; any rerun needs a new reviewed identity and
+bounded execution amendment. No direct probes were sent; no credentials,
 prompts, or outputs are recorded here.
+
+## Completion verification follow-up
+
+The harness implementation and review fixes are committed as `e34b506`,
+`2e18d6f` and `d5d808a`. On October 12, a fresh read-only Azure control-plane
+check reported provisioning `Succeeded`, ready revision
+`foundry-router-staging--0000002`, the recorded `grimsugar` image tag, and
+`maxReplicas: 1`. A tag readback does not independently attest the running digest.
+Historical digest, seeds, grant removal and owner/quiescence details above are
+retained execution observations; this follow-up does not re-attest them.
+
+Fresh local checks passed: 69 harness tests with 81.01% harness coverage,
+repository Ruff lint and format (919 files), Mypy (72 source files), a local
+Docker build, and 15 Azurite integration tests. The SonarQube script is absent,
+so that conditional check is not applicable. Independent contextual review
+found no new blocking implementation finding and required the financial/cause
+correction above. The [completion report](completion-2026-10-12.md) records
+2,505 full-suite passes and 89.47% runtime coverage, plus successful health/admin
+readback with zero active/inflight reservations on both groups. Current quietness
+does not establish the failed case's historical debit or cause.

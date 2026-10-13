@@ -1,6 +1,12 @@
+The [two passing OpenRouter models are now deployed to production](../openrouter-production-two/deployment-evidence.md) under a separately reviewed non-streaming restriction and credit handoff. The historical broader plan below retains its original scope and open gates.
+
 # Production enablement for Zen/OpenRouter backends
 
-**Staging case validation passed; production planned.** Independent plan review
+**Harness implemented and staging deployed; roster validation partially passed
+and halted; production planned.** The [roster execution evidence](evidence-roster-2026-10-12.md)
+records two passes, a failed DeepSeek case and two unattempted successors.
+The four original staging cases remain accepted under their earlier release scope.
+Independent plan review
 is recorded in [review.md](review.md).
 The draft has been revised at planning level; no staging or production change,
 secret provisioning, image rollout or live dispatch is authorized by this record.
@@ -23,8 +29,13 @@ New-release validation remains pending. The release contract below
 remains the reviewed baseline; staging deviations are recorded as SE-1, not
 implicitly approved by the case pass.
 
+The user selected the [two passing OpenRouter staging models](../passed-openrouter-staging/accepted-models.md). Fresh health/admin bindings passed; no new inference or rollout was needed.
+
 ## Companion documents
 
+- [Skip-DeepSeek staging continuation](../roster-skip-deepseek/evidence.md)
+- [Completion and fresh verification](completion-2026-10-12.md)
+- [Halted roster execution evidence](evidence-roster-2026-10-12.md)
 - [Inputs](inputs.md)
 - [Activities](activities.md)
 - [Outputs](outputs.md)
@@ -36,10 +47,20 @@ implicitly approved by the case pass.
 - [Independent staging harness review](review-staging-harness-9a763c7.md)
 - [Staging infrastructure amendment and review](amendment-staging-infrastructure.md)
 - [Per-group reserve policy amendment (reviewed)](amendment-per-backend-reserves.md)
-- [OpenRouter production roster amendment (draft)](amendment-openrouter-roster.md)
+- [OpenRouter roster amendment (changes required)](amendment-openrouter-roster.md)
+- [Independent OpenRouter roster review](review-openrouter-roster-57bee77.md)
+- [Roster staging execution amendment](amendment-roster-execution.md)
+- [Independent staging execution plan review](review-roster-execution-3bd4010.md)
 - [Independent group reserve plan review](review-group-reserves-df5396c.md)
 - [Independent group reserve implementation review](review-group-reserves-f891d06.md)
 - [Scoped black-box acceptance amendment](amendment-black-box-acceptance.md)
+
+The [roster review](review-openrouter-roster-57bee77.md) leaves OR-1/2/3 open.
+The [narrowed staging execution plan](amendment-roster-execution.md) is reviewed
+and its [harness implementation review](review-harness-e34b506.md) is cleared.
+The retained staging deployment/run occurred under the recorded concrete
+execution inputs; its halted ledger cannot be replayed. New inference requires
+a reviewed bounded amendment and new identity. OpenRouter production remains excluded.
 
 ## Decision and rollout scope
 

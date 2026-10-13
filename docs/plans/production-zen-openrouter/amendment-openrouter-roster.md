@@ -1,38 +1,79 @@
-# OpenRouter production roster amendment (draft — pending independent review)
+# OpenRouter production roster amendment — changes required
 
-Date: 2026-10-12. Status: **Proposed; no code or configuration changed.**
-Extends the Zen-first production scope with five paid OpenRouter pools,
-non-streaming only. The streaming exclusion, paid-only rule, and per-case
-staging validation gates are unchanged. No live dispatches authorized.
+Date: 2026-10-12. Status: **Proposed; independent review not cleared.**
+See [review of 57bee77](review-openrouter-roster-57bee77.md). No code or
+configuration is changed by this amendment. It proposes five paid OpenRouter
+pools but does not supersede the approved Zen-first production scope. No staging
+vault write, rollout or live dispatch is cleared by this record.
 
-## Roster (verified against `GET /api/v1/models` 2026-10-12)
+## Candidate roster
 
-| Pool | Deployment | In / Out per 1M | Basis |
-|---|---|---|---|
-| `gpt-6-luna-or` | `openai/gpt-6-luna` | $0.10 / $0.50 | 6.2T weekly OR volume; efficient GPT frontier |
-| `claude-haiku-5.5-or` | `anthropic/claude-haiku-5.5` | $0.10 / $0.50 | Fastest measured (240 tok/s); 1.09T new-week volume |
-| `deepseek-v4.1-flash-or` | `deepseek/deepseek-v4.1-flash` | $0.15 / $0.60 | #1 OR volume (25.6T); value consensus |
-| `mimo-v2.6-flash-or` | `xiaomi/mimo-v2.6-flash` | $0.14 / $0.28 | Cheapest above quality floor; Pro sibling leads open weights |
-| `muse-spark-1.3-contributor-or` | `meta/muse-spark-1.3-contributor` | $0.10 / $0.20 | 1.43T volume; Meta-ecosystem open model |
+The operator supplied a [committed catalog excerpt](catalog-openrouter-excerpt-2026-10-12.json)
+captured at `2026-10-12T13:48:27Z` from `GET /api/v1/models`. The
+[evidence follow-up](review-openrouter-roster-57bee77.md#evidence-follow-up-efd13ab)
+checks all five IDs and per-token conversions against this roster. These remain
+provisional catalog inputs, not independently tested router capability or billing
+evidence; recheck IDs, units and applicable charge categories day-of.
 
-Flagships (`claude-sonnet-5.5`, `claude-opus-5.5`, `gpt-6-astra`) and all
-`:free` variants are explicitly out: wallet fit and rate-limit/availability
-terms respectively. See roster rationale in session record 2026-10-12.
+| Pool | Proposed deployment | Proposed USD/M input / output |
+| --- | --- | --- |
+| `gpt-6-luna-or` | `openai/gpt-6-luna` | 0.10 / 0.50 |
+| `claude-haiku-5.5-or` | `anthropic/claude-haiku-5.5` | 0.10 / 0.50 |
+| `deepseek-v4.1-flash-or` | `deepseek/deepseek-v4.1-flash` | 0.15 / 0.60 |
+| `mimo-v2.6-flash-or` | `xiaomi/mimo-v2.6-flash` | 0.14 / 0.28 |
+| `muse-spark-1.3-contributor-or` | `meta/muse-spark-1.3-contributor` | 0.10 / 0.20 |
 
-## Configuration contract
+Flagships and all `:free` variants remain excluded from this proposal. The
+original draft's volume/speed/benchmark source links are retained in the evidence
+follow-up but their contents have not been independently verified. The operator
+clarifies the reported 5.5% (USD 0.80 minimum) fee is for top-ups, not an inference
+rate adjustment. Current applicable terms still need checking. Paid status alone
+does not establish acceptable retention/training terms.
 
-- One backend per deployment (existing per-deployment rule); all five share
-  the `or-shared` credit group — no new money pools, no reserve-map change.
-- `models_json` gains the five pools (single-backend weight 1.0);
-  `pricing_json` uses the catalog-verified list prices above, re-verified day-of.
-- Streaming stays excluded for OpenRouter (mocked-only per prior decision);
-  pools serve `responses` non-streaming via the Chat-translation dialect.
-- Effective ~$0.0004–$0.0009 per 2k-in/1k-out request; ~5,000+ requests of
-  runway on the confirmed $4.83 balance before top-up (plus 5.5% fee).
+## Proposed configuration and unresolved boundaries
 
-## Acceptance
+- One backend per exact deployment; one single-backend pool at weight 1.0 each.
+  Keep distinct logical pools and no Azure fallback/new aliases. Define an exact
+  baseline-plus-delta roster, including the disposition of the two existing
+  staging OpenRouter pools, before preparing the execution manifest.
+- All five share canonical `or-shared` only if backed by the same billed account.
+  Quota ownership remains separate. Staging/production ledgers must not each
+  receive the full shared balance; allocation or controlled handoff is required.
+- **OR-1 open:** `responses` does not restrict stream mode. Production requires
+  either a reviewed pre-admission enforcement feature with zero-dispatch negative
+  tests, or separately qualified streaming and an explicitly revised policy.
+  Until then, candidates may only be considered for operator-controlled staging.
+- **OR-2 open:** “No reserve-map change” is not viable for the stated USD 4.83
+  account under inherited USD 10 / 5% production settings. Propose an explicit
+  `or-shared` group policy/current allocation or establish headroom under existing
+  policy. Preserve Azure/Zen policy and fresh seeds for all retained accounts.
+- **OR-3 open:** A new identity must be backed by a reviewed execution amendment
+  and harness changes. Current immutable manifests/specs do not contain this
+  roster. Define exact calls, prices, limits, allowance, durable files and
+  promotion checks bound to the new image/configuration and new staging evidence.
+  This must also account for the outstanding group-reserve shared-instance check.
 
-- Independent review of this amendment before implementation.
-- Staging validation of the five pools under a new reviewed run identity
-  (existing passes stay closed); production seeds cover all retained groups
-  on the memory restart per the reserve amendment.
+The [staging-only execution amendment](amendment-roster-execution.md) specifies
+a concrete OR-2 staging policy and OR-3 five-case design, reviewed for local
+harness implementation. This does not clear deployment/live gates or OR-1
+production enforcement. Staging can proceed after its own implementation/input/
+operator gates without first enabling OpenRouter production.
+
+## Acceptance gates
+
+- [ ] Resolve OR-1 production streaming policy/enforcement and review it.
+- [ ] Resolve OR-2 shared-account reserve, fresh inputs and staging allocation.
+- [x] Retain/review the supplied catalog excerpt, exact capture time, source links and per-token conversions.
+- [ ] Recheck day-of catalog/charge applicability and account/provider data-use terms; catalog evidence is not live inference qualification.
+- [ ] Resolve OR-3 with immutable manifests and independently reviewed harness;
+      retain all historical ledgers closed and unchanged.
+- [ ] Review concrete staging release/configuration/version/maintenance inputs
+      before vault writes or rollout; obtain the existing operator approvals.
+- [ ] Execute and independently accept only the newly authorized staging cases.
+- [ ] Separately review production release/policy, all-account seeds, bounded
+      production checks, monitoring/rollback ownership and operator approval.
+
+The draft prices imply USD 0.00056832 for five hypothetical 512-input/128-output
+checks; this is an illustrative input/output-only estimate, not an approved
+allowance or verified provider charge. The prior USD 4.83 figure is not a fresh
+balance confirmation, and the previous 5,000-request runway claim is withdrawn.

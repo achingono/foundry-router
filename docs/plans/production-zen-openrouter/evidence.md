@@ -1,12 +1,17 @@
 # Enablement evidence
 
-**Deployment planned; harness implemented locally.** No staging/production
-writes or live inference were performed by the reviewer. Independent plan and
-harness review are complete; environment preparation and execution approvals
-remain pending.
+**Original staging cases passed; roster staging deployed and halted after two
+passes and one failure; production planned.** See the
+[roster execution evidence](evidence-roster-2026-10-12.md). Independent review of
+the retained four-case staging evidence is complete in
+[the staging evidence review](review-staging-evidence-be1f2c0.md). The reviewer
+performed no live requests or environment changes. Production release evidence,
+credit seeds and operator approval remain pending.
 The independent harness review gate is cleared for `82c7d09`: all seven Major
 findings and SV-8 are closed under the narrowed public/admin acceptance contract.
-Actual-environment, release, maintenance and operator execution gates remain open.
+Production release, maintenance and operator gates remain open, including the
+SE-1 operational scope, SE-2 immutable release binding and SE-3 account continuity
+findings. Infrastructure code review is complete; production policy is not approved.
 
 | Item | Reference | Notes |
 | --- | --- | --- |
@@ -15,7 +20,7 @@ Actual-environment, release, maintenance and operator execution gates remain ope
 | Pool names / prices | [Configuration table](index.md#pools-prices-and-account-ownership) | Haiku version explicit; prior configured prices retained provisionally, current provenance/policy check pending |
 | Review verification | Repository source and canonical docs | Checked backend capabilities, translated-stream failure behavior, credit ownership, memory handoff and template secret binding; no tests or live requests needed for this documentation review |
 | Documentation checks | Revised plan | Relative links, whitespace and final diff checked |
-| Release and execution prerequisites | [Exit criteria](exit-criteria.md) | Actual environment baseline, image, secret-selection mechanism, maintenance, manifests/harness and operator approvals pending |
+| Release and execution prerequisites | [Exit criteria](exit-criteria.md), [staging evidence review](review-staging-evidence-be1f2c0.md) | Harness/case evidence accepted; infrastructure scope amendment, immutable release/configuration evidence, fresh production seeds, maintenance and operator approval remain pending |
 | Staging harness | `scripts/quality/staging_validation.py`, `tests/unit/test_staging_validation.py` | 48 offline checks: immutable specs, combined allowance, single-backend/single-shot enforcement, bounded reads, strict SSE terminals, whole-prefix reconciliation with coherence revalidation, precision-derived settlement, inference-only entry accounting, evidence-scope binding, narrowed production gating, redaction |
 | Staging deployment (2026-10-12) | `rg-foundry-router-staging-eastus`, image `zen-openrouter-staging-4224eaa` | New group holds vault `kv-fr-stg-002`, runtime identity, app; app attached to production environment `foundry-router-env-production`. Eight secrets populated before provisioning; temp Secrets Officer removed. Credit groups `zen-staging` (10.00/10.00) and shared `or-shared` (4.83/4.83) seeded at operator-confirmed actuals; staging reserves 0.05/5% via parameterized template. Prod group clean except self-deleting staging env. No credential values recorded |
 | Staging validation run (2026-10-12) | Run `staging-zen-openrouter-2026-10-11`, ledger/results in stage dir (git-ignored) | 4/4 passed, all HTTP 200, usage coherent, terminated, settlement matched, reservations cleared. Debits: zen-nonstream 3.15e-05, zen-stream 3.15e-05, openai-nonstream 3.15e-06, haiku-nonstream 3.8e-05; total 0.00010415 USD under the 0.01 allowance. Quiescence confirmed by approver; no other traffic during run |
@@ -24,3 +29,19 @@ Actual-environment, release, maintenance and operator execution gates remain ope
 | Narrowing decision (2026-10-12) | [Scoped acceptance amendment](amendment-black-box-acceptance.md) | Reviewer accepts deployed public/admin acceptance without independent provider/billing claims; six-case budget and operator gates unchanged. Implementation/re-review pending; no execution clearance |
 | Harness second follow-up (2026-10-12) | [Review of 08221ff](review-staging-harness-9a763c7.md#follow-up-review-of-08221ff) | SV-1 closed; SV-6 remains partial because scope is not bound and legacy/true-upstream-flag records are accepted. SV-8 remains partial; its claimed marker/harvesting fix is absent. 43 tests plus independent state, scope, replay and bounds checks. No live changes |
 | Harness final follow-up (2026-10-12) | [Review of 82c7d09](review-staging-harness-9a763c7.md#follow-up-review-of-82c7d09) | SV-6/SV-8 closed; all prior findings remain closed. Independent harness review gate cleared for the six scoped cases. 48 tests plus independent scope/legacy/promotion/replay and entry-failure probes passed. No live requests or staging writes |
+| Independent staging evidence review (2026-10-12) | [Review of be1f2c0](review-staging-evidence-be1f2c0.md) | Four actual retained records reconciled; local debit recomputed as USD 0.00010415 (1.0415% of allowance); artifact hashes recorded. 48 offline checks passed. SE-1 infrastructure scope and SE-2 release binding remain open; no production approval or live reviewer requests |
+| Release packet follow-up (2026-10-12) | [Packet review](review-staging-evidence-be1f2c0.md#follow-up-supplied-release-packet-2026-10-12), [infrastructure amendment](amendment-staging-infrastructure.md) | Candidate digest operator-reported; source continuity confirmed. Infrastructure code review complete with both Bicep builds/root lint (existing warnings), compiled assertions and 25 credit tests. SE-1 operational evidence and SE-2 release binding remain open; SE-3 rejects Zen-only seeds and automatic global reserve reduction on the existing app. No live reviewer actions |
+| Group reserve plan review (2026-10-12) | [Review of df5396c](review-group-reserves-df5396c.md), [revised amendment](amendment-per-backend-reserves.md) | Canonical group policy design approved for local implementation after mixed-policy diagnostics and fresh-evidence gates were specified. No code changed or tests/live requests run. Fresh all-account seeds, implementation review and separately bounded new-release staging validation remain open |
+| Group reserve implementation review (2026-10-12) | [Review of f891d06](review-group-reserves-f891d06.md) | 129 focused tests, independent mixed-policy diagnostics/fingerprint checks and flat/typed builds/lints passed (existing Bicep warnings). GI-1 Major: inherited resolver repeats full backend scans per candidate; GI-2 Suggestion: parsed map remains mutable. Implementation gate not cleared; no live requests |
+| Group reserve follow-up (2026-10-12) | [Review of 48012df](review-group-reserves-f891d06.md#follow-up-review-of-48012df) | GI-1/GI-2 closed; independent implementation gate cleared under startup-only configuration. 133 focused tests and independent many-candidate/immutability checks passed; steady-state resolver scans zero. Fixture cache-miss fallback has two scans and is not hot reload. Live execution and production gates remain open |
+| OpenRouter roster plan review (2026-10-12) | [Review of 57bee77](review-openrouter-roster-57bee77.md) | Changes required: OR-1 non-stream production enforcement, OR-2 shared-account reserve/headroom, OR-3 exact bounded new-release validation/promotion contract. Catalog lookup operator-reported; independent public read unavailable due network and automatic-review service failure. No staging writes or paid requests |
+| OpenRouter catalog evidence follow-up (2026-10-12) | [Review of efd13ab](review-openrouter-roster-57bee77.md#evidence-follow-up-efd13ab), [catalog excerpt](catalog-openrouter-excerpt-2026-10-12.json) | Artifact identity, five IDs, capture metadata and all per-token conversions checked locally; USD 0.00056832 provisional five-case arithmetic confirmed. Retained-catalog/source-location gap addressed; links and top-up-fee clarification recorded as operator-supplied. OR-1/2/3 remain open; no live reads/writes or inference |
+| Roster staging execution plan review (2026-10-12) | [Review of 3bd4010](review-roster-execution-3bd4010.md), [revised amendment](amendment-roster-execution.md) | Revised plan cleared for local harness implementation after exact mixed-policy contrast and retained release/policy evidence were specified. Five new cases estimate USD 0.00056832; original-plus-new estimate USD 0.00571392 within USD 0.01. Harness review, concrete inputs and operator approval remain open; no live changes |
+| Roster harness implementation and fixes | [Review of e34b506 and 2e18d6f](review-harness-e34b506.md), fixture correction `d5d808a` | HR-1/HR-2 closed; operations-only mutation now observable and tested. Fresh 69-test run and 81.01% harness coverage passed |
+| Roster staging deployment and halted run | [Execution evidence](evidence-roster-2026-10-12.md) | Two passing local debits total USD 0.0000079; failed-case debit unmeasured. DeepSeek returned HTTP 502; cause undetermined. Three consumed slots, two unattempted successors; halted ledger retained without replay |
+
+| Skip-DeepSeek staging continuation | [Evidence](../roster-skip-deepseek/evidence.md) | User confirmed staging; harness two new identities reviewed,80 focused and2,516 full tests passed. Both live attempts stopped at health preflight/warmup before inference; old results preserved. Existing deployment retained; MiMo/Spark not qualified |
+
+| Passed-model staging selection | [Acceptance evidence](../passed-openrouter-staging/evidence.md) | Luna/Haiku selected; current revision, exact bindings, health/readiness and quiet groups verified read-only. Existing deployment retained, no inference replay or production promotion |
+
+| Two-model production rollout | [Deployment evidence](../openrouter-production-two/deployment-evidence.md) | Luna/Haiku nonstreamonlydeployed;4/4stage/prodchecksaccepted;baselinepreserved,stagingoff,quietgroups. Broaderroster/stream/Tablegatesnotcleared |
