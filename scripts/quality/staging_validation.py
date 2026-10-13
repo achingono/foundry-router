@@ -33,6 +33,9 @@ MAX_RESULTS_BYTES = 65536
 STAGING_RUN_ID = "staging-zen-openrouter-2026-10-11"
 PRODUCTION_RUN_ID = "production-zen-openrouter-2026-10-11"
 ROSTER_RUN_ID = "staging-or-roster-2026-10-12"
+REMAINING_RUN_ID = "staging-or-roster-remaining-2026-10-12"
+FINAL_RUN_ID = "staging-or-roster-final-2026-10-12"
+ROSTER_RUN_IDS = {ROSTER_RUN_ID, REMAINING_RUN_ID, FINAL_RUN_ID}
 
 PROMPT = "Reply with the word ready."
 MAX_OUTPUT_TOKENS = 128
@@ -95,20 +98,29 @@ ROSTER_CASES = (
     "roster-spark-nonstream",
 )
 
+REMAINING_CASES = ("remaining-mimo-nonstream", "remaining-spark-nonstream")
+FINAL_CASES = ("final-mimo-nonstream", "final-spark-nonstream")
+
 RUN_ENVIRONMENTS = {
     STAGING_RUN_ID: "staging",
     PRODUCTION_RUN_ID: "production",
     ROSTER_RUN_ID: "staging",
+    REMAINING_RUN_ID: "staging",
+    FINAL_RUN_ID: "staging",
 }
 RUN_CASES = {
     STAGING_RUN_ID: STAGING_CASES,
     PRODUCTION_RUN_ID: PRODUCTION_CASES,
     ROSTER_RUN_ID: ROSTER_CASES,
+    REMAINING_RUN_ID: REMAINING_CASES,
+    FINAL_RUN_ID: FINAL_CASES,
 }
 RUN_FILES = {
     STAGING_RUN_ID: ("ledger-staging.json", "results-staging.json"),
     PRODUCTION_RUN_ID: ("ledger-production.json", "results-production.json"),
     ROSTER_RUN_ID: ("ledger-roster.json", "results-roster.json"),
+    REMAINING_RUN_ID: ("ledger-roster-remaining.json", "results-roster-remaining.json"),
+    FINAL_RUN_ID: ("ledger-roster-final.json", "results-roster-final.json"),
 }
 
 # Immutable reviewed case specifications. Manifests must match their run's
@@ -232,6 +244,16 @@ RUN_SPECS = {
     ),
 }
 
+RUN_SPECS[REMAINING_RUN_ID] = tuple(
+    {**case, "id": case_id}
+    for case, case_id in zip(RUN_SPECS[ROSTER_RUN_ID][-2:], REMAINING_CASES, strict=True)
+)
+
+RUN_SPECS[FINAL_RUN_ID] = tuple(
+    {**case, "id": case_id}
+    for case, case_id in zip(RUN_SPECS[ROSTER_RUN_ID][-2:], FINAL_CASES, strict=True)
+)
+
 CASE_SPEC_KEYS = (
     "id",
     "pool",
@@ -339,7 +361,7 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
         or not total <= ALLOWANCE_USD
     ):
         raise ValueError("Invalid staging bounds or allowance")
-    if run == ROSTER_RUN_ID:
+    if run in ROSTER_RUN_IDS:
         if manifest.get("release") != ROSTER_RELEASE:
             raise ValueError("Invalid roster release binding")
         if manifest.get("configuration") != ROSTER_CONFIGURATION:
@@ -503,7 +525,7 @@ def validate_result(  # noqa: PLR0912, PLR0915 -- bounded evidence schema
 ) -> None:
     """Bounded schema for persisted validation outcomes."""
     cases = {case["id"]: case for case in manifest["cases"]}
-    roster = manifest.get("run") == ROSTER_RUN_ID
+    roster = manifest.get("run") in ROSTER_RUN_IDS
     expected_keys = ROSTER_RESULT_KEYS if roster else RESULT_KEYS
     if not isinstance(result, dict) or set(result) != expected_keys:
         raise ValueError("Invalid validation result")
@@ -1064,7 +1086,7 @@ async def run_validation_case(  # noqa: PLR0911, PLR0912, PLR0913, PLR0915 -- fi
 ) -> dict:
     """One bounded black-box case; only redacted numerics are returned."""
     started = time.monotonic()
-    roster_run = manifest.get("run") == ROSTER_RUN_ID
+    roster_run = manifest.get("run") in ROSTER_RUN_IDS
     result: dict = {
         "case_id": case["id"],
         "pool": case["pool"],
@@ -1289,6 +1311,8 @@ def _run_files(run: str, stage_dir: Path) -> tuple[Path, Path]:
         STAGING_RUN_ID: ("ledger-staging.json", "results-staging.json"),
         PRODUCTION_RUN_ID: ("ledger-production.json", "results-production.json"),
         ROSTER_RUN_ID: ("ledger-roster.json", "results-roster.json"),
+        REMAINING_RUN_ID: ("ledger-roster-remaining.json", "results-roster-remaining.json"),
+        FINAL_RUN_ID: ("ledger-roster-final.json", "results-roster-final.json"),
     }
     ledger_name, results_name = names[run]
     return stage_dir / ledger_name, stage_dir / results_name
@@ -1304,6 +1328,9 @@ def _load_canonical_manifest(directory: Path, name: str) -> dict:
     expected = {
         "manifest.staging.json": STAGING_RUN_ID,
         "manifest.production.json": PRODUCTION_RUN_ID,
+        "manifest.roster.json": ROSTER_RUN_ID,
+        "manifest.roster-remaining.json": REMAINING_RUN_ID,
+        "manifest.roster-final.json": FINAL_RUN_ID,
     }.get(name)
     if expected is None or manifest["run"] != expected:
         raise ValueError("Staging manifest unavailable")
@@ -1411,7 +1438,7 @@ def execute_validation(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase 
         by_id = {item["case_id"]: item for item in results["attempts"]}
         if run == PRODUCTION_RUN_ID and not _staging_results_passed(directory):
             raise ValueError("Production validation requires passing staging results")
-        if run == ROSTER_RUN_ID:
+        if run in ROSTER_RUN_IDS:
             try:
                 staging_manifest = _load_canonical_manifest(directory, "manifest.staging.json")
                 production_manifest = _load_canonical_manifest(
@@ -1419,10 +1446,14 @@ def execute_validation(  # noqa: PLR0912, PLR0913, PLR0915 -- fail-closed phase 
                 )
             except (OSError, ValueError):
                 raise ValueError("Roster validation requires committed run manifests") from None
-            if (
-                combined_preflight_estimate(manifest, staging_manifest, production_manifest)
-                > ALLOWANCE_USD
-            ):
+            manifests = [manifest, staging_manifest, production_manifest]
+            if run in {REMAINING_RUN_ID, FINAL_RUN_ID}:
+                manifests.append(_load_canonical_manifest(directory, "manifest.roster.json"))
+            if run == FINAL_RUN_ID:
+                manifests.append(
+                    _load_canonical_manifest(directory, "manifest.roster-remaining.json")
+                )
+            if combined_preflight_estimate(*manifests) > ALLOWANCE_USD:
                 raise ValueError("Combined estimate exceeds allowance")
         factory = transport_factory or (
             lambda: httpx.AsyncHTTPTransport(trust_env=False, retries=0)

@@ -1326,3 +1326,162 @@ def test_roster_operation_change_halts(tmp_path):
     results = run_roster(tmp_path, manifest, app)
     assert results["attempts"][0]["status"] == "failed"
     assert len(app.calls) == 1
+
+
+def remaining_manifest():
+    return json.loads((PLAN_DIR / "manifest.roster-remaining.json").read_text())
+
+
+def run_remaining(tmp_path, manifest, app):
+    import shutil
+
+    copy_canonical_pair(tmp_path)
+    shutil.copy(PLAN_DIR / "manifest.roster.json", tmp_path / "manifest.roster.json")
+    return run_validation(tmp_path, manifest, app)
+
+
+def test_remaining_pinned_files_and_budget(tmp_path):
+    manifest = remaining_manifest()
+    sv.validate_manifest(manifest)
+    assert tuple(c["id"] for c in manifest["cases"]) == sv.REMAINING_CASES
+    assert sv._run_files(sv.REMAINING_RUN_ID, tmp_path) == (
+        tmp_path / "ledger-roster-remaining.json",
+        tmp_path / "results-roster-remaining.json",
+    )
+    assert sv.RUN_FILES[sv.REMAINING_RUN_ID] == tuple(
+        p.name for p in sv._run_files(sv.REMAINING_RUN_ID, tmp_path)
+    )
+    assert sv.combined_preflight_estimate(
+        staging_manifest(), production_manifest(), roster_manifest(), manifest
+    ) == pytest.approx(0.00589824)
+    for name in ("manifest.roster.json", "manifest.roster-remaining.json"):
+        assert sv._load_canonical_manifest(PLAN_DIR, name)["run"] in sv.ROSTER_RUN_IDS
+
+
+def test_remaining_two_pass_no_historical_replay(tmp_path):
+    manifest = remaining_manifest()
+    app = roster_app(manifest)
+    historical = tmp_path / "ledger-roster.json"
+    historical.write_text('{"halted":true}')
+    results = run_remaining(tmp_path, manifest, app)
+    assert [r["case_id"] for r in results["attempts"]] == list(sv.REMAINING_CASES)
+    assert all(r["status"] == "passed" for r in results["attempts"])
+    sv.load_validation_results(tmp_path / "results-roster-remaining.json", manifest)
+    assert len(app.calls) == 2
+    run_remaining(tmp_path, manifest, app)
+    assert len(app.calls) == 2
+    assert historical.read_text() == '{"halted":true}'
+
+
+def test_remaining_halt_and_no_replay(tmp_path):
+    manifest = remaining_manifest()
+    app = roster_app(manifest, status_override={sv.REMAINING_CASES[0]: (502, {})})
+    results = run_remaining(tmp_path, manifest, app)
+    assert len(results["attempts"]) == 1
+    assert results["attempts"][0]["status"] == "failed"
+    with pytest.raises(ValueError, match="Halted"):
+        run_remaining(tmp_path, manifest, app)
+    assert len(app.calls) == 1
+
+
+@pytest.mark.parametrize("key", ["release", "configuration"])
+def test_remaining_mutation_refused(key):
+    manifest = remaining_manifest()
+    manifest[key] = {}
+    with pytest.raises(ValueError):
+        sv.validate_manifest(manifest)
+
+
+def test_remaining_requires_historical_manifest(tmp_path):
+    manifest = remaining_manifest()
+    copy_canonical_pair(tmp_path)
+    app = roster_app(manifest)
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def test_remaining_wrong_policy_refuses_before_inference(tmp_path):
+    manifest = remaining_manifest()
+    app = roster_app(manifest, global_reserves=(0.05, 5.0))
+    with pytest.raises(ValueError):
+        run_remaining(tmp_path, manifest, app)
+    assert app.calls == []
+
+
+def final_manifest():
+    return json.loads((PLAN_DIR / "manifest.roster-final.json").read_text())
+
+
+def run_final(tmp_path, app):
+    import shutil
+
+    for name in (
+        "manifest.staging.json",
+        "manifest.production.json",
+        "manifest.roster.json",
+        "manifest.roster-remaining.json",
+    ):
+        shutil.copy(PLAN_DIR / name, tmp_path / name)
+    return run_validation(tmp_path, final_manifest(), app)
+
+
+def test_final_manifest_files_budget_and_pass(tmp_path):
+    manifest = final_manifest()
+    sv.validate_manifest(manifest)
+    assert tuple(c["id"] for c in manifest["cases"]) == sv.FINAL_CASES
+    assert sv._run_files(sv.FINAL_RUN_ID, tmp_path) == (
+        tmp_path / "ledger-roster-final.json",
+        tmp_path / "results-roster-final.json",
+    )
+    assert sv.combined_preflight_estimate(
+        staging_manifest(), production_manifest(), roster_manifest(), remaining_manifest(), manifest
+    ) == pytest.approx(0.00608256)
+    app = roster_app(manifest)
+    result = run_final(tmp_path, app)
+    assert all(r["status"] == "passed" for r in result["attempts"])
+    run_final(tmp_path, app)
+    assert len(app.calls) == 2
+
+
+def test_final_missing_previous_manifest_and_failure_refuse(tmp_path):
+    manifest = final_manifest()
+    app = roster_app(manifest)
+    copy_canonical_pair(tmp_path)
+    (tmp_path / "manifest.roster.json").write_text(json.dumps(roster_manifest()))
+    with pytest.raises(ValueError):
+        run_validation(tmp_path, manifest, app)
+    assert app.calls == []
+    # Aggregate prerequisites precede slot reservation; supplying the missing
+    # immutable manifest can complete this still-pristine offline run.
+    result = run_final(tmp_path, app)
+    assert all(r["status"] == "passed" for r in result["attempts"])
+    assert len(app.calls) == 2
+
+
+def test_final_failure_halts_successor(tmp_path):
+    app = roster_app(final_manifest(), status_override={sv.FINAL_CASES[0]: (502, {})})
+    result = run_final(tmp_path, app)
+    assert len(result["attempts"]) == 1
+    assert result["attempts"][0]["status"] == "failed"
+    with pytest.raises(ValueError):
+        run_final(tmp_path, app)
+    assert len(app.calls) == 1
+
+
+def test_final_health_failure_keeps_reserved_slot(tmp_path):
+    class UnhealthyApp(FakeApp):
+        async def handle_async_request(self, request):
+            if request.url.path == "/health/live":
+                return httpx.Response(503, json={})
+            return await super().handle_async_request(request)
+
+    manifest = final_manifest()
+    app = UnhealthyApp(manifest)
+    with pytest.raises(ValueError):
+        run_final(tmp_path, app)
+    with pytest.raises(ValueError, match="Unresolved"):
+        run_final(tmp_path, app)
+    assert app.calls == []
+    ledger = json.loads((tmp_path / "ledger-roster-final.json").read_text())
+    assert ledger["cases"][sv.FINAL_CASES[0]]["reserved"] is True

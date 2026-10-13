@@ -1,0 +1,19 @@
+# Skip-DeepSeek staging activities
+
+## Step-By-Step Activities
+
+1. Preserve all old manifests, ledgers, identities and results. Skip DeepSeek inference and qualification; do not edit its failed record or replay Luna/Haiku.
+2. Add fixed staging continuation identity `staging-or-roster-remaining-2026-10-12` with exactly two nonstream Responses cases: `remaining-mimo-nonstream` (xiaomi/mimo-v2.6-flash, USD/M 0.14/0.28) then `remaining-spark-nonstream` (meta/muse-spark-1.3-contributor, USD/M 0.10/0.20). Same prompt, store:false,512/128 assumptions,120s deadline,read bounds,single-shot path,policy/release binding and halt/no-replay rules as reviewed roster.
+3. New files `manifest.roster-remaining.json`, `ledger-roster-remaining.json`, identity and `results-roster-remaining.json` reside in existing canonical staging folder. This is two additional slots, never releasing old slots. Estimate USD 0.00018432; sum of original six + original five + new two is USD 0.00589824, below existing USD 0.01. Runtime aggregate gate must include all four immutable manifests and refuse missing/changed metadata before dispatch.
+4. Reuse the existing mixed-policy result validation and preflight for both roster runs. Update every run/file/manifest/CLI routing boundary. Do not change production predicate or consume production slots.
+5. Tests cover exact pinning, file routing, two-pass path, halt/no replay, aggregate prerequisites, release/policy mutation refusal, old results unchanged and no DeepSeek/Luna/Haiku inference. Run focused + full checks,runtime and harness coverage>=80,lint,format,mypy. Docker is not required for local harness-only code: deployed application source/image unchanged. Sonar absent conditional gate; independent deep review required.
+6. Read-only preflight verifies current staging app is ready,correct two pools with exact backends, mixed policy and quiet groups. Execute once after independent review. User has authorized these two remaining checks; no further confirmation required. Halt if failed or ambiguous; do not substitute models or retry.
+7. Record sanitized results and update plan hub,ops,traceability. Keep existing deployment: remaining model pools are already deployed. DeepSeek is skipped from this qualification, not removed from current topology. No vault writes, rollout,memory restart,resources,grants or production change are required by this narrow continuation. If removal from topology becomes required, prepare a separately reviewed drained/seeded configuration amendment first.
+
+## Review Focus
+
+Exact two new slots; unchanged historical identities; combined USD 0.01 scope; release/policy binding; bounded reads and single-shot egress; failure halts successors. Success means MiMo/Spark nonstream public/admin acceptance on deployed staging image, with Luna/Haiku historical evidence retained separately. No 5/5 claim, DeepSeek diagnosis or production qualification.
+
+## Preflight-timeout amendment
+
+The first continuation identity is reserved/unresolved after a health timeout before inference. Retain it permanently unchanged; no inference was sent. Read-only direct and environment-routed health subsequently returned200. Add one fresh final identity `staging-or-roster-final-2026-10-12`, cases `final-mimo-nonstream` then `final-spark-nonstream`, exact prior case specification/policy/digest. Files manifest.roster-final.json,ledger-roster-final.json (+identity),results-roster-final.json. Aggregate gate must include original six, original five, first continuation two and final two: USD0.00608256, within USD0.01. Do not refund first continuation. No subsequent identity or retries authorized if this one refuses/fails. All prior tests,gates and bounds apply. Short unauthenticated health warmup is read-only preparation; each inference still requires the unchanged five-second harness preflight.
