@@ -1,0 +1,29 @@
+{
+ "diff_sha256": "ba35dc3e4d3beec0408a0fcf12af40dd7595adde3f02b5c83fb1e3f5f73567f8",
+ "note": "Working tree pinned without committing; ca7 was built from this exact tree.",
+ "release_subset_files": {
+  "docs/plans/opencode-gemini-streaming/release-subset/acceptance-manifest.subset.json": "bdfaf9c9cf20891143778b9dc32407e9115e236f3933cd1a02adeed61c349c3a",
+  "docs/plans/opencode-gemini-streaming/release-subset/mirror-fingerprint.txt": "eb82dd47962d8f3cbf2f5cb75b03122217182f864c98b836e33971c9844b8701",
+  "docs/plans/opencode-gemini-streaming/release-subset/staging-admin-projection.json": "1ed6a2811d3dd600c576efb9fd8e8e2b2f370b0c13f64096bb8ac0272a0a97c2",
+  "docs/plans/opencode-gemini-streaming/release-subset/staging-identity.subset.json": "b206dbcf65bc7d7212a2effb67ad1144028aec6c782cf0e9e6742b8aa46394f1",
+  "docs/plans/opencode-gemini-streaming/release-subset/staging-ledger.subset.json": "0eca5bc56341a23da541bfabf696a343acb084629c17d2455aa11ec4589a4bb5",
+  "docs/plans/opencode-gemini-streaming/release-subset/staging-packet.subset.json": "5f6c2a3b2c379cd6e5a54f08704aa6286436428d7802e7f3cc9e7f2fb89ce34c",
+  "docs/plans/opencode-gemini-streaming/release-subset/subset-prod-projection.json": "3d513528ce2ed1f200573a51a4de19024fc284cfe9daeda6cbf12e247aaef4a3",
+  "docs/plans/opencode-gemini-streaming/release-subset/vault-metadata.json": "1bae3d89916ec430933bc8678c89a404ca15225fafc55d6df751918a0f762c49",
+  "scripts/quality/opencode_five_diagnostic.py": "84ddf1f624e0d2d3ba19776020c122af94edf61e6cd833483e246de1a06a99b3",
+  "scripts/quality/opencode_five_validation.py": "c8cde008026edc65433c573012ec18e76c75f815161549d308555e949c37725a",
+  "scripts/quality/opencode_gemini_stream_diagnostic.py": "60489ae98fa48b3baafdaf2c160f7915e02b12e38e36f37dc7b8df10c67fb732",
+  "src/foundry_router/api/adapters/opencode_anthropic.py": "920d95b64970f8e834fc2a5c943246dd26b7080114a9fb17b03c27f5a6821ae2",
+  "tests/integration/test_opencode_anthropic_integration.py": "e9a15a74e9e358daf38b3656edeb6cf2a5569bde025542c3f1bb53d5ed45b936",
+  "tests/integration/test_opencode_google_integration.py": "f53a3707cee9b44cb1254fa98a722c9a2b4c50be0fa727ea10e760b01a1de093",
+  "tests/unit/test_google_model_status.py": "7ad8fb8d276e7879c4240aea9cb93b9ffc6c76dd44bc4c6db7bec651f5732500",
+  "tests/unit/test_opencode_anthropic.py": "fd0ce980bf2b6b134b4b031550713655ba95cefb8695720146d3f74372f639a1",
+  "tests/unit/test_opencode_five_diagnostic.py": "9c307aae72633ab3fe26b0c7f420e0db2b567dac135b128ab42594dc47aea63d",
+  "tests/unit/test_opencode_five_validation.py": "5cb6175651437116fd8faf87dcb754dd85d6a07504382fa26997c9cb99e1a328",
+  "tests/unit/test_opencode_gemini_stream_diagnostic.py": "15fd6a3d587981c51e78367e87bdabc2dc663a2b17aa3d04fda1c405809e1f61",
+  "tests/unit/test_opencode_google.py": "5228c061f0d317455507ac85eb998600cd7552f3c50608ea8dcd39bf93fa3e15"
+ },
+ "status_porcelain": " M .gitignore\n M docs/configuration/index.md\n M docs/decisions/requirements-traceability.md\n M docs/index.md\n M docs/operations/index.md\n M src/foundry_router/api/adapters/__init__.py\n M src/foundry_router/api/adapters/google_native.py\n M src/foundry_router/backends/__init__.py\n M src/foundry_router/config/__init__.py\n M src/foundry_router/forwarding/__init__.py\n?? docs/plans/opencode-gemini-argon/\n?? docs/plans/opencode-gemini-streaming/\n?? docs/plans/opencode-zen-five-models/\n?? scripts/quality/opencode_five_diagnostic.py\n?? scripts/quality/opencode_five_validation.py\n?? scripts/quality/opencode_gemini_stream_diagnostic.py\n?? src/foundry_router/api/adapters/opencode_anthropic.py\n?? tests/integration/test_opencode_anthropic_integration.py\n?? tests/integration/test_opencode_google_integration.py\n?? tests/unit/test_google_model_status.py\n?? tests/unit/test_opencode_anthropic.py\n?? tests/unit/test_opencode_five_diagnostic.py\n?? tests/unit/test_opencode_five_validation.py\n?? tests/unit/test_opencode_gemini_stream_diagnostic.py\n?? tests/unit/test_opencode_google.py\n",
+ "status_porcelain_sha256": "4ab1d0bd053a370368980a3fc98884ce046d4f28e0a70cfb3e1050c8665acb11",
+ "untracked_tracked_files": 15
+}

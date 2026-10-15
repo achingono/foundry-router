@@ -1,0 +1,211 @@
+{
+ "account_allocation_usd": 10.0,
+ "case_timeout_seconds": 120,
+ "cases": [
+  {
+   "deployment": "gemini-3.8-flash",
+   "environment": "staging",
+   "id": "staging-0-nonstream",
+   "input_per_million": 1.5,
+   "output_per_million": 7.5,
+   "pool": "gemini-3.8-flash-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-3.8-flash-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-3.8-flash",
+   "environment": "staging",
+   "id": "staging-0-stream",
+   "input_per_million": 1.5,
+   "output_per_million": 7.5,
+   "pool": "gemini-3.8-flash-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-3.8-flash-zen",
+    "store": false,
+    "stream": true
+   },
+   "stream": true,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-4-argon",
+   "environment": "staging",
+   "id": "staging-1-nonstream",
+   "input_per_million": 4.0,
+   "output_per_million": 20.0,
+   "pool": "gemini-4-argon-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-4-argon-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-4-argon",
+   "environment": "staging",
+   "id": "staging-1-stream",
+   "input_per_million": 4.0,
+   "output_per_million": 20.0,
+   "pool": "gemini-4-argon-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-4-argon-zen",
+    "store": false,
+    "stream": true
+   },
+   "stream": true,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "claude-sonnet-5-5",
+   "environment": "staging",
+   "id": "staging-2-nonstream",
+   "input_per_million": 4.0,
+   "output_per_million": 10.0,
+   "pool": "claude-sonnet-5.5-zen",
+   "provider": "opencode_anthropic",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 128,
+    "model": "claude-sonnet-5.5-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": false
+  },
+  {
+   "deployment": "gemini-3.8-flash",
+   "environment": "production",
+   "id": "production-0-nonstream",
+   "input_per_million": 1.5,
+   "output_per_million": 7.5,
+   "pool": "gemini-3.8-flash-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-3.8-flash-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-3.8-flash",
+   "environment": "production",
+   "id": "production-0-stream",
+   "input_per_million": 1.5,
+   "output_per_million": 7.5,
+   "pool": "gemini-3.8-flash-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-3.8-flash-zen",
+    "store": false,
+    "stream": true
+   },
+   "stream": true,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-4-argon",
+   "environment": "production",
+   "id": "production-1-nonstream",
+   "input_per_million": 4.0,
+   "output_per_million": 20.0,
+   "pool": "gemini-4-argon-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-4-argon-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "gemini-4-argon",
+   "environment": "production",
+   "id": "production-1-stream",
+   "input_per_million": 4.0,
+   "output_per_million": 20.0,
+   "pool": "gemini-4-argon-zen",
+   "provider": "opencode_google",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 512,
+    "model": "gemini-4-argon-zen",
+    "store": false,
+    "stream": true
+   },
+   "stream": true,
+   "streaming_enabled": true
+  },
+  {
+   "deployment": "claude-sonnet-5-5",
+   "environment": "production",
+   "id": "production-2-nonstream",
+   "input_per_million": 4.0,
+   "output_per_million": 10.0,
+   "pool": "claude-sonnet-5.5-zen",
+   "provider": "opencode_anthropic",
+   "request": {
+    "input": "Reply with the single word OK.",
+    "max_output_tokens": 128,
+    "model": "claude-sonnet-5.5-zen",
+    "store": false,
+    "stream": false
+   },
+   "stream": false,
+   "streaming_enabled": false
+  }
+ ],
+ "configuration_fingerprints": {
+  "production": "c12d9288d1611997ae7193325721775437d7aa2d92ed1cc1809f5ae4d53c9c29",
+  "staging": "b1e6a2d0c8dacaa1e57bfbeec327be09698a9881f4022953128355ea47eb4076"
+ },
+ "image_digest": "sha256:b4b84283527eb19f86b19d53458621a0da9d653b64b36d74841efe580b423bbc",
+ "max_dispatches": 10,
+ "production_seed_usd": 9.9,
+ "request_hashes": [
+  "6e7a354e01882bcbd20d8be18078dd9fa59b109e0303f88eb39a1534211b1f92",
+  "3d586df52231fa37055f1fd6dcbe1a6a0c74dcd9ec1ff99f01c44ac8f164d75a",
+  "ccf70c2ffc071a7cf9d29dd8ca59da97ce60bce3b178c9220f236c26e23ea99a",
+  "9b9be44195898493cc8f8688e21385578f5c16c6dfd1b1162a8497a5e3530593",
+  "dabec8e75cf893fbac85e5d14902baa28e143ad511e49d20ab6749b1f317a7c5",
+  "6e7a354e01882bcbd20d8be18078dd9fa59b109e0303f88eb39a1534211b1f92",
+  "3d586df52231fa37055f1fd6dcbe1a6a0c74dcd9ec1ff99f01c44ac8f164d75a",
+  "ccf70c2ffc071a7cf9d29dd8ca59da97ce60bce3b178c9220f236c26e23ea99a",
+  "9b9be44195898493cc8f8688e21385578f5c16c6dfd1b1162a8497a5e3530593",
+  "dabec8e75cf893fbac85e5d14902baa28e143ad511e49d20ab6749b1f317a7c5"
+ ],
+ "reserve": {
+  "min_credit_reserve_percent": 5.0,
+  "min_credit_reserve_usd": 0.05
+ },
+ "run": "opencode-zen-five-subset-20261014",
+ "staging_allocation_usd": 0.09
+}

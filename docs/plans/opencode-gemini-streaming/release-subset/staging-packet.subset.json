@@ -1,0 +1,23 @@
+{
+ "cases": 10,
+ "configuration_fingerprints": {
+  "production": "c12d9288d1611997ae7193325721775437d7aa2d92ed1cc1809f5ae4d53c9c29",
+  "staging": "b1e6a2d0c8dacaa1e57bfbeec327be09698a9881f4022953128355ea47eb4076"
+ },
+ "image_digest": "sha256:b4b84283527eb19f86b19d53458621a0da9d653b64b36d74841efe580b423bbc",
+ "manifest_sha256": "148ae26b5a485b00ebd6688c6695a880364da4b1e02a89ea34e79321e7761a1e",
+ "production_config_shas": {
+  "allowance": "2b19bb3ab21abcded1ab59b19098042857d50c96c90ad33caac55258f3234588",
+  "backends": "48f4061f66a7e2ffbd5b632826ec85251c53854c0c7515d7f3b4160697f9b62e",
+  "initial": "92b6d8c4648335c0b83d695049eb69ea7dfd30bc296374f05d7ef73851b91a73",
+  "models": "35405d5553dfe03770adf78c2d78a918c1d9d375d8cb7882d0341c867905cf38",
+  "pricing": "9c2f3442be381c17562f345f749cab91514a5052eea67cbd51045f5feeed5151",
+  "start": "e19310a25cb2deee3ecb71e4cabdb5908bc87153944e8faa1f6c714017203d4b"
+ },
+ "production_reserves_convention": "global 10.0/5.0 with or-shared + opencode-account 0.05/5.0 overrides; opencode allowance==initial==9.90 day 14",
+ "production_seed_usd": 9.9,
+ "run": "opencode-zen-five-subset-20261014",
+ "staging_allocation_usd": 0.09,
+ "staging_full_config_sha256": "5c5c08af19c3f7968e41df5676a5a3fa59fa2f5982a744dc59774d1e16e3b460",
+ "status": "FINAL - pending independent staging-packet re-review before live staging"
+}

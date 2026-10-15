@@ -1,0 +1,90 @@
+{
+ "entries": [
+  {
+   "reserved": true,
+   "result": {
+    "error_category": null,
+    "estimated_debit_usd": 0.0005804999999999977,
+    "http_status": 200,
+    "id": "staging-0-nonstream",
+    "input_tokens": 7,
+    "output_tokens": 76,
+    "reservations_cleared": true,
+    "status": "passed"
+   }
+  },
+  {
+   "reserved": true,
+   "result": {
+    "error_category": null,
+    "estimated_debit_usd": 0.0005504999999999954,
+    "http_status": 200,
+    "id": "staging-0-stream",
+    "input_tokens": 7,
+    "output_tokens": 72,
+    "reservations_cleared": true,
+    "status": "passed"
+   }
+  },
+  {
+   "reserved": true,
+   "result": {
+    "error_category": null,
+    "estimated_debit_usd": 0.0002520000000000022,
+    "http_status": 200,
+    "id": "staging-1-nonstream",
+    "input_tokens": 38,
+    "output_tokens": 5,
+    "reservations_cleared": true,
+    "status": "passed"
+   }
+  },
+  {
+   "reserved": true,
+   "result": {
+    "error_category": null,
+    "estimated_debit_usd": 0.0002520000000000022,
+    "http_status": 200,
+    "id": "staging-1-stream",
+    "input_tokens": 38,
+    "output_tokens": 5,
+    "reservations_cleared": true,
+    "status": "passed"
+   }
+  },
+  {
+   "reserved": true,
+   "result": {
+    "error_category": null,
+    "estimated_debit_usd": 0.00011200000000000099,
+    "http_status": 200,
+    "id": "staging-2-nonstream",
+    "input_tokens": 18,
+    "output_tokens": 4,
+    "reservations_cleared": true,
+    "status": "passed"
+   }
+  },
+  {
+   "reserved": false,
+   "result": null
+  },
+  {
+   "reserved": false,
+   "result": null
+  },
+  {
+   "reserved": false,
+   "result": null
+  },
+  {
+   "reserved": false,
+   "result": null
+  },
+  {
+   "reserved": false,
+   "result": null
+  }
+ ],
+ "manifest_sha256": "148ae26b5a485b00ebd6688c6695a880364da4b1e02a89ea34e79321e7761a1e"
+}

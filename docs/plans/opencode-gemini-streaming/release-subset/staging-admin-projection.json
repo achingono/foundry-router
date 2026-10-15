@@ -1,0 +1,70 @@
+{
+ "accounts": {
+  "opencode-account": {
+   "cycle_allowance_usd": 0.09,
+   "cycle_start_day": 14,
+   "initial_estimated_remaining_usd": 0.09,
+   "reserve_policy": {
+    "min_credit_reserve_percent": 5.0,
+    "min_credit_reserve_usd": 0.05,
+    "source": "override"
+   }
+  }
+ },
+ "aliases": {},
+ "backends": {
+  "zen-five-0": {
+   "api_surface": "native",
+   "credit_group": "opencode-account",
+   "deployment": "gemini-3.8-flash",
+   "endpoint": "https://opencode.ai/inference/v1",
+   "google_features": [],
+   "provider": "opencode_google",
+   "supported_operations": [
+    "responses"
+   ]
+  },
+  "zen-five-1": {
+   "api_surface": "native",
+   "credit_group": "opencode-account",
+   "deployment": "gemini-4-argon",
+   "endpoint": "https://opencode.ai/inference/v1",
+   "google_features": [],
+   "provider": "opencode_google",
+   "supported_operations": [
+    "responses"
+   ]
+  },
+  "zen-five-2": {
+   "api_surface": "openai_compat",
+   "credit_group": "opencode-account",
+   "deployment": "claude-sonnet-5-5",
+   "endpoint": "https://opencode.ai/inference/v1",
+   "google_features": [],
+   "provider": "opencode_anthropic",
+   "supported_operations": [
+    "responses"
+   ]
+  }
+ },
+ "models": {
+  "claude-sonnet-5.5-zen": {
+   "backends": {
+    "zen-five-2": 1.0
+   },
+   "streaming_enabled": false
+  },
+  "gemini-3.8-flash-zen": {
+   "backends": {
+    "zen-five-0": 1.0
+   },
+   "streaming_enabled": true
+  },
+  "gemini-4-argon-zen": {
+   "backends": {
+    "zen-five-1": 1.0
+   },
+   "streaming_enabled": true
+  }
+ }
+}

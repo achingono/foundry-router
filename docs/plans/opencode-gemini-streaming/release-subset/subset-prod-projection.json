@@ -1,0 +1,16 @@
+{
+ "fp_production": "e61e5656d5958bcc2a631ad651efcafdc8f0a08ec0ef1cfd5b2484bacb21e04f",
+ "pools": [
+  "claude-haiku-5.5-or",
+  "claude-sonnet-5.5-zen",
+  "gemini-3.8-flash-zen",
+  "gemini-4-argon-zen",
+  "gpt-5.6-luna",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-6-astra",
+  "gpt-6-luna",
+  "gpt-6-luna-or",
+  "gpt-6.1-sol"
+ ]
+}
