@@ -1,0 +1,363 @@
+{
+  "run": "opencode-zen-five-20261013",
+  "image_digest": "sha256:a91fc53fac19212103ada1f304b492b6f6c9be355a766f87351859a68e290aec",
+  "configuration_fingerprints": {
+    "staging": "1c4b03afd9d558638105e6456f4253377b10afa35853b202e14c7b4ed87d1319",
+    "production": "a4ba1c8feea29e2a2be2cbda66e337898d144fe039becf0745f9a3da83b81869"
+  },
+  "cases": [
+    {
+      "id": "staging-0-nonstream",
+      "environment": "staging",
+      "pool": "gemini-3.8-flash-zen",
+      "deployment": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "stream": false,
+      "input_per_million": 1.5,
+      "output_per_million": 7.5,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-3.8-flash-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-0-stream",
+      "environment": "staging",
+      "pool": "gemini-3.8-flash-zen",
+      "deployment": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "stream": true,
+      "input_per_million": 1.5,
+      "output_per_million": 7.5,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-3.8-flash-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-1-nonstream",
+      "environment": "staging",
+      "pool": "gemini-4-argon-zen",
+      "deployment": "gemini-4-argon",
+      "provider": "opencode_google",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 20.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-1-stream",
+      "environment": "staging",
+      "pool": "gemini-4-argon-zen",
+      "deployment": "gemini-4-argon",
+      "provider": "opencode_google",
+      "stream": true,
+      "input_per_million": 4.0,
+      "output_per_million": 20.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-2-nonstream",
+      "environment": "staging",
+      "pool": "claude-sonnet-5.5-zen",
+      "deployment": "claude-sonnet-5-5",
+      "provider": "opencode_anthropic",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 10.0,
+      "streaming_enabled": false,
+      "request": {
+        "model": "claude-sonnet-5.5-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-3-nonstream",
+      "environment": "staging",
+      "pool": "grok-4.7-zen",
+      "deployment": "grok-4.7",
+      "provider": "opencode_zen",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 12.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "grok-4.7-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-3-stream",
+      "environment": "staging",
+      "pool": "grok-4.7-zen",
+      "deployment": "grok-4.7",
+      "provider": "opencode_zen",
+      "stream": true,
+      "input_per_million": 4.0,
+      "output_per_million": 12.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "grok-4.7-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-4-nonstream",
+      "environment": "staging",
+      "pool": "muse-spark-1.3-zen",
+      "deployment": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "stream": false,
+      "input_per_million": 1.25,
+      "output_per_million": 4.25,
+      "streaming_enabled": true,
+      "request": {
+        "model": "muse-spark-1.3-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "staging-4-stream",
+      "environment": "staging",
+      "pool": "muse-spark-1.3-zen",
+      "deployment": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "stream": true,
+      "input_per_million": 1.25,
+      "output_per_million": 4.25,
+      "streaming_enabled": true,
+      "request": {
+        "model": "muse-spark-1.3-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "production-0-nonstream",
+      "environment": "production",
+      "pool": "gemini-3.8-flash-zen",
+      "deployment": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "stream": false,
+      "input_per_million": 1.5,
+      "output_per_million": 7.5,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-3.8-flash-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "production-0-stream",
+      "environment": "production",
+      "pool": "gemini-3.8-flash-zen",
+      "deployment": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "stream": true,
+      "input_per_million": 1.5,
+      "output_per_million": 7.5,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-3.8-flash-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "production-1-nonstream",
+      "environment": "production",
+      "pool": "gemini-4-argon-zen",
+      "deployment": "gemini-4-argon",
+      "provider": "opencode_google",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 20.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "production-1-stream",
+      "environment": "production",
+      "pool": "gemini-4-argon-zen",
+      "deployment": "gemini-4-argon",
+      "provider": "opencode_google",
+      "stream": true,
+      "input_per_million": 4.0,
+      "output_per_million": 20.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "production-2-nonstream",
+      "environment": "production",
+      "pool": "claude-sonnet-5.5-zen",
+      "deployment": "claude-sonnet-5-5",
+      "provider": "opencode_anthropic",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 10.0,
+      "streaming_enabled": false,
+      "request": {
+        "model": "claude-sonnet-5.5-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "production-3-nonstream",
+      "environment": "production",
+      "pool": "grok-4.7-zen",
+      "deployment": "grok-4.7",
+      "provider": "opencode_zen",
+      "stream": false,
+      "input_per_million": 4.0,
+      "output_per_million": 12.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "grok-4.7-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "production-3-stream",
+      "environment": "production",
+      "pool": "grok-4.7-zen",
+      "deployment": "grok-4.7",
+      "provider": "opencode_zen",
+      "stream": true,
+      "input_per_million": 4.0,
+      "output_per_million": 12.0,
+      "streaming_enabled": true,
+      "request": {
+        "model": "grok-4.7-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    },
+    {
+      "id": "production-4-nonstream",
+      "environment": "production",
+      "pool": "muse-spark-1.3-zen",
+      "deployment": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "stream": false,
+      "input_per_million": 1.25,
+      "output_per_million": 4.25,
+      "streaming_enabled": true,
+      "request": {
+        "model": "muse-spark-1.3-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": false,
+        "store": false
+      }
+    },
+    {
+      "id": "production-4-stream",
+      "environment": "production",
+      "pool": "muse-spark-1.3-zen",
+      "deployment": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "stream": true,
+      "input_per_million": 1.25,
+      "output_per_million": 4.25,
+      "streaming_enabled": true,
+      "request": {
+        "model": "muse-spark-1.3-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 512,
+        "stream": true,
+        "store": false
+      }
+    }
+  ],
+  "request_hashes": [
+    "6e7a354e01882bcbd20d8be18078dd9fa59b109e0303f88eb39a1534211b1f92",
+    "3d586df52231fa37055f1fd6dcbe1a6a0c74dcd9ec1ff99f01c44ac8f164d75a",
+    "ccf70c2ffc071a7cf9d29dd8ca59da97ce60bce3b178c9220f236c26e23ea99a",
+    "9b9be44195898493cc8f8688e21385578f5c16c6dfd1b1162a8497a5e3530593",
+    "dabec8e75cf893fbac85e5d14902baa28e143ad511e49d20ab6749b1f317a7c5",
+    "1670bd21142a620f45eeda949bec6e65b1fa2a7c978e1a9093f5d134e0e73fa4",
+    "8e99472bef4169f6c2060d9fbb789221f531d5883c54b933e9610646c2561bc1",
+    "a589f2c89305a52a2c37dca7e99f83bbb56e4678e012ea4056da4e676c308603",
+    "af31a3a8fc975591d7cf26c5d644c70e64a7c259c3e403bb70daf2161a1233f9",
+    "6e7a354e01882bcbd20d8be18078dd9fa59b109e0303f88eb39a1534211b1f92",
+    "3d586df52231fa37055f1fd6dcbe1a6a0c74dcd9ec1ff99f01c44ac8f164d75a",
+    "ccf70c2ffc071a7cf9d29dd8ca59da97ce60bce3b178c9220f236c26e23ea99a",
+    "9b9be44195898493cc8f8688e21385578f5c16c6dfd1b1162a8497a5e3530593",
+    "dabec8e75cf893fbac85e5d14902baa28e143ad511e49d20ab6749b1f317a7c5",
+    "1670bd21142a620f45eeda949bec6e65b1fa2a7c978e1a9093f5d134e0e73fa4",
+    "8e99472bef4169f6c2060d9fbb789221f531d5883c54b933e9610646c2561bc1",
+    "a589f2c89305a52a2c37dca7e99f83bbb56e4678e012ea4056da4e676c308603",
+    "af31a3a8fc975591d7cf26c5d644c70e64a7c259c3e403bb70daf2161a1233f9"
+  ],
+  "case_timeout_seconds": 120,
+  "max_dispatches": 18,
+  "account_allocation_usd": 10.0,
+  "staging_allocation_usd": 0.1,
+  "production_seed_usd": 9.9,
+  "reserve": {
+    "min_credit_reserve_usd": 0.05,
+    "min_credit_reserve_percent": 5.0
+  }
+}

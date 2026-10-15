@@ -129,9 +129,22 @@ screenshots/
 !/docs/plans/zen-openrouter-live-verification/manifest.rerun-anthropic.json
 !/docs/plans/production-zen-openrouter/manifest.staging.json
 !/docs/plans/production-zen-openrouter/manifest.production.json
+!/docs/plans/opencode-gemini-argon/configuration-delta.json
+!/docs/plans/opencode-gemini-argon/acceptance-manifest.json
 !/docs/plans/production-zen-openrouter/manifest.roster.json
 !/docs/plans/production-zen-openrouter/catalog-openrouter-excerpt-2026-10-12.json
 
 !/docs/plans/production-zen-openrouter/manifest.roster-remaining.json
 !/docs/plans/production-zen-openrouter/manifest.roster-final.json
 !/docs/plans/openrouter-production-two/manifest.json
+!/docs/plans/opencode-zen-five-models/release-packet.json
+!/docs/plans/opencode-zen-five-models/acceptance-manifest.json
+!/docs/plans/opencode-zen-five-models/release-packet.model-status.json
+!/docs/plans/opencode-zen-five-models/acceptance-manifest.model-status.json
+!/docs/plans/opencode-zen-five-models/release-packet.vertex-time.json
+!/docs/plans/opencode-zen-five-models/acceptance-manifest.vertex-time.json
+!/docs/plans/opencode-zen-five-models/release-packet.gemini-nonstream.json
+!/docs/plans/opencode-zen-five-models/acceptance-manifest.gemini-nonstream.json
+!/docs/plans/opencode-zen-five-models/release-packet.anthropic-nullable.json
+!/docs/plans/opencode-zen-five-models/acceptance-manifest.anthropic-nullable.json
+!/docs/plans/opencode-gemini-streaming/release-subset/*.json

@@ -49,6 +49,27 @@ operator-verified Responses-model compatibility; the router does not consult the
 upstream catalog. Zen `/messages`, Google-model and `systemone` wires are out of
 scope. See [Zen/OpenRouter contract](../plans/opencode-zen-openrouter/index.md).
 
+`provider: opencode_google` is **Implemented with mocked verification** for
+OpenCode's native Google text-model wire. Set `api_surface: native`, the exact
+HTTPS API root (for example `https://opencode.ai/inference/v1`), an external
+credential, and a safe physical model segment in `deployment`. Transport appends
+`/models/{deployment}:generateContent`, or `:streamGenerateContent?alt=sse` for
+streaming, with server-owned Bearer authentication. It adds no Google `/v1beta`
+suffix or body `model`. Raw model/operation paths, encoded/dot/duplicate segments,
+queries, fragments and userinfo are rejected.
+
+The backend requires metered credit, Responses-only operations and an exact
+text-only `google_features` profile containing `native_thinking_level: low`
+(or `minimal` for an operator-verified compatible model) and
+`thought_token_pricing: true`. Other profile values keep defaults. Tools, media,
+structured output and continuation remain disabled. The existing native adapter
+includes thought tokens in output usage/cost and drops ordinary text signatures.
+Argon uses `low`; Flash/Argon streaming and Sonnet nonstream passed bounded
+staging/production acceptance and are deployed on ca7 (Grok/Muse excluded, see
+the [streaming resolution records](../plans/opencode-gemini-streaming/evidence.md)).
+OpenCode native Google does not use Google's free-tier retry policy.
+See the [Argon plan and evidence](../plans/opencode-gemini-argon/index.md).
+
 ```yaml
 backends:
   sub_a:
@@ -386,3 +407,43 @@ acceptance remains unverified.
 ## Per-pool streaming policy
 
 Each `FOUNDRY_MODELS_JSON` pool accepts `streaming_enabled` (strict boolean,default`true`). Set it to`false` for nonstream-only Responses pools. Aliases inherit the resolved pool policy. A stream request is rejected before provider preparation or quota/credit admission; other pools retain their own policy. Admin model diagnostics reports the effective flag. Example: `{"logical":{"backends":{"backend":1.0},"streaming_enabled":false}}`.
+
+## OpenCode Anthropic text models
+
+`provider: opencode_anthropic` is **Implemented with mocked verification** for
+non-streaming text Responses translated into Anthropic Messages. Configure an
+exact HTTPS API root such as `https://opencode.ai/inference/v1`, a safe physical
+model segment, external credential and metered credit. Transport appends
+`/messages`, sets server-owned Bearer authentication and `anthropic-version:
+2023-06-01`, and strips caller version/beta/auth headers. Raw operation paths,
+unsafe roots and native/Google feature profiles are rejected. Default operations
+are Responses only.
+
+The bounded text adapter maps instructions/system/developer history into system
+blocks and user/assistant text into Messages content. Streaming, tools, schemas,
+media, thinking, cache controls and stored continuation reject before admission.
+Set the Sonnet pool `streaming_enabled:false` for the public policy; the adapter
+also rejects streaming when a pool mistakenly enables it. Usage includes actual
+input, cache creation and cache read tokens; malformed output preserves known
+usage for conservative settlement. The planned Sonnet input estimate4USD/M
+covers up to twice ordinary2USD/M cache-write cost; output estimate10USD/M.
+These are deliberately conservative local estimates, not measured provider bills.
+See [five-model rollout](../plans/opencode-zen-five-models/index.md).
+
+Native Google text responses accept bounded, documented `modelStatus` metadata
+(`modelStage`, `message`, `retirementTime`). The adapter validates it in both
+nonstream and stream envelopes, then omits it from public responses and state.
+Unknown envelope or metadata fields continue to reject. See the
+[native metadata amendment](../plans/opencode-zen-five-models/native-metadata-amendment.md).
+
+Native text responses also accept bounded, valid RFC3339 `createTime` metadata
+from the documented Vertex native response envelope. Creation timestamps are
+validated and omitted from public output/state. See the
+[Vertex timestamp amendment](../plans/opencode-zen-five-models/vertex-time-amendment.md).
+
+OpenCode Anthropic Responses accept only absent/null `container`, `diagnostics`
+and `stop_details` metadata, and absent/null/empty-list text `citations`. These
+forms are omitted from public output. Non-null state, active citations and
+unknown fields remain unsupported; cache-inclusive usage is retained for
+settlement if conversion rejects. See the
+[nullable metadata amendment](../plans/opencode-zen-five-models/anthropic-nullable-amendment.md).

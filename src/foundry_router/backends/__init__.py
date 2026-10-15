@@ -142,7 +142,13 @@ class AllowedBackendClient:
             and config.api_surface != "native"
             and (
                 config.provider
-                in {"google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"}
+                in {
+                    "google_ai_studio",
+                    "openai_compatible",
+                    "opencode_zen",
+                    "openrouter",
+                    "opencode_anthropic",
+                }
                 or (config.provider == "azure_foundry" and operation == "responses")
             )
         ):
@@ -161,19 +167,21 @@ class AllowedBackendClient:
             if operation not in operations:
                 raise ValueError("Unsupported compatible backend operation")
             return base.copy_with(path=f"{base.path.rstrip('/')}/{operations[operation]}")
-        if config.provider == "opencode_zen":
+        if config.provider in {"opencode_zen", "opencode_anthropic"}:
             if operation != "responses":
                 raise ValueError("Zen backends support only the Responses operation")
-            return base.copy_with(path=f"{base.path.rstrip('/')}/responses")
-        if config.provider == "google_ai_studio":
+            suffix = "messages" if config.provider == "opencode_anthropic" else "responses"
+            return base.copy_with(path=f"{base.path.rstrip('/')}/{suffix}")
+        if config.provider in {"google_ai_studio", "opencode_google"}:
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
-            if config.provider == "google_ai_studio" and config.api_surface == "native":
+            if config.api_surface == "native":
                 if operation != "responses":
                     raise ValueError("Native Google supports only Responses")
                 method = "streamGenerateContent" if streaming else "generateContent"
+                native_root = "" if config.provider == "opencode_google" else "/v1beta"
                 path = (
-                    f"{base.path.rstrip('/')}/v1beta/models/"
+                    f"{base.path.rstrip('/')}{native_root}/models/"
                     f"{quote(config.deployment, safe='')}:{method}"
                 )
                 return base.copy_with(path=path, params={"alt": "sse"} if streaming else None)
@@ -201,6 +209,12 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         safe_headers = self._sanitize_headers(headers) or {}
+        if config.provider in {"opencode_google", "opencode_anthropic"}:
+            safe_headers["authorization"] = f"Bearer {config.credential}"
+            if config.provider == "opencode_anthropic":
+                safe_headers.pop("anthropic-beta", None)
+                safe_headers["anthropic-version"] = "2023-06-01"
+            return safe_headers
         if config.provider in {
             "google_ai_studio",
             "openai_compatible",

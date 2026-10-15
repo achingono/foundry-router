@@ -1,0 +1,98 @@
+{
+  "status": "Planned; no acceptance dispatched",
+  "run": "opencode-argon-20261013",
+  "cases": [
+    {
+      "id": "staging-nonstream",
+      "environment": "staging",
+      "provider": "opencode_google",
+      "deployment": "gemini-4-argon",
+      "pool": "gemini-4-argon-zen",
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "store": false,
+        "stream": false
+      },
+      "request_sha256": "57c7ad1fd730293262a67ba1d17793edde4cf3e0373a3b6a7c59603eb45879ec",
+      "thinking_level": "low",
+      "max_output_tokens": 128,
+      "timeout_seconds": 120
+    },
+    {
+      "id": "staging-stream",
+      "environment": "staging",
+      "provider": "opencode_google",
+      "deployment": "gemini-4-argon",
+      "pool": "gemini-4-argon-zen",
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "store": false,
+        "stream": true
+      },
+      "request_sha256": "4f8587b1d5f63a636da0702032544d4d7260280cb934cb50d7347322b72786b3",
+      "thinking_level": "low",
+      "max_output_tokens": 128,
+      "timeout_seconds": 120
+    },
+    {
+      "id": "production-nonstream",
+      "environment": "production",
+      "provider": "opencode_google",
+      "deployment": "gemini-4-argon",
+      "pool": "gemini-4-argon-zen",
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "store": false,
+        "stream": false
+      },
+      "request_sha256": "57c7ad1fd730293262a67ba1d17793edde4cf3e0373a3b6a7c59603eb45879ec",
+      "thinking_level": "low",
+      "max_output_tokens": 128,
+      "timeout_seconds": 120
+    },
+    {
+      "id": "production-stream",
+      "environment": "production",
+      "provider": "opencode_google",
+      "deployment": "gemini-4-argon",
+      "pool": "gemini-4-argon-zen",
+      "request": {
+        "model": "gemini-4-argon-zen",
+        "input": "Reply with the single word OK.",
+        "max_output_tokens": 128,
+        "store": false,
+        "stream": true
+      },
+      "request_sha256": "4f8587b1d5f63a636da0702032544d4d7260280cb934cb50d7347322b72786b3",
+      "thinking_level": "low",
+      "max_output_tokens": 128,
+      "timeout_seconds": 120
+    }
+  ],
+  "maximum_dispatches": 4,
+  "retry_attempts_per_case": 0,
+  "input_per_million_estimate_usd": 4.0,
+  "output_per_million_estimate_usd": 20.0,
+  "prohibited": [
+    "replay",
+    "model substitution",
+    "after-output failover",
+    "concurrent shared account allocation"
+  ],
+  "require": [
+    "image digest binding",
+    "config bundle hash binding",
+    "reserve-before-egress durable ledger",
+    "meaningful text",
+    "response.completed or complete nonstream response",
+    "thought-inclusive usage/settlement",
+    "zero active/inflight reservations"
+  ],
+  "configuration_delta_sha256": "5c756ab6de5e1826cea8160bad4cec2c15e0cc6e2b794fb6f872599bb7c47b28"
+}

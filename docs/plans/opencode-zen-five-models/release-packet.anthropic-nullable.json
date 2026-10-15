@@ -1,0 +1,82 @@
+{
+  "image_digest": "sha256:180b9d9efc0f5ccb01528ac8178ac28babae2470e991cbd34f212a22cad6d27e",
+  "image_build": "ca6",
+  "platform": "linux/amd64",
+  "models": [
+    {
+      "pool": "gemini-3.8-flash-zen",
+      "physical_model": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 1.5,
+      "output_estimate_usd_per_million": 7.5,
+      "streaming_enabled": false
+    },
+    {
+      "pool": "gemini-4-argon-zen",
+      "physical_model": "gemini-4-argon",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 20.0,
+      "streaming_enabled": false
+    },
+    {
+      "pool": "claude-sonnet-5.5-zen",
+      "physical_model": "claude-sonnet-5-5",
+      "provider": "opencode_anthropic",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 10.0,
+      "streaming_enabled": false
+    },
+    {
+      "pool": "grok-4.7-zen",
+      "physical_model": "grok-4.7",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 12.0,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "muse-spark-1.3-zen",
+      "physical_model": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 1.25,
+      "output_estimate_usd_per_million": 4.25,
+      "streaming_enabled": true
+    }
+  ],
+  "api_root": "https://opencode.ai/inference/v1",
+  "google_native_thinking_level": "low",
+  "google_thought_token_pricing": true,
+  "credit_group": "opencode-account",
+  "allocation_usd": 10.0,
+  "stage_seed_usd": 0.088,
+  "production_seed_usd": 9.9,
+  "reserve": {
+    "min_credit_reserve_usd": 0.05,
+    "min_credit_reserve_percent": 5.0
+  },
+  "policy_sha256": {
+    "staging": "e90fe2c133a3b7268a21e807e0f9a0f8eb640e3e8828efabfaaf140681bd000f",
+    "production": "fd5a2731b9180e4c0c07a94dc4a5a3909b34d1126a0cdbd806dd1f27d1bbc6ef"
+  },
+  "manifest_sha256": "7d30655fb285a9d14efe6eb54c41940c3229383100ddd05fd01488ec68bf94cb",
+  "staging_full_config_sha256": "6da4c553995f381a0699c4ff00c788d55d29e94d4616768db151ca031e53e597",
+  "handoff": "Final readable drained all-account snapshot captured with old writer alive after verified ingress deny barrier and unchanged replica/PID1; stop all old revisions, bind exact seed and pinned secret payload plus full-config, image and manifest hashes in separate immutable private artifact before promotion. Never restore stale memory seeds; no unused staging transfer. Original ingress restored after acceptance only.",
+  "replacement_source_binding": {
+    "original_manifest_sha256": "423915f04e4810fb9b68ccce6af68bf7350aabffe12953d4c6d46e0e53b4ff69",
+    "original_failed_ledger_sha256": "c1f392d9c74c712de964e4bb0c1f97ddb381c0d753c87909c8bcf784e4d10bfe",
+    "model_status_manifest_sha256": "ffbc1cf6a1e0e2b47ce5fd4c3363f3f2667ecdb0961e1644e6ad45933e83d093",
+    "model_status_failed_ledger_sha256": "273f6907252a6f323fefa6019f5c2e9d6ff266487d9d7bd3f656a02ea5b25d7b",
+    "diagnostic_consumed_sha256": "64a475bd648471060ad29829fc88ebab854689506bfdeeba931c1ab2e09997a1",
+    "diagnostic_result_sha256": "56d1b3e378c1c7b11c4846b2dfe7fcc0b1389bad9a8f27245f666bd4484bd492",
+    "latest_stopped_snapshot_sha256": "bfb78e1d186da613cefd3efd535a52b5f12f54db23bce622a0384a97c9b5dfda",
+    "latest_stopped_proof_sha256": "0505e79a389edf61f563c7541d07ba2c3d2599e39505ccd32c413df828462bbf",
+    "vertex_manifest_sha256": "a72261670f23e3f7adb1f4980fc0324d5a635a913de964ffbd29d88726f7afb8",
+    "vertex_failed_ledger_sha256": "5c27be7ab6eeeff855683be4f21735bc7424c313627171b0f732ea3a3d62e49d",
+    "discarded_staging_estimate_usd": 0.0011830000000000035,
+    "gemini_nonstream_manifest_sha256": "a9b2f6bfb48c954ea954c1436138db62153038cab89ccd170be0f4b5b40c14b4",
+    "gemini_nonstream_failed_ledger_sha256": "35996efa3dd8100be9109d0a2cc912f3725a3ee551ad9fdd37e8306547172028",
+    "replacement_run": "opencode-zen-five-20261013-anthropic-nullable",
+    "staging_seed_usd": 0.088
+  }
+}

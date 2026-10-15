@@ -110,3 +110,43 @@ and verify the actual collector, auth, network route, retention and resource-bas
 before deployment; it is not created by runtime enablement. See
 [observability aggregation guidance](observability.md#central-otlp-aggregation). Local
 verification does not clear production scale-out or real provider admission gates.
+
+## OpenCode native Google models
+
+The `opencode_google` provider is **Implemented with mocked verification** for
+bounded native text Responses and streaming. `opencode_zen` retains its
+Responses-model wire. OpenCode native Google uses server-owned Bearer auth and
+single-shot translated forwarding; only pre-output 429 permits fresh routing
+admission. Dispatched ambiguous failures retain known usage or the full estimate;
+401/403 enter backend cooldown, and emitted output forbids retry/failover.
+Thought tokens are included in output usage and local estimated debit.
+
+[Gemini 4 Argon enablement](../plans/opencode-gemini-argon/index.md) is **Implemented
+and deployed** for streaming alongside Gemini 3.8 Flash and non-streaming Sonnet
+5.5 (image `zen-five-20261014-1`, ca7); Grok/Muse remain excluded on a recorded
+acceptance failure. See the [streaming resolution and subset deployment
+records](../plans/opencode-gemini-streaming/evidence.md). The
+production writer uses the [Luna/Haiku release](../plans/openrouter-production-two/deployment-evidence.md)
+plus the three additive OpenCode pools,
+memory state and one replica. The OpenCode account uses a 9.90 seed with a
+0.05/5% reserve override.
+Local estimates never establish provider balances; staging and production must
+not allocate the same account funds concurrently.
+
+## Five-model OpenCode Zen rollout
+
+The [five-model rollout](../plans/opencode-zen-five-models/index.md) deployed a
+reviewed subset: Gemini3.8Flash and Gemini4Argon (nonstream/stream) plus
+Sonnet5.5 (nonstream-only) on ca7; Grok4.7/MuseSpark1.3 are excluded on the
+recorded Grok over-bound acceptance failure with no substitution. See the
+[streaming resolution and subset deployment records](../plans/opencode-gemini-streaming/evidence.md).
+Provider-specific text translation is locally implemented; live deployment is
+not inferred from catalog listing or offline tests. Sonnet is nonstream-only;
+other four pools require exact nonstream/stream qualification. One shared
+OpenCode account uses confirmed10USD allocation with0.05USD/5% reserve.
+Separate bounded local staging allocation and conservative production seed
+prevent concurrent wallet duplication. Final handoff requires verified admission
+closure, final drained snapshot while old memory is readable, then stopped
+writers and fresh all-account seeds. Temporary ingress restrictions must retain
+process continuity and restore exact original policy after acceptance. Production
+remains memory-backed with one worker and max one replica.

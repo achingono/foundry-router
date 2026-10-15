@@ -1,0 +1,65 @@
+{
+  "image_digest": "sha256:a91fc53fac19212103ada1f304b492b6f6c9be355a766f87351859a68e290aec",
+  "image_build": "ca3",
+  "platform": "linux/amd64",
+  "models": [
+    {
+      "pool": "gemini-3.8-flash-zen",
+      "physical_model": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 1.5,
+      "output_estimate_usd_per_million": 7.5,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "gemini-4-argon-zen",
+      "physical_model": "gemini-4-argon",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 20.0,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "claude-sonnet-5.5-zen",
+      "physical_model": "claude-sonnet-5-5",
+      "provider": "opencode_anthropic",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 10.0,
+      "streaming_enabled": false
+    },
+    {
+      "pool": "grok-4.7-zen",
+      "physical_model": "grok-4.7",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 12.0,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "muse-spark-1.3-zen",
+      "physical_model": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 1.25,
+      "output_estimate_usd_per_million": 4.25,
+      "streaming_enabled": true
+    }
+  ],
+  "api_root": "https://opencode.ai/inference/v1",
+  "google_native_thinking_level": "low",
+  "google_thought_token_pricing": true,
+  "credit_group": "opencode-account",
+  "allocation_usd": 10.0,
+  "stage_seed_usd": 0.1,
+  "production_seed_usd": 9.9,
+  "reserve": {
+    "min_credit_reserve_usd": 0.05,
+    "min_credit_reserve_percent": 5.0
+  },
+  "policy_sha256": {
+    "staging": "1c4b03afd9d558638105e6456f4253377b10afa35853b202e14c7b4ed87d1319",
+    "production": "a4ba1c8feea29e2a2be2cbda66e337898d144fe039becf0745f9a3da83b81869"
+  },
+  "manifest_sha256": "423915f04e4810fb9b68ccce6af68bf7350aabffe12953d4c6d46e0e53b4ff69",
+  "staging_full_config_sha256": "6279c83f942ac2c1dce51cc9b91c41e6c9f5be1608c8e8fe34afb91b6d073d7f",
+  "handoff": "Final readable drained all-account snapshot captured with old writer alive after verified ingress deny barrier and unchanged replica/PID1; stop all old revisions, bind exact seed and pinned secret payload plus full-config, image and manifest hashes in separate immutable private artifact before promotion. Never restore stale memory seeds; no unused staging transfer. Original ingress restored after acceptance only."
+}

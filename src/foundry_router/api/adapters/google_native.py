@@ -7,7 +7,9 @@ sharing the compatibility adapter's public Responses item/event construction.
 from __future__ import annotations
 
 import json
+import re
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 if TYPE_CHECKING:
@@ -31,7 +33,62 @@ _BLOCKS = {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "OTHER"}
 _FILTERS = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"}
 _SAFE_REFUSAL = "The provider declined this request."
 _MAX_TOKENS = 1000000000
-_ENVELOPE_FIELDS = {"candidates", "usageMetadata", "promptFeedback", "modelVersion", "responseId"}
+_ENVELOPE_FIELDS = {
+    "candidates",
+    "usageMetadata",
+    "promptFeedback",
+    "modelVersion",
+    "responseId",
+    "modelStatus",
+    "createTime",
+}
+_MODEL_STAGES = {
+    "MODEL_STAGE_UNSPECIFIED",
+    "UNSTABLE_EXPERIMENTAL",
+    "EXPERIMENTAL",
+    "PREVIEW",
+    "STABLE",
+    "LEGACY",
+    "DEPRECATED",
+    "RETIRED",
+}
+_MODEL_STATUS_TEXT_BYTES = 4096
+_MODEL_STATUS_TIME_BYTES = 128
+
+
+def _validate_envelope(upstream: Any) -> None:
+    if not isinstance(upstream, dict) or "error" in upstream:
+        raise ValueError("Invalid native response envelope")
+    if set(upstream) - _ENVELOPE_FIELDS:
+        raise ValueError("Unsupported native envelope or provider state")
+    if "createTime" in upstream:
+        value = upstream["createTime"]
+        if (
+            not isinstance(value, str)
+            or len(value.encode()) > _MODEL_STATUS_TIME_BYTES
+            or not re.fullmatch(
+                r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])",
+                value,
+            )
+        ):
+            raise ValueError("Invalid native creation time metadata")
+        try:
+            datetime.fromisoformat(value)
+        except ValueError as error:
+            raise ValueError("Invalid native creation time metadata") from error
+    if "modelStatus" not in upstream:
+        return
+    status = upstream["modelStatus"]
+    if not isinstance(status, dict) or set(status) - {"modelStage", "message", "retirementTime"}:
+        raise ValueError("Invalid native model status metadata")
+    for key, value in status.items():
+        if not isinstance(value, str):
+            raise ValueError("Invalid native model status metadata")
+        if key == "modelStage" and value not in _MODEL_STAGES:
+            raise ValueError("Invalid native model status metadata")
+        bound = _MODEL_STATUS_TIME_BYTES if key == "retirementTime" else _MODEL_STATUS_TEXT_BYTES
+        if len(value.encode()) > bound:
+            raise ValueError("Native model status metadata exceeds bound")
 
 
 def _token(value: Any) -> TypeGuard[int]:
@@ -74,10 +131,7 @@ def native_usage(
 
 
 def _native_output(upstream: Any, *, drop_signatures: bool = False) -> dict[str, Any]:
-    if not isinstance(upstream, dict) or "error" in upstream:
-        raise ValueError("Invalid native response envelope")
-    if set(upstream) - _ENVELOPE_FIELDS:
-        raise ValueError("Unsupported native envelope or provider state")
+    _validate_envelope(upstream)
     feedback = upstream.get("promptFeedback")
     if "promptFeedback" in upstream and (
         not isinstance(feedback, dict)
@@ -653,16 +707,24 @@ class GoogleNativeStreamDecoder(GoogleStreamDecoder):
                 self.usage_invalid = True
                 raise ValueError("Native cumulative usage decreased")
             self._input_tokens, self._output_tokens = known
-        try:
-            native_usage(payload, strict=True, accept_thoughts=self._accept_thoughts)
-        except ValueError:
-            if isinstance(payload, dict) and "usageMetadata" in payload and known == (None, None):
-                self.usage_invalid = True
-            raise
-        if not isinstance(payload, dict):
-            raise ValueError("Invalid native SSE envelope")
-        if set(payload) - _ENVELOPE_FIELDS:
-            raise ValueError("Unsupported native envelope or provider state")
+        # Early stream chunks legitimately carry an empty usageMetadata object
+        # before dimensions are known (proven live: first Flash chunk with
+        # content but zero usage dimensions). Defer strict dimension checks
+        # until dimensions appear; they are then enforced per chunk,
+        # accumulated, and settled conservatively if never reported.
+        usage_block = payload.get("usageMetadata") if isinstance(payload, dict) else None
+        if not (isinstance(usage_block, dict) and not usage_block):
+            try:
+                native_usage(payload, strict=True, accept_thoughts=self._accept_thoughts)
+            except ValueError:
+                if (
+                    isinstance(payload, dict)
+                    and "usageMetadata" in payload
+                    and known == (None, None)
+                ):
+                    self.usage_invalid = True
+                raise
+        _validate_envelope(payload)
         if "candidates" not in payload and "promptFeedback" not in payload:
             if "usageMetadata" in payload:
                 return []

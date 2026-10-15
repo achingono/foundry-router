@@ -112,6 +112,8 @@ def _uses_translated_forwarding(settings: Any, backend_id: str) -> bool:
         "google_ai_studio",
         "openai_compatible",
         "openrouter",
+        "opencode_google",
+        "opencode_anthropic",
     }
 
 

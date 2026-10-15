@@ -1,0 +1,7 @@
+**Approve the seven fixed staging cases once. No Critical or Major findings in the changed scope.** Approval binds the [nullable release packet](/Users/achingono/source/repos/foundry-router/docs/plans/opencode-zen-five-models/release-packet.anthropic-nullable.json), its exact fourteen-case manifest, and ca6 Linux/amd64 digest `sha256:180b9d9efc0f5ccb01528ac8178ac28babae2470e991cbd34f212a22cad6d27e`.
+
+Nullable acceptance/rejection and cache-inclusive settlement match the amendment. Timestamp offset bounds and all three regression paths are present. Public request, policy, manifest and historical-manifest hashes reconcile. Runner5 preserves ordering, failure/no-replay behavior and the cleared handoff/replica safeguards. The full log confirms **2,718 passed; 90.23% coverage**.
+
+Production remains conditional on all seven staging passes, staging shutdown, actual barrier/process continuity, drain, empty old replicas, fresh immutable handoff, seven production passes, all three streaming rejections and ingress restoration after acceptance.
+
+Gemini and Sonnet remain nonstream-only; the native-field explanation remains unproven until acceptance. Private-state and build/readiness outcomes remain supplied evidence. No edits, inference, private-input reads or subagents were used.

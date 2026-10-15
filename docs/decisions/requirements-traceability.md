@@ -329,3 +329,49 @@ The [passed-model staging selection](../plans/passed-openrouter-staging/evidence
 Per-pool strict boolean `streaming_enabled` is Implemented locally with direct/alias zero-admission negative tests and nonstream/default-stream regressions. The [two-model production plan](../plans/openrouter-production-two/activities.md) records the reviewed rollout; completed acceptance is recorded below.
 
 The [two-model production release](../plans/openrouter-production-two/deployment-evidence.md) is Implemented and deployed with an alias-safe streaming restriction before admission and four passing non-streaming staging/production checks. Wallet handoff, zero credit for the disabled account, coherent versioned secrets and baseline preservation were verified. OpenRouter streaming, Table and provider failover gates remain open.
+
+### OpenCode native Google text routing
+
+**Implemented with mocked verification; live/production Planned.** The
+[Argon plan](../plans/opencode-gemini-argon/index.md) records the independent
+review and exact rollout gates. Configuration requires a metered, priced,
+text-only native thinking profile and a safe physical model segment.
+`config/`, `backends/`, the adapter registry and `forwarding/` implement the
+provider boundary. `tests/unit/test_opencode_google.py` and
+`tests/integration/test_opencode_google_integration.py` verify raw-root/model
+confinement, Bearer-only auth, native paths, thought-inclusive settlement,
+pre-admission rejections, single-shot failures and no partial-stream failover.
+Production remains memory/one on the existing release until live gates pass.
+
+### OpenCode Anthropic nonstream text and five-model rollout
+
+**Implemented with mocked verification; deployment Planned.** The
+[five-model plan](../plans/opencode-zen-five-models/index.md) specifies native
+Google, Responses and Anthropic Messages wires under one OpenCode account.
+`opencode_anthropic.py`, configuration, backend transport and translated
+forwarding implement strict bounded nonstream text, server-owned version/auth,
+cache-inclusive usage and conservative ambiguous-failure accounting. New unit
+and integration tests cover cache usage, malformed output, header/root/model
+confinement, single-shot failures and streaming/feature rejection before egress.
+`scripts/quality/opencode_five_validation.py` provides eighteen fixed immutable
+slots, image/config/request binding, atomic consume-before-egress and fail-closed
+replay/state/settlement checks. Live readiness, ledger acceptance and production
+handoff are separate operational gates, not established by these tests.
+
+Native Google model-status metadata validation is **Implemented** locally for
+nonstream, content-stream and usage-only-stream envelopes, with bounded metadata
+omitted from public output. Replacement five-model acceptance is **Planned**;
+the first original staging slot failed and the consumed diagnostic identified
+an unsupported envelope, without establishing its redacted field name. See the
+[metadata amendment](../plans/opencode-zen-five-models/native-metadata-amendment.md).
+
+### Subset production deployment (Flash/Argon streaming, Sonnet nonstream)
+
+**Implemented and deployed** on ca7 (`zen-five-20261014-1`). A live Flash
+streaming diagnostic established empty-`usageMetadata` early chunks as the
+502 cause; the streaming decoder defers strict dimension checks for empty usage
+objects only, with malformed/partial rejection, decrease detection and
+conservative settlement preserved. Bounded subset staging (5/5) and production
+acceptance (5/5) passed with exact debits under reviewed funding amendments;
+Grok/Muse are excluded on the recorded over-bound failure. See the
+[streaming resolution records](../plans/opencode-gemini-streaming/evidence.md).

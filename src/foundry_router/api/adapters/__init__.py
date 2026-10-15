@@ -28,14 +28,21 @@ from foundry_router.api.adapters.openai_compatible import (
     OpenAICompatibleAdapter,
     OpenAICompatibleStreamDecoder,
 )
+from foundry_router.api.adapters.opencode_anthropic import OpenCodeAnthropicAdapter
 from foundry_router.api.adapters.zen import ZenAdapter
 from foundry_router.config.google_features import GoogleFeatureProfile
+
+_OPENCODE_GOOGLE_PROFILE = GoogleFeatureProfile(
+    native_thinking_level="low", thought_token_pricing=True
+)
 
 _ADAPTERS: dict[str, ProviderAdapter] = {
     "azure_foundry": AzureAdapter(),
     "google_ai_studio": GoogleAiStudioAdapter(),
     "openai_compatible": CompatibleTextAdapter(),
     "opencode_zen": ZenAdapter(),
+    "opencode_google": GoogleNativeAdapter(profile=_OPENCODE_GOOGLE_PROFILE),
+    "opencode_anthropic": OpenCodeAnthropicAdapter(),
     "openrouter": CompatibleTextAdapter(),
 }
 
@@ -49,6 +56,19 @@ def get_adapter(
     backend_id: str | None = None,
     prepared_continuation: PreparedContinuation | None = None,
 ) -> ProviderAdapter:
+    if provider == "opencode_google":
+        # Error translation selects the provider without a configured profile.
+        # Actual requests receive their validated text-only backend profile.
+        profile = (
+            google_features
+            if isinstance(google_features, GoogleFeatureProfile)
+            else _OPENCODE_GOOGLE_PROFILE
+        )
+        if profile.native_thinking_level is None or profile != GoogleFeatureProfile(
+            native_thinking_level=profile.native_thinking_level, thought_token_pricing=True
+        ):
+            raise ValueError("OpenCode Google requires a priced text-only thinking profile")
+        return GoogleNativeAdapter(profile=profile)
     if (
         isinstance(google_features, GoogleFeatureProfile)
         and "audio_output" in google_features.features

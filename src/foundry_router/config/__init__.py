@@ -46,7 +46,13 @@ class BackendConfig(BaseModel):
     """Configuration for a single Foundry backend."""
 
     provider: Literal[
-        "azure_foundry", "google_ai_studio", "openai_compatible", "opencode_zen", "openrouter"
+        "azure_foundry",
+        "google_ai_studio",
+        "openai_compatible",
+        "opencode_zen",
+        "openrouter",
+        "opencode_google",
+        "opencode_anthropic",
     ] = "azure_foundry"
     api_surface: Literal["openai_compat", "native"] = "openai_compat"
     endpoint: HttpUrl
@@ -68,6 +74,8 @@ class BackendConfig(BaseModel):
         if not isinstance(value, dict) or value.get("provider") not in {
             "openai_compatible",
             "opencode_zen",
+            "opencode_google",
+            "opencode_anthropic",
             "openrouter",
         }:
             return value
@@ -94,8 +102,12 @@ class BackendConfig(BaseModel):
         if "//" in path or unquote(path) != path:
             raise ValueError(f"{label} endpoint must be a safe API root")
         operation_suffixes: tuple[str, ...] = ("/chat/completions", "/embeddings", "/responses")
-        if provider == "opencode_zen":
+        if provider in {"opencode_zen", "opencode_google", "opencode_anthropic"}:
             operation_suffixes += ("/messages", "/systemone")
+        if provider == "opencode_google" and any(
+            segment == "models" or ":" in segment for segment in path.split("/")
+        ):
+            raise ValueError("OpenCode Google endpoint must be an API root, not a model path")
         if path.rstrip("/").endswith(operation_suffixes):
             raise ValueError(f"{label} endpoint must be an API root, not an operation path")
         return value
@@ -161,6 +173,51 @@ class BackendConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
+        if self.provider == "opencode_anthropic":
+            if (
+                self.api_surface != "openai_compat"
+                or not self.credit_metered
+                or self.google_pre_output_failover
+                or self.google_features != GoogleFeatureProfile()
+            ):
+                raise ValueError("OpenCode Anthropic requires metered text-only Responses")
+            if (
+                self.deployment is None
+                or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.deployment) is None
+            ):
+                raise ValueError("OpenCode Anthropic requires a bounded safe model segment")
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
+            elif self.supported_operations != ["responses"]:
+                raise ValueError("OpenCode Anthropic supports only Responses")
+        if self.provider == "opencode_google":
+            profile = self.google_features
+            if (
+                self.api_surface != "native"
+                or not self.credit_metered
+                or self.google_pre_output_failover
+                or profile.native_thinking_level is None
+                or profile
+                != GoogleFeatureProfile(
+                    native_thinking_level=profile.native_thinking_level,
+                    thought_token_pricing=True,
+                )
+            ):
+                raise ValueError(
+                    "OpenCode Google requires metered native text with a priced thinking level"
+                )
+            if (
+                self.deployment is None
+                or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.deployment) is None
+            ):
+                raise ValueError("OpenCode Google requires a bounded safe physical model segment")
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
+            elif self.supported_operations != ["responses"]:
+                raise ValueError("OpenCode Google supports only Responses")
+            return self
         if self.google_pre_output_failover and (
             self.provider != "google_ai_studio" or self.credit_metered
         ):

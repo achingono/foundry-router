@@ -1,0 +1,9 @@
+**Critical: none. Major: none in the changed scope. Approve the seven bounded staging calls once**, using the exact [public packet](/Users/achingono/source/repos/foundry-router/docs/plans/opencode-zen-five-models/release-packet.gemini-nonstream.json) and its bound manifest.
+
+Verified fourteen exact cases, seven per environment; independent deep-copied requests; unchanged historical eighteen-slot manifests; Gemini512, Sonnet128, Grok/Muse512; `.09` staging floor, `9.90` production seed, `.05`/5% reserve; and the specified ca5 digest on Linux/amd64. Initialization, state validation and execution enforce exact cases, staging-first ordering and failure/no-replay behavior.
+
+Code-only preparation checks all three historical ledgers, consumed diagnostic, drained/stopped identity and balance arithmetic. The prior Major is resolved: replica enumeration must succeed and explicitly return empty lists. Barrier continuity, snapshot/process bindings and immutable full-handoff hashes remain enforced. The full log completed: **2,694 passed, 90.23% coverage**. Focused results remain supplied evidence: 29 passed, runner92.22%, diagnostic99.11%.
+
+Production remains conditional on actual seven staging passes, staging shutdown, continuous admission barrier and drained snapshot, stopped old writers, immutable handoff, seven production passes, all three zero-inference streaming rejections, and exact ingress restoration after acceptance.
+
+Gemini streaming remains unverified; disclose Gemini and Sonnet as nonstream-only. Later user steering takes precedence. No edits, inference, private-input reads or subagents were used.

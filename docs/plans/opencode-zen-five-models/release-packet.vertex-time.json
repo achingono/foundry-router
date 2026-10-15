@@ -1,0 +1,77 @@
+{
+  "image_digest": "sha256:4153217d61a7a803c4f0c2d2969b2c01d6cffe4014f4367593b507c1850bd4e4",
+  "image_build": "ca5",
+  "platform": "linux/amd64",
+  "models": [
+    {
+      "pool": "gemini-3.8-flash-zen",
+      "physical_model": "gemini-3.8-flash",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 1.5,
+      "output_estimate_usd_per_million": 7.5,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "gemini-4-argon-zen",
+      "physical_model": "gemini-4-argon",
+      "provider": "opencode_google",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 20.0,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "claude-sonnet-5.5-zen",
+      "physical_model": "claude-sonnet-5-5",
+      "provider": "opencode_anthropic",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 10.0,
+      "streaming_enabled": false
+    },
+    {
+      "pool": "grok-4.7-zen",
+      "physical_model": "grok-4.7",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 4.0,
+      "output_estimate_usd_per_million": 12.0,
+      "streaming_enabled": true
+    },
+    {
+      "pool": "muse-spark-1.3-zen",
+      "physical_model": "muse-spark-1.3",
+      "provider": "opencode_zen",
+      "input_estimate_usd_per_million": 1.25,
+      "output_estimate_usd_per_million": 4.25,
+      "streaming_enabled": true
+    }
+  ],
+  "api_root": "https://opencode.ai/inference/v1",
+  "google_native_thinking_level": "low",
+  "google_thought_token_pricing": true,
+  "credit_group": "opencode-account",
+  "allocation_usd": 10.0,
+  "stage_seed_usd": 0.095514,
+  "production_seed_usd": 9.9,
+  "reserve": {
+    "min_credit_reserve_usd": 0.05,
+    "min_credit_reserve_percent": 5.0
+  },
+  "policy_sha256": {
+    "staging": "6e92b1cc75d661706710e465c171e80748504c42fb42f34db120e1d387881892",
+    "production": "a4ba1c8feea29e2a2be2cbda66e337898d144fe039becf0745f9a3da83b81869"
+  },
+  "manifest_sha256": "a72261670f23e3f7adb1f4980fc0324d5a635a913de964ffbd29d88726f7afb8",
+  "staging_full_config_sha256": "5e5b75ee21b61bf944c6720048bbe432b4c46b9cd65c791656f88df440d68654",
+  "handoff": "Final readable drained all-account snapshot captured with old writer alive after verified ingress deny barrier and unchanged replica/PID1; stop all old revisions, bind exact seed and pinned secret payload plus full-config, image and manifest hashes in separate immutable private artifact before promotion. Never restore stale memory seeds; no unused staging transfer. Original ingress restored after acceptance only.",
+  "replacement_source_binding": {
+    "original_manifest_sha256": "423915f04e4810fb9b68ccce6af68bf7350aabffe12953d4c6d46e0e53b4ff69",
+    "original_failed_ledger_sha256": "c1f392d9c74c712de964e4bb0c1f97ddb381c0d753c87909c8bcf784e4d10bfe",
+    "model_status_manifest_sha256": "ffbc1cf6a1e0e2b47ce5fd4c3363f3f2667ecdb0961e1644e6ad45933e83d093",
+    "model_status_failed_ledger_sha256": "273f6907252a6f323fefa6019f5c2e9d6ff266487d9d7bd3f656a02ea5b25d7b",
+    "diagnostic_consumed_sha256": "64a475bd648471060ad29829fc88ebab854689506bfdeeba931c1ab2e09997a1",
+    "diagnostic_result_sha256": "56d1b3e378c1c7b11c4846b2dfe7fcc0b1389bad9a8f27245f666bd4484bd492",
+    "latest_stopped_snapshot_sha256": "fb502a347eb8fc5d83ac2e4ea1b2aacd225f44be3a0004410df55310213b0668",
+    "latest_stopped_proof_sha256": "a25e05a08179faba846b8d5e105afe2fb46b23c442381eae857de26225ff163f",
+    "replacement_run": "opencode-zen-five-20261013-vertex-time",
+    "staging_seed_usd": 0.095514
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "status": "Planned; existing production preserved; account/intake inputs pending",
+  "backends_add": {
+    "zen-argon": {
+      "provider": "opencode_google",
+      "api_surface": "native",
+      "endpoint": "https://opencode.ai/inference/v1",
+      "credential": "${OPENCODE_CREDENTIAL}",
+      "deployment": "gemini-4-argon",
+      "credit_group": "opencode-account",
+      "credit_metered": true,
+      "supported_operations": [
+        "responses"
+      ],
+      "google_features": {
+        "native_thinking_level": "low",
+        "thought_token_pricing": true
+      }
+    }
+  },
+  "models_add": {
+    "gemini-4-argon-zen": {
+      "backends": {
+        "zen-argon": 1.0
+      }
+    }
+  },
+  "pricing_add": {
+    "gemini-4-argon-zen": {
+      "input_per_million": 4.0,
+      "output_per_million": 20.0
+    }
+  },
+  "credit_group_reserves_add": {
+    "opencode-account": {
+      "min_credit_reserve_usd": 0.05,
+      "min_credit_reserve_percent": 5.0
+    }
+  },
+  "account_inputs": {
+    "cycle_start_day": "required operator input",
+    "cycle_allowance_usd": "required operator allocation",
+    "initial_estimated_remaining_usd": "fresh operator/all-account quiescent seed"
+  },
+  "required_runtime": {
+    "state_backend": "memory",
+    "workers": 1,
+    "max_replicas": 1
+  }
+}
