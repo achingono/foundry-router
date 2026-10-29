@@ -63,7 +63,7 @@ class OpenCodeAnthropicAdapter(CompatibleTextAdapter):
             return AdapterRejection(
                 422,
                 "unsupported_parameter",
-                "OpenCode Anthropic supports non-streaming Responses only",
+                f"{self.provider_label} supports non-streaming Responses only",
             )
         if body.get("temperature") is not None and body.get("top_p") is not None:
             return AdapterRejection(
@@ -199,4 +199,4 @@ class OpenCodeAnthropicAdapter(CompatibleTextAdapter):
 
     def create_stream_decoder(self, **kwargs: Any) -> Any:
         _ = kwargs
-        raise ValueError("OpenCode Anthropic streaming is disabled")
+        raise ValueError(f"{self.provider_label} streaming is disabled")

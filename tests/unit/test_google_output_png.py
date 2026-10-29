@@ -100,3 +100,44 @@ def test_split_zlib_header_and_bad_deflate_adler():
         damaged[offset] ^= 255
         with pytest.raises(ValueError):
             inspect_output_png(raw[:33] + chunk(b"IDAT", bytes(damaged)) + chunk(b"IEND", b""))
+
+
+def test_mai_provenance_is_preserved_and_default_rejects():
+    raw = png()
+    signed = raw[:33] + chunk(b"caBX", b"opaque provenance") + raw[33:]
+    with pytest.raises(ValueError):
+        inspect_output_png(signed)
+    assert inspect_output_png(signed, allow_c2pa=True)["bytes"] == len(signed)
+
+
+@pytest.mark.parametrize("provenance", [b"", b"x" * 65537])
+def test_mai_provenance_size_bound(provenance):
+    raw = png()
+    with pytest.raises(ValueError):
+        inspect_output_png(raw[:33] + chunk(b"caBX", provenance) + raw[33:], allow_c2pa=True)
+
+
+@pytest.mark.parametrize(
+    "mode", ["duplicate", "after_data", "before_header", "crc", "other_ancillary"]
+)
+def test_mai_provenance_structure_fails_closed(mode):
+    raw = png()
+    provenance = chunk(b"caBX", b"x")
+    if mode == "duplicate":
+        signed = raw[:33] + provenance * 2 + raw[33:]
+    elif mode == "after_data":
+        signed = raw[:-12] + provenance + raw[-12:]
+    elif mode == "before_header":
+        signed = raw[:8] + provenance + raw[8:]
+    elif mode == "crc":
+        signed = raw[:33] + provenance[:-1] + bytes([provenance[-1] ^ 1]) + raw[33:]
+    else:
+        signed = raw[:33] + chunk(b"tEXt", b"x") + raw[33:]
+    with pytest.raises(ValueError):
+        inspect_output_png(signed, allow_c2pa=True)
+
+
+@pytest.mark.parametrize("profile", [1, "true", None])
+def test_non_boolean_png_profile_rejected(profile):
+    with pytest.raises(ValueError):
+        inspect_output_png(png(), allow_c2pa=profile)

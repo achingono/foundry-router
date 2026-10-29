@@ -19,6 +19,7 @@ from foundry_router.config.cost_management import (
     parse_cost_groups,
     parse_subscription_currencies,
 )
+from foundry_router.config.foundry_models import validate_foundry_model_pools
 from foundry_router.config.google_audio_output import validate_audio_output_pools
 from foundry_router.config.google_features import GoogleFeatureProfile
 from foundry_router.config.google_output import validate_image_output_pools
@@ -47,6 +48,8 @@ class BackendConfig(BaseModel):
 
     provider: Literal[
         "azure_foundry",
+        "azure_anthropic",
+        "azure_mai",
         "google_ai_studio",
         "openai_compatible",
         "opencode_zen",
@@ -72,6 +75,8 @@ class BackendConfig(BaseModel):
     def validate_compatible_endpoint_input(cls, value: object) -> object:
         """Reject unsafe raw roots before URL coercion can erase dot segments."""
         if not isinstance(value, dict) or value.get("provider") not in {
+            "azure_anthropic",
+            "azure_mai",
             "openai_compatible",
             "opencode_zen",
             "opencode_google",
@@ -170,6 +175,28 @@ class BackendConfig(BaseModel):
                     f"Backend supported_operations entry '{operation}' is not supported"
                 )
         return list(v)
+
+    @model_validator(mode="after")
+    def validate_foundry_translated_fields(self) -> BackendConfig:
+        if self.provider in {"azure_anthropic", "azure_mai"}:
+            if (
+                self.api_surface != "openai_compat"
+                or not self.credit_metered
+                or self.google_pre_output_failover
+                or self.google_features != GoogleFeatureProfile()
+                or urlsplit(str(self.endpoint)).path not in {"", "/"}
+                or self.deployment is None
+                or len(self.deployment.encode()) > MAX_COMPATIBLE_MODEL_BYTES
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.deployment) is None
+            ):
+                raise ValueError(
+                    "Foundry translated providers require a metered root and safe model"
+                )
+            if self.supported_operations is None:
+                self.supported_operations = ["responses"]
+            elif self.supported_operations != ["responses"]:
+                raise ValueError("Foundry translated providers support only Responses")
+        return self
 
     @model_validator(mode="after")
     def validate_provider_specific_fields(self) -> BackendConfig:
@@ -976,6 +1003,7 @@ class Settings(BaseSettings):
         if any("audio_output" in b.google_features.features for b in self.backends.values()):
             raise ValueError("Generated audio runtime is unavailable pending integration gates")
         validate_image_output_pools(self, backends_data)
+        validate_foundry_model_pools(self)
         # Local integration alone does not clear resource/readiness/exact-model gates.
         if any(
             "image_output" in backend.google_features.features for backend in self.backends.values()

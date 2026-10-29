@@ -179,3 +179,19 @@ meter ceilings, so local estimates can exceed actual billed cost.
 Production acceptance and ingress-restoration details and limits are recorded
 in the linked evidence; Table cut-over and live nonzero-cache validation remain
 unverified.
+
+
+## MAI image ceiling accounting (Implemented and deployed)
+
+The azure_mai provider reserves one configured positive image estimate and
+retains it through non-streaming forwarding. This operator-owned estimate
+represents bounded prompt plus image generation; it is not a verified Azure
+billing ceiling. Unverified provider usage
+cannot imply zero cost. Confirmed pre-dispatch rejection releases the reserve;
+post-dispatch cancellation, malformed/oversized output and worker failures
+retain conservative charging. Successful image delivery charges the same local
+ceiling once. Billable token usage has not been established, so later authoritative cost
+reconciliation remains the way to adjust the estimate. The existing canonical
+ledger debit counters expose these charges. See [live enablement gates](../plans/foundry-three-models/evidence.md).
+
+The three-model production handoff preserved live balances and separately deducted one native diagnostic estimate; see [production evidence](../plans/foundry-three-models/production-evidence.md).

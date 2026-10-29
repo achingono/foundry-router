@@ -148,6 +148,8 @@ class AllowedBackendClient:
                     "opencode_zen",
                     "openrouter",
                     "opencode_anthropic",
+                    "azure_anthropic",
+                    "azure_mai",
                 }
                 or (config.provider == "azure_foundry" and operation == "responses")
             )
@@ -167,11 +169,25 @@ class AllowedBackendClient:
             if operation not in operations:
                 raise ValueError("Unsupported compatible backend operation")
             return base.copy_with(path=f"{base.path.rstrip('/')}/{operations[operation]}")
-        if config.provider in {"opencode_zen", "opencode_anthropic"}:
-            if operation != "responses":
-                raise ValueError("Zen backends support only the Responses operation")
-            suffix = "messages" if config.provider == "opencode_anthropic" else "responses"
-            return base.copy_with(path=f"{base.path.rstrip('/')}/{suffix}")
+        if config.provider in {
+            "opencode_zen",
+            "opencode_anthropic",
+            "azure_anthropic",
+            "azure_mai",
+        }:
+            if operation != "responses" or (
+                streaming and config.provider in {"azure_anthropic", "azure_mai"}
+            ):
+                raise ValueError(
+                    "Translated backends support only the Responses operation in an allowed mode"
+                )
+            suffix = {
+                "opencode_zen": "/responses",
+                "opencode_anthropic": "/messages",
+                "azure_anthropic": "/anthropic/v1/messages",
+                "azure_mai": "/mai/v1/images/generations",
+            }[config.provider]
+            return base.copy_with(path=f"{base.path.rstrip('/')}{suffix}")
         if config.provider in {"google_ai_studio", "opencode_google"}:
             if not config.deployment:
                 raise ValueError(f"Backend '{backend_id}' has no Google model configured")
@@ -209,6 +225,16 @@ class AllowedBackendClient:
         if config is None:
             raise ValueError(f"Unknown backend '{backend_id}'")
         safe_headers = self._sanitize_headers(headers) or {}
+        if config.provider == "azure_anthropic":
+            safe_headers = {
+                key: value
+                for key, value in safe_headers.items()
+                if key.lower() not in {"anthropic-beta", "anthropic-version"}
+            }
+            safe_headers["anthropic-version"] = "2023-06-01"
+            safe_headers["x-api-key"] = config.credential
+            safe_headers["api-key"] = config.credential
+            return safe_headers
         if config.provider in {"opencode_google", "opencode_anthropic"}:
             safe_headers["authorization"] = f"Bearer {config.credential}"
             if config.provider == "opencode_anthropic":

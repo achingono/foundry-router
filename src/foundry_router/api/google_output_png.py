@@ -11,7 +11,10 @@ _SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_CHUNKS = 64
 
 
-def inspect_output_png(raw: bytes) -> dict[str, int]:
+def inspect_output_png(raw: bytes, *, allow_c2pa: bool = False) -> dict[str, int]:
+    """Inspect raster syntax; optional bounded caBX bytes are preserved, not trusted."""
+    if type(allow_c2pa) is not bool:
+        raise ValueError("Invalid generated PNG profile")
     if not 57 <= len(raw) <= MAX_PNG_BYTES or not raw.startswith(_SIGNATURE):
         raise ValueError("Invalid generated PNG boundary")
     position = len(_SIGNATURE)
@@ -24,6 +27,7 @@ def inspect_output_png(raw: bytes) -> dict[str, int]:
     decompressor = None
     zlib_header = bytearray()
     ended = False
+    c2pa_seen = False
     while position + 12 <= len(raw):
         count += 1
         if count > _MAX_CHUNKS:
@@ -54,6 +58,10 @@ def inspect_output_png(raw: bytes) -> dict[str, int]:
             ):
                 raise ValueError("Unsupported generated PNG raster")
             row_size = 1 + width * (3 if color == 2 else 4)
+        elif kind == b"caBX" and allow_c2pa:
+            if not row_size or idat_bytes or c2pa_seen or not 1 <= size <= 65536:
+                raise ValueError("Invalid generated PNG provenance boundary")
+            c2pa_seen = True
         elif kind == b"IDAT":
             if not row_size or ended or count == _MAX_CHUNKS or not size:
                 raise ValueError("Invalid generated PNG data ordering")

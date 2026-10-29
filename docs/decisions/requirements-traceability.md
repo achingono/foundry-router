@@ -377,3 +377,14 @@ conservative settlement preserved. Bounded subset staging (5/5) and production
 acceptance (5/5) passed with exact debits under reviewed funding amendments;
 Grok/Muse are excluded on the recorded over-bound failure. See the
 [streaming resolution records](../plans/opencode-gemini-streaming/evidence.md).
+
+
+## Additional Foundry protocol models
+
+| Requirement | Implementation status | Evidence |
+| --- | --- | --- |
+| Foundry Anthropic root/auth with bounded nonstream Responses translation | Implemented and deployed; scoped nonstream live acceptance passed | test_foundry_translated_models.py and existing Anthropic regressions; [gates](../plans/foundry-three-models/evidence.md) |
+| MAI one-image Responses projection, isolated PNG validation and positive ceiling debit without fabricated usage | Implemented and deployed; bounded live PNG acceptance and debit passed | MAI API/worker/cancellation regressions in test_foundry_translated_models.py; [gates](../plans/foundry-three-models/evidence.md) |
+| Existing Terra/Sonnet/MAI deployment registration and price-backed production acceptance | Implemented and deployed;22backends/14pools, scoped live acceptance passed | [three-model evidence](../plans/foundry-three-models/evidence.md) |
+
+MAI native metadata and one bounded CRC-valid caBX chunk are supported through a server-owned inspection profile; default Google inspection remains strict. See [final production evidence](../plans/foundry-three-models/production-evidence.md).

@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from foundry_router.api.google_sealing import SealContext
 
 from foundry_router.api.adapters.azure import AzureAdapter
+from foundry_router.api.adapters.azure_anthropic import AzureAnthropicAdapter
+from foundry_router.api.adapters.azure_mai import AzureMaiAdapter
 from foundry_router.api.adapters.base import (
     AdapterRejection,
     ProviderAdapter,
@@ -38,6 +40,8 @@ _OPENCODE_GOOGLE_PROFILE = GoogleFeatureProfile(
 
 _ADAPTERS: dict[str, ProviderAdapter] = {
     "azure_foundry": AzureAdapter(),
+    "azure_anthropic": AzureAnthropicAdapter(),
+    "azure_mai": AzureMaiAdapter(),
     "google_ai_studio": GoogleAiStudioAdapter(),
     "openai_compatible": CompatibleTextAdapter(),
     "opencode_zen": ZenAdapter(),

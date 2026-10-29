@@ -8,6 +8,8 @@ import sys
 
 
 def main() -> int:
+    if sys.argv[1:] not in ([], ["--mai-c2pa"]):
+        return 2
     try:
         resource.setrlimit(resource.RLIMIT_AS, (134217728, 134217728))
         resource.setrlimit(resource.RLIMIT_CPU, (1, 1))
@@ -21,7 +23,9 @@ def main() -> int:
             inspect_output_png,
         )
 
-        result = inspect_output_png(sys.stdin.buffer.read(MAX_PNG_BYTES + 1))
+        result = inspect_output_png(
+            sys.stdin.buffer.read(MAX_PNG_BYTES + 1), allow_c2pa=sys.argv[1:] == ["--mai-c2pa"]
+        )
     except ImportError:
         return 2
     except (ValueError, MemoryError, OverflowError):

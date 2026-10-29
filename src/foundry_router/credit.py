@@ -282,10 +282,32 @@ def estimate_request_cost(
     if not _valid_non_negative_finite(input_price) or not _valid_non_negative_finite(output_price):
         return None
 
-    signature_bound = 0
-    thinking_budget = 0
+    signature_bound = thinking_budget = 0
     pools = getattr(settings, "models", {})
     pool = pools.get(model)
+    if (
+        settings is not None
+        and pool is not None
+        and any(
+            getattr(settings.backends[name], "provider", "azure_foundry") == "azure_mai"
+            for name in pool.backends
+        )
+    ):
+        price = getattr(model_pricing, "image_output_per_image", None)
+        if (
+            operation != "responses"
+            or not image_output_request(body)
+            or any(
+                getattr(settings.backends[name], "provider", "azure_foundry") != "azure_mai"
+                for name in pool.backends
+            )
+            or not isinstance(price, (int, float))
+            or isinstance(price, bool)
+            or not _valid_non_negative_finite(price)
+            or price <= 0
+        ):
+            return None
+        return RequestEstimate(input_tokens=0, output_tokens=0, estimated_cost_usd=float(price))
     if (
         operation == "responses"
         and settings is not None

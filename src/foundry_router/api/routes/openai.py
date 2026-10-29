@@ -154,6 +154,20 @@ def build_router(
         output_lease = None
         output_transferred = False
         try:
+            if any(settings.backends[name].provider == "azure_mai" for name in pool.backends):
+                rejection = get_adapter("azure_mai").check_request("responses", canonical_body)
+                if rejection is not None:
+                    return api_error(rejection.status_code, rejection.message, rejection.code)
+                if sys.platform != "linux":
+                    return api_error(503, "Generated output requires Linux", "upstream_error")
+                try:
+                    output_lease = OutputInspectionLease(slots=1, allow_c2pa=True)
+                except ValueError:
+                    return api_error(503, "Generated output inspection is busy", "upstream_error")
+                if not await output_lease.ready(deadline=intake_deadline):
+                    return api_error(
+                        503, "Generated output inspector is unavailable", "upstream_error"
+                    )
             if audio_output_request(canonical_body) and any(
                 "audio_output" in settings.backends[name].google_features.features
                 for name in pool.backends

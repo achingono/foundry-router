@@ -339,3 +339,30 @@ def test_weighted_thread_contention_never_leaks_partial_capacity():
         list(executor.map(compete, range(8)))
     both = OutputInspectionLease(slots=2)
     both.close()
+
+
+@pytest.mark.parametrize("profile", [False, True])
+async def test_server_owned_mai_worker_flag(monkeypatch, profile):
+    monkeypatch.setattr(sys, "platform", "linux")
+    gate = asyncio.Event()
+    gate.set()
+    child = FakeChild(gate)
+
+    async def spawn(*args, **_kwargs):
+        assert ("--mai-c2pa" in args) is profile
+        return child
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    lease = OutputInspectionLease(allow_c2pa=profile)
+    try:
+        await lease.inspect(png(), deadline=time.monotonic() + 2)
+    finally:
+        lease.close()
+
+
+@pytest.mark.parametrize("profile", [1, "true", None])
+def test_invalid_profile_does_not_consume_capacity(profile):
+    with pytest.raises(ValueError):
+        OutputInspectionLease(allow_c2pa=profile)
+    lease = OutputInspectionLease(slots=2)
+    lease.close()

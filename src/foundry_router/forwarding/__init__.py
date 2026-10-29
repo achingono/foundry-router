@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from foundry_router.api.google_sealing import SealContext
 
 from foundry_router.api.adapters import get_adapter
+from foundry_router.api.adapters.azure_mai import translate_mai_image_output
 from foundry_router.api.adapters.google_audio_request import (
     MAX_AUDIO_RESPONSE_BYTES,
     audio_output_request,
@@ -114,6 +115,8 @@ def _uses_translated_forwarding(settings: Any, backend_id: str) -> bool:
         "openrouter",
         "opencode_google",
         "opencode_anthropic",
+        "azure_anthropic",
+        "azure_mai",
     }
 
 
@@ -1064,6 +1067,14 @@ async def _google_non_streaming_attempt(
                         logical_model=logical_model,
                         request_body=public_body,
                         metadata=public_body.get("metadata"),
+                    )
+                elif _provider_of(settings, backend_id) == "azure_mai":
+                    generated_body = await translate_mai_image_output(
+                        payload,
+                        request_body=public_body,
+                        logical_model=logical_model,
+                        lease=output_lease,
+                        deadline=reservation_deadline_monotonic,
                     )
                 else:
                     generated_body = await translate_image_output(

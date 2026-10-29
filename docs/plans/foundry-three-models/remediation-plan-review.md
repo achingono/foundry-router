@@ -1,0 +1,19 @@
+# Independent MAI remediation plan review
+
+Historical review: pending execution statements below describe the state at review. The scoped rollout subsequently passed; see [final production evidence](production-evidence.md).
+
+**Verdict: Approved for the scoped implementation amendment.** No Critical or Major findings. Exact replacement release/handoff and new live acceptance remain separately reviewable gates.
+
+Reviewer: independent `credit_plan_review` / `gpt-6-astra`, not the amendment author. Reviewed [measured findings and amendment](mai-remediation.md), private sanitized diagnostic facts, current strict PNG inspector, worker entrypoint, lease dispatch boundary and previously approved MAI implementation. Plan SHA-256 `83db38f7ba1d106a4a7d0ecdcb324b75c6fcafe753b763492af175f3737698c0`; diagnostic facts SHA-256 `98b9378fe8e1267ee28481f1b1d1994dfa18fc7f52a15fa61e6eee9cbf9b22df`. No source edits or live calls performed by reviewer.
+
+The measured response supports the proposed scope: one PNG item in an envelope with metadata, 558,479 image bytes, 1024×1024 8-bit RGB, one 19,492-byte caBX between IHDR and IDAT, and strict rejection of that ancillary chunk. Ignoring bounded unused envelope metadata, while retaining the exact single base64 item and ignoring unverified usage for billing, resolves the envelope mismatch without broadening public inputs or fabricating usage.
+
+A server-owned MAI-only profile is an appropriate minimal worker change. The default profile must continue rejecting caBX. In MAI mode, accept at most one nonempty caBX up to 64KiB only after a valid IHDR and before any IDAT bytes; retain CRC, total bytes/chunks, raster, zlib and expansion bounds. Preserve original bytes/digest. The opaque chunk is carried through, not interpreted or authenticated; no provenance-trust claim is supported. Unknown CLI flags fail closed, and public request/env data cannot select this profile.
+
+Required tests cover both worker profiles, complete-file digest/byte preservation, first-IDAT ordering including partial zlib-header cases, duplicate/empty/oversized/misplaced/corrupt caBX, other ancillary chunks, unchanged raster/expansion rejection, MAI-only lease selection and bounded metadata with usage remaining unknown. Reuse existing request-owned worker cleanup and resource limits. Focused tests, full >=80% coverage, lint/format/types, real Linux/amd64 worker execution, immutable rebuild and independent contextual review are required before replacement deployment.
+
+The financial/release amendment correctly preserves the original failed MAI USD1 router debit, archives prior counters, and deducts the separate consumed native diagnostic USD1 liability exactly once from the fresh drained openclaw seed. The prior three text receipts remain valid evidence for unchanged text adapters; they are not replayed. One new MAI acceptance slot, with the two-candidate USD2 local estimate bound, is a distinct reviewed attempt. It does not establish an authoritative Azure billing ceiling.
+
+Fresh exact-packet review must bind updated helper/profile behavior, source/image/configuration, consumed diagnostic liability and deduction marker, latest ledger/process, old-writer exclusion and the new slot. Public ingress stays restricted until real Responses output passes the amended strict MAI profile and final accounting/process checks. Neither original consumed image slot nor diagnostic slot may be replayed; ambiguous replacement acceptance requires inspection and separately reviewed recovery.
+
+Documentation should update the leading investigation/proposed-diagnostic statuses as historical work is recorded, while retaining the diagnostic and failed-call accounting facts. No new Azure resource, Table cut-over, allowance increase or broader image format support is approved.

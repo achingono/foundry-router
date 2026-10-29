@@ -1,0 +1,13 @@
+# Independent bounded MAI diagnostic review
+
+Historical review: pending execution statements below describe the state at review. The scoped rollout subsequently passed; see [final production evidence](production-evidence.md).
+
+**Verdict: Approved for one separate native diagnostic attempt.** No Critical or Major findings. Approval applies only to `/private/tmp/three-mai-native-diagnostic.py` SHA-256 `e71a9b21722290672c6c2f573b2fa6fd9cdd050f5710bf47f10fcb9f09977d9e` and its existing approved handoff/helper dependencies.
+
+Independent reviewer: `credit_plan_review` / `gpt-6-astra`, not the script author. Reviewed executable and redacted failure/acceptance facts. The three text acceptance slots passed; the original MAI slot remains consumed. Failure snapshot records openclaw remaining USD127.2395, total debit USD1.00025 and no active reservations; the diagnostic slot did not yet exist at review. No provider call, source edit or Azure mutation was performed by reviewer.
+
+The script requires the bound promoted configuration, revision/replica, exact executor-only ingress and unchanged quiet failure ledger before dispatch. It uses the existing approved physical MAI backend/credential and fixed 1024×1024 request through the native endpoint. A consumed record precedes dispatch and records a separate USD1 operator-estimate liability. The call has no retry, finite 90-second deadline and 2MiB response bound. Output remains in memory; persisted facts are bounded envelope/item-key classifications, image signatures/digest/size and PNG structure/inspector results. Authentication and image/prompt content are not printed. Post-call diagnostics require the router ledger to remain unchanged, since this direct call bypasses router accounting.
+
+The USD1 liability is an approved local accounting estimate, not a verified Azure cost ceiling. It is additional to the original failed router call's USD1 debit. The next independently reviewed remediation handoff must bind this consumed record and deduct its USD1 exactly once from the fresh drained openclaw seed, including if the native attempt times out, fails parsing or has an ambiguous outcome. Do not refund the original router debit or interpret missing diagnostic facts as proof that no charge occurred.
+
+No replay of either consumed slot is approved. No public reopening, PNG-parser relaxation, source amendment or replacement deployment is approved by this diagnostic review. Any diagnostic exception requires inspecting the existing consumed record and available facts; a further provider call requires a separate bounded review. Actual wire findings must drive a reviewed minimal remediation and its verification/live acceptance gates.

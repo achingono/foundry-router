@@ -180,7 +180,9 @@ class PreparedOutputPng:
 class OutputInspectionLease:
     """Caller close retains a busy slot until the child is killed and reaped."""
 
-    def __init__(self, *, slots: int = 1) -> None:
+    def __init__(self, *, slots: int = 1, allow_c2pa: bool = False) -> None:
+        if type(allow_c2pa) is not bool:
+            raise ValueError("Invalid generated output profile")
         if type(slots) is not int or slots not in (1, 2):
             raise ValueError("Invalid generated output capacity")
         with _SLOT_LOCK:
@@ -189,6 +191,7 @@ class OutputInspectionLease:
                     for _ in range(acquired):
                         _SLOTS.release()
                     raise ValueError("Generated output inspection is busy")
+        self._allow_c2pa = allow_c2pa
         self._slots = slots
         self._closed = False
         self._active = False
@@ -259,6 +262,7 @@ class OutputInspectionLease:
                     "-I",
                     "-m",
                     "foundry_router.api.google_output_png_worker",
+                    *(["--mai-c2pa"] if self._allow_c2pa else []),
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL,

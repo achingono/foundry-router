@@ -456,3 +456,40 @@ forms are omitted from public output. Non-null state, active citations and
 unknown fields remain unsupported; cache-inclusive usage is retained for
 settlement if conversion rejects. See the
 [nullable metadata amendment](../plans/opencode-zen-five-models/anthropic-nullable-amendment.md).
+
+
+## Additional Foundry protocol providers (Implemented and deployed)
+
+`azure_anthropic` requires a metered resource-root endpoint, a safe deployment
+segment and Responses-only operations. Its pools must set streaming_enabled=false.
+It translates bounded text Responses into Anthropic Messages and counts ordinary,
+cache-creation and cache-read input tokens together at the configured input
+ceiling. It does not enable tools, media, streaming or automatic cached discounts.
+The backend injects both server-owned x-api-key and api-key plus anthropic-version;
+inbound authentication and version/beta overrides are discarded.
+
+`azure_mai` requires an image-only pool with streaming_enabled=false and unsigned
+continuation. Configure input/output token rates as zero, no cached-input rate,
+and a strictly positive image_output_per_image estimate for the entire
+bounded generation (including prompt billing). This is an operator estimate,
+not a claim that Azure bills per image: MAI retail meters can bill text/image
+tokens while its provider usage has not been established as billable token usage. Verified rates or an explicitly approved operator estimate are
+required before production activation; an operator estimate is not a proven
+Azure billing ceiling. All candidates in such a pool must use
+azure_mai; existing credit account and credential sharing remain supported.
+
+MAI requests use Responses with a string input (at most 64KiB), store=false,
+stream=false, and exactly one tool:
+`{"type":"image_generation","output_format":"png","size":"1024x1024"}`.
+History, instructions, edits, output-token limits, web grounding and aspect-ratio
+controls are rejected. The router sends fixed dimensions and the deployment
+model to /mai/v1/images/generations and returns one image_generation_call with
+usage=null. Bounded PNG inspection and delivery require Linux; Google image
+startup gates remain unchanged. See [implementation and live gates](../plans/foundry-three-models/evidence.md).
+
+MAI native envelope metadata is ignored; provider usage is not interpreted as
+billable tokens. MAI alone selects a server-owned PNG inspection profile that
+preserves one CRC-valid, nonempty `caBX` provenance chunk up to 64 KiB between
+IHDR and IDAT. Embedded provenance is opaque and its authenticity is unverified.
+The 1 MiB image, 1024 RGB/RGBA raster, chunk and expansion bounds remain. Other
+ancillary chunks fail; the default Google inspection profile rejects `caBX`.

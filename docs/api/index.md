@@ -749,3 +749,18 @@ inherit this Google policy. Usage and SSE text boundaries remain unchanged. Exac
 acceptance is recorded in the [phase evidence](../plans/google-compatible-signature-text/evidence.md).
 
 When a resolved model pool sets `streaming_enabled:false`, Responses with `stream:true` returnHTTP400 with error type `streaming_not_supported` before quota/credit admission or upstream dispatch. Omitted or false stream remains available. Aliases use the target pool policy.
+
+
+The deployed Foundry Anthropic provider exposes non-streaming,
+text-only Responses. The deployed MAI provider projects one bounded
+PNG into a completed image_generation_call, with usage=null because provider
+usage has not been established as billable token usage. Unsupported operations/features reject before
+backend dispatch. The exact image tool and pricing/inspection constraints are
+in [configuration](../configuration/index.md); production model registration
+and validation are tracked in [three-model evidence](../plans/foundry-three-models/evidence.md).
+
+MAI accepts native envelope metadata alongside its single image and omits
+unverified token usage from the public response. Its bounded inspection profile
+preserves one `caBX` provenance chunk without parsing or trusting it; all image
+bytes and their digest are preserved. See [configuration](../configuration/index.md)
+and [live compatibility remediation](../plans/foundry-three-models/mai-remediation.md).
