@@ -99,6 +99,14 @@ Shared-resource credit is **Implemented**. `/admin/status` adds canonical `credi
 snapshots and a `credit_group` on each backend. Backend credit views are compatible but nonadditive.
 `/metrics` adds `foundry_router_credit_group_available_usd{credit_group}` while retaining backend
 metrics. Reconciliation adds `last_updated_credit_groups`; the legacy count is a compatibility alias.
+Canonical group `live.debited_usd_total` and `live.recovered_debit_usd_total` are **Implemented
+locally** as cumulative actual ledger reductions and their expiry-recovery subset. Authenticated
+`/metrics` exposes `foundry_router_credit_group_debited_usd_total{credit_group}` and
+`foundry_router_credit_group_recovered_debit_usd_total{credit_group}`. These include conservative
+missing-usage settlement, exclude seed/config/reconciliation changes, and persist across Table
+restart/cycle rollover. Memory startup begins a fresh counter lifetime. Shared Table counter views
+across workers are nonadditive. See [correction evidence](../plans/credit-accounting-correction/evidence.md)
+for rollout status.
 Readiness checks unique routable metered accounts. A credit persistence/finalization failure before
 response delivery returns `503 credit_store_unavailable`, preventing failover after failed release.
 After SSE output, completion failure propagates without a retry. See

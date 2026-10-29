@@ -101,6 +101,28 @@ existing `foundry_router_credit_available_usd{backend}` is nonadditive. Request/
 backend-labelled. Opt-in multi-worker OTLP aggregation is implemented locally; deployed
 collector acceptance remains unverified. See [observability](observability.md).
 
+Request-cost counters do not account for every credit-ledger debit. Azure streams
+without terminal usage settle the full reservation but contribute no cost to the request-cost
+counter; expiry recovery also has no corresponding request-cost observation. The canonical
+`foundry_router_credit_group_debited_usd_total` counter is **Implemented and deployed in production memory mode** and includes
+every actual settlement/recovery reduction; `foundry_router_credit_group_recovered_debit_usd_total`
+is its expiry-recovery subset. Admin credit-group `live` exposes `debited_usd_total` and
+`recovered_debit_usd_total`. Counters exclude reconciliation/config changes and starting-seed
+deductions. They remain cumulative across cycle rollover and reconciliation, start at zero on
+memory process startup, and persist in Table balance transactions. Missing historical Table
+fields start at zero without reconstructing past debits; invalid fields fail closed. Drain old
+Table writers before upgrading because their replacement writes do not preserve new fields.
+Shared Table counter views across workers are nonadditive; OTLP still exports per-worker request
+telemetry, not these shared ledger counters.
+
+Cached Azure input uses optional `cached_input_per_million` only with valid explicit provider
+cache usage; omission or malformed/ambiguous cache details retains ordinary input pricing.
+Admission retains full input pricing before cache hits are known. Use canonical group snapshots to assess
+admission, and compare provider charts over the verified subscription billing period and currency.
+The [October 29 production investigation](../plans/production-credit-discrepancy/evidence.md)
+records the reproduced discrepancy and verified billing dates. Correction rollout status is in the
+[accounting correction evidence](../plans/credit-accounting-correction/evidence.md).
+
 Reconciliation providers should supply canonical group updates once. Direct store calls also accept
 backend aliases, normalize the complete input before writes, coalesce equal amounts and reject
 conflicting values for one group. `last_updated_credit_groups` is the unique-account count;
@@ -140,3 +162,20 @@ For the accepted new OpenRouter staging roster, use [`gpt-6-luna-or` and `claude
 Pool `streaming_enabled:false` rejects Responses stream requests before quota/credit admission and provider preparation; aliases inherit the canonical pool policy. Set this only for pools qualified for nonstream use. This does not stop all intake or isolate shared account wallets.
 
 The [two-model OpenRouter production rollout](../plans/openrouter-production-two/deployment-evidence.md) is deployed: `gpt-6-luna-or` and `claude-haiku-5.5-or` accept non-streaming Responses only. The existing six Azure pools and aliases were retained; the disabled fs-openclaw group has zero allowance. Staging is stopped for the exclusive OpenRouter handoff; do not restart its stale credit allocation. Production remains memory/one. Four new staging/production checks passed; the operator controls intake reopening.
+
+
+## October 29 accounting correction
+
+The [credit accounting correction](../plans/credit-accounting-correction/evidence.md)
+release is deployed in production memory/one mode. It adds complete canonical
+ledger debit/recovery counters and explicit cached-input settlement prices.
+`fs-openclaw` is enabled with operator-authorized CAD 200 allowance / CAD 180
+remaining converted conservatively to USD 142.49 / USD 128.24 at 1.4036 CAD/USD.
+The inherited reserve leaves USD 118.24 available before acceptance costs.
+Other accounts' drained remaining estimates were preserved; historical debit
+estimates were not refunded. Azure subscription billing periods verified cycle
+start days 2 for swarm and 26 for openclaw. Pricing uses documented conservative
+meter ceilings, so local estimates can exceed actual billed cost.
+Production acceptance and ingress-restoration details and limits are recorded
+in the linked evidence; Table cut-over and live nonzero-cache validation remain
+unverified.

@@ -143,6 +143,8 @@ class BackendCreditLiveSnapshot:
     next_reset_utc: datetime
     active_reservations: int
     oldest_reservation_age_seconds: float | None = None
+    debited_usd_total: float = 0.0
+    recovered_debit_usd_total: float = 0.0
 
 
 @runtime_checkable
@@ -213,6 +215,8 @@ class _BackendCreditSnapshot:
     estimated_remaining_usd: float
     cycle_start_utc: datetime
     reserved_inflight_usd: float = 0.0
+    debited_usd_total: float = 0.0
+    recovered_debit_usd_total: float = 0.0
 
 
 @dataclass
@@ -605,8 +609,76 @@ def estimate_response_usage_cost(
     if usage_tokens is None:
         return None
     input_tokens, output_tokens = usage_tokens
-    cost = ((input_tokens * input_price) + (output_tokens * output_price)) / 1_000_000
+    cached_price = getattr(model_pricing, "cached_input_per_million", None)
+    cached_tokens = 0
+    if (
+        isinstance(cached_price, (int, float))
+        and not isinstance(cached_price, bool)
+        and _valid_non_negative_finite(cached_price)
+        and cached_price <= input_price
+    ):
+        cached_tokens = _cached_response_input_tokens(response)
+    else:
+        cached_price = input_price
+    cost = (
+        ((input_tokens - cached_tokens) * input_price)
+        + (cached_tokens * cached_price)
+        + (output_tokens * output_price)
+    ) / 1_000_000
     return cost if _valid_non_negative_finite(cost) else None
+
+
+def _cached_response_input_tokens(response: Any) -> int:
+    """Discount only a valid, explicit, unambiguous cached subset of input usage."""
+    try:
+        payload = json.loads(response.body)
+    except (AttributeError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return 0
+    usage = payload.get("usage") if isinstance(payload, dict) else None
+    if not isinstance(usage, dict):
+        return 0
+    pairs = (
+        ("input_tokens", "input_tokens_details"),
+        ("prompt_tokens", "prompt_tokens_details"),
+    )
+    counts = []
+    for count_key, details_key in pairs:
+        if count_key not in usage and details_key not in usage:
+            continue
+        count = _usage_int(usage, count_key)
+        details = usage.get(details_key)
+        if count is None or not isinstance(details, dict):
+            return 0
+        cached = _usage_int(details, "cached_tokens")
+        if cached is None or cached > count:
+            return 0
+        counts.append((count, cached))
+    if not counts or any(pair != counts[0] for pair in counts):
+        return 0
+    return counts[0][1]
+
+
+def accumulate_credit_debit(
+    remaining: float, total: float, recovered_total: float, charge: float, *, recovered: bool
+) -> tuple[float, float, float]:
+    """Compute an actual ledger reduction and its counters before mutating financial state."""
+    if (
+        any(
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not _valid_non_negative_finite(value)
+            for value in (remaining, total, recovered_total, charge)
+        )
+        or recovered_total > total
+    ):
+        raise CreditStoreError("Invalid credit debit accounting state")
+    new_remaining = max(0.0, remaining - charge)
+    debit = remaining - new_remaining
+    new_total = total + debit
+    new_recovered = recovered_total + (debit if recovered else 0.0)
+    if not math.isfinite(new_total) or not math.isfinite(new_recovered):
+        raise CreditStoreError("Credit debit accounting capacity exceeded")
+    return new_remaining, new_total, new_recovered
 
 
 def extract_response_usage_tokens(response: Any) -> tuple[int, int] | None:
@@ -1037,6 +1109,8 @@ class InMemoryCreditStore:
                         if oldest_monotonic is not None
                         else None
                     ),
+                    debited_usd_total=snapshot.debited_usd_total,
+                    recovered_debit_usd_total=snapshot.recovered_debit_usd_total,
                 )
         return snapshots
 
@@ -1059,6 +1133,7 @@ class InMemoryCreditStore:
                 reservation,
                 charge_reserved=True,
                 charged_cost_usd=reservation.settlement_charge_usd,
+                recovered=True,
             )
 
     def _release_locked(
@@ -1067,19 +1142,29 @@ class InMemoryCreditStore:
         *,
         charge_reserved: bool,
         charged_cost_usd: float | None,
+        recovered: bool = False,
     ) -> None:
         snapshot = self._snapshots.get(reservation.backend_id)
         if snapshot is not None:
-            snapshot.reserved_inflight_usd = max(
-                0.0,
-                snapshot.reserved_inflight_usd - reservation.estimated_cost_usd,
-            )
             charge = 0.0
             if charged_cost_usd is not None and _valid_non_negative_finite(charged_cost_usd):
                 charge = charged_cost_usd
             elif charge_reserved:
                 charge = reservation.estimated_cost_usd
-            snapshot.estimated_remaining_usd = max(0.0, snapshot.estimated_remaining_usd - charge)
+            remaining, total, recovered_total = accumulate_credit_debit(
+                snapshot.estimated_remaining_usd,
+                snapshot.debited_usd_total,
+                snapshot.recovered_debit_usd_total,
+                charge,
+                recovered=recovered,
+            )
+            snapshot.reserved_inflight_usd = max(
+                0.0,
+                snapshot.reserved_inflight_usd - reservation.estimated_cost_usd,
+            )
+            snapshot.estimated_remaining_usd = remaining
+            snapshot.debited_usd_total = total
+            snapshot.recovered_debit_usd_total = recovered_total
         self._reservations.pop(reservation.request_id, None)
 
     def _rollover_if_needed(self, snapshot: _BackendCreditSnapshot, now_utc: datetime) -> None:

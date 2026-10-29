@@ -24,6 +24,7 @@ from foundry_router.credit import (
     CreditAssessmentContext,
     CreditReservePolicy,
     CreditState,
+    accumulate_credit_debit,
     calculate_cycle_window,
 )
 from foundry_router.credit_groups import (
@@ -290,10 +291,31 @@ class _BalanceRow:
     reserved_inflight_usd: float
     cycle_start_utc: datetime
     etag: str | None = None
+    debited_usd_total: float = 0.0
+    recovered_debit_usd_total: float = 0.0
 
 
 class TableEntityCreditStoreError(CreditStoreError):
     """A credit store operation failed and cannot be retried safely."""
+
+
+def _debit_balance(balance: _BalanceRow, charge: float, *, recovered: bool) -> _BalanceRow:
+    try:
+        remaining, total, recovered_total = accumulate_credit_debit(
+            balance.estimated_remaining_usd,
+            balance.debited_usd_total,
+            balance.recovered_debit_usd_total,
+            charge,
+            recovered=recovered,
+        )
+    except CreditStoreError as exc:
+        raise TableEntityCreditStoreError("Invalid credit debit accounting state") from exc
+    return replace(
+        balance,
+        estimated_remaining_usd=remaining,
+        debited_usd_total=total,
+        recovered_debit_usd_total=recovered_total,
+    )
 
 
 class AzureTableCreditStore:
@@ -459,6 +481,8 @@ class AzureTableCreditStore:
             reserved_inflight_usd=stored.reserved_inflight_usd,
             cycle_start_utc=stored.cycle_start_utc,
             etag=stored.etag,
+            debited_usd_total=stored.debited_usd_total,
+            recovered_debit_usd_total=stored.recovered_debit_usd_total,
         )
         ops = [
             _TransactionEntity(
@@ -501,6 +525,8 @@ class AzureTableCreditStore:
                 reserved_inflight_usd=fresh_row.reserved_inflight_usd,
                 cycle_start_utc=fresh_row.cycle_start_utc,
                 etag=fresh_row.etag,
+                debited_usd_total=fresh_row.debited_usd_total,
+                recovered_debit_usd_total=fresh_row.recovered_debit_usd_total,
             )
             ops = [
                 _TransactionEntity(
@@ -710,6 +736,8 @@ class AzureTableCreditStore:
                         + estimated_request_cost_usd,
                         cycle_start_utc=balance.cycle_start_utc,
                         etag=balance.etag,
+                        debited_usd_total=balance.debited_usd_total,
+                        recovered_debit_usd_total=balance.recovered_debit_usd_total,
                     )
                     reservation = _ReservationRow(
                         request_id=request_id,
@@ -921,16 +949,11 @@ class AzureTableCreditStore:
                     if balance is None:
                         raise TableEntityCreditStoreError("Missing settlement balance")
 
-                new_balance = _BalanceRow(
-                    backend_id=balance.backend_id,
-                    cycle_start_day=balance.cycle_start_day,
-                    cycle_allowance_usd=balance.cycle_allowance_usd,
-                    estimated_remaining_usd=max(0.0, balance.estimated_remaining_usd - charge),
+                new_balance = replace(
+                    _debit_balance(balance, charge, recovered=False),
                     reserved_inflight_usd=max(
                         0.0, balance.reserved_inflight_usd - reservation.estimated_cost_usd
                     ),
-                    cycle_start_utc=balance.cycle_start_utc,
-                    etag=balance.etag,
                 )
                 ops = [
                     _TransactionEntity(
@@ -1026,6 +1049,8 @@ class AzureTableCreditStore:
                         reserved_inflight_usd=balance.reserved_inflight_usd,
                         cycle_start_utc=balance.cycle_start_utc,
                         etag=balance.etag,
+                        debited_usd_total=balance.debited_usd_total,
+                        recovered_debit_usd_total=balance.recovered_debit_usd_total,
                     )
 
                     ops = [
@@ -1144,7 +1169,7 @@ class AzureTableCreditStore:
                 continue
             fetched = self._entity_to_balance(entity)
             if fetched is None:
-                continue
+                raise TableEntityCreditStoreError("Invalid credit balance diagnostics")
             self._rollover_if_needed(fetched, now)
             async with self._lock:
                 self._balance_cache[backend_id] = (time.monotonic(), fetched)
@@ -1184,6 +1209,8 @@ class AzureTableCreditStore:
                 available_credit_usd=assessment.available_credit_usd,
                 reserved_inflight_usd=balance.reserved_inflight_usd,
                 estimated_remaining_usd=balance.estimated_remaining_usd,
+                debited_usd_total=balance.debited_usd_total,
+                recovered_debit_usd_total=balance.recovered_debit_usd_total,
                 cycle_allowance_usd=balance.cycle_allowance_usd,
                 current_cycle_start_utc=cycle.current_cycle_start_utc,
                 next_reset_utc=cycle.next_reset_utc,
@@ -1297,19 +1324,12 @@ class AzureTableCreditStore:
                             break
                         intent = self._settlement_intent(fresh)
                         charge = intent if intent is not None else fresh_res.estimated_cost_usd
-                        new_balance = _BalanceRow(
-                            backend_id=balance.backend_id,
-                            cycle_start_day=balance.cycle_start_day,
-                            cycle_allowance_usd=balance.cycle_allowance_usd,
-                            estimated_remaining_usd=max(
-                                0.0, balance.estimated_remaining_usd - charge
-                            ),
+                        new_balance = replace(
+                            _debit_balance(balance, charge, recovered=True),
                             reserved_inflight_usd=max(
                                 0.0,
                                 balance.reserved_inflight_usd - fresh_res.estimated_cost_usd,
                             ),
-                            cycle_start_utc=balance.cycle_start_utc,
-                            etag=balance.etag,
                         )
                         ops = [
                             _TransactionEntity(
@@ -1476,6 +1496,8 @@ class AzureTableCreditStore:
             "cycle_allowance_usd": balance.cycle_allowance_usd,
             "estimated_remaining_usd": balance.estimated_remaining_usd,
             "reserved_inflight_usd": balance.reserved_inflight_usd,
+            "debited_usd_total": balance.debited_usd_total,
+            "recovered_debit_usd_total": balance.recovered_debit_usd_total,
             "cycle_start_utc_timestamp": balance.cycle_start_utc.timestamp(),
             "updated_at": time.time(),
         }
@@ -1490,6 +1512,20 @@ class AzureTableCreditStore:
             cycle_allowance = float(entity["cycle_allowance_usd"])
             remaining = float(entity["estimated_remaining_usd"])
             reserved = float(entity["reserved_inflight_usd"])
+            debit_totals = [
+                entity.get("debited_usd_total", 0.0),
+                entity.get("recovered_debit_usd_total", 0.0),
+            ]
+            if (
+                any(
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or not _valid_non_negative_finite(value)
+                    for value in debit_totals
+                )
+                or debit_totals[1] > debit_totals[0]
+            ):
+                return None
             cycle_start_ts = float(entity["cycle_start_utc_timestamp"])
 
             if not _valid_non_negative_finite(cycle_allowance) or not _valid_non_negative_finite(
@@ -1511,6 +1547,8 @@ class AzureTableCreditStore:
                 cycle_allowance_usd=cycle_allowance,
                 estimated_remaining_usd=remaining,
                 reserved_inflight_usd=reserved,
+                debited_usd_total=float(debit_totals[0]),
+                recovered_debit_usd_total=float(debit_totals[1]),
                 cycle_start_utc=cycle_start_utc,
                 etag=etag,
             )

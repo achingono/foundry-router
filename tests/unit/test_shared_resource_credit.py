@@ -341,6 +341,9 @@ async def test_stream_settlement_failure_still_closes_quota_and_metrics():
 @pytest.mark.asyncio
 async def test_readiness_admin_and_canonical_group_metric(store):
     settings = shared_settings()
+    await store.sync_from_settings(settings)
+    assert await store.try_assign_reservation("diagnostic-debit", "a", 4, **POLICY)
+    await store.finalize_request("diagnostic-debit", charge_reserved=True, charged_cost_usd=2)
     app = FastAPI()
     app.dependency_overrides[verify_admin_auth] = lambda: None
     app.include_router(health_router(load_settings_fn=lambda: settings))
@@ -357,6 +360,8 @@ async def test_readiness_admin_and_canonical_group_metric(store):
         assert (await client.get("/health/ready")).status_code == 200
         status = (await client.get("/admin/status")).json()
         assert list(status["credit_groups"]) == ["account"]
+        assert status["credit_groups"]["account"]["live"]["debited_usd_total"] == 2
+        assert status["credit_groups"]["account"]["live"]["recovered_debit_usd_total"] == 0
         assert all(backend["credit_group"] == "account" for backend in status["backends"].values())
         metrics = (await client.get("/metrics")).text
         assert (
@@ -364,6 +369,11 @@ async def test_readiness_admin_and_canonical_group_metric(store):
         )
         assert 'foundry_router_credit_available_usd{backend="a"}' in metrics
         assert 'foundry_router_credit_available_usd{backend="b"}' in metrics
+        assert (
+            metrics.count('foundry_router_credit_group_debited_usd_total{credit_group="account"}')
+            == 1
+        )
+        assert 'credit_group_debited_usd_total{credit_group="account"} 2.000000000' in metrics
         settings.backend_cycle_start_day.clear()
         assert (await client.get("/health/ready")).status_code == 503
 

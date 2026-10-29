@@ -56,6 +56,8 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 - `foundry_router_backend_health_state{backend}`: Current backend health state gauge.
 - `foundry_router_credit_available_usd{backend}`: Nonadditive backend view of estimated account credit.
 - `foundry_router_credit_group_available_usd{credit_group}`: Canonical unique account spendable estimate.
+- `foundry_router_credit_group_debited_usd_total{credit_group}`: Cumulative actual settlement/recovery ledger reductions, including missing-usage full-reservation charges.
+- `foundry_router_credit_group_recovered_debit_usd_total{credit_group}`: Expiry-recovery subset of the preceding counter.
 - `foundry_router_rate_limit_remaining{backend, quota_group, limit}`: Remaining configured RPM, input TPM, or RPD budget.
 - `foundry_router_rate_limit_exhausted{backend, quota_group}`: Whether the project quota group is exhausted.
 - `foundry_router_rate_limit_cooldown{backend, quota_group}`: Whether the backend is currently in quota cooldown.
@@ -67,6 +69,15 @@ The router exposes a Prometheus-compatible `/metrics` endpoint for in-process me
 Opt-in OpenTelemetry push is implemented and verified with two local subprocess workers
 and a restarted worker. File-based Prometheus aggregation alone does not combine Container
 App replicas. Deployed collection and acceptance remain unverified.
+
+Canonical debit counters are **Implemented and deployed in production memory mode**
+on admin/Prometheus; see [accounting correction evidence](../plans/credit-accounting-correction/evidence.md). They exclude initial
+seed deductions and reconciliation/config adjustments, persist in Table balance transactions,
+and reset on memory-process startup. Old Table rows start these counters at zero; they do not
+reconstruct historical deductions. Shared account views across Table workers must not be summed.
+They are not added to per-worker OTLP exports. Request-cost counters can omit conservative
+charges when usage is unavailable; use canonical debit totals to inspect complete ledger
+deductions. See [accounting operations](shared-resource-credit.md).
 
 ## Operator Checks
 

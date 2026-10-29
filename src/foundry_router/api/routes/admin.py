@@ -213,6 +213,8 @@ def build_router(
                         "credit_state": snapshot.state,
                         "available_credit_usd": snapshot.available_credit_usd,
                         "estimated_remaining_usd": snapshot.estimated_remaining_usd,
+                        "debited_usd_total": snapshot.debited_usd_total,
+                        "recovered_debit_usd_total": snapshot.recovered_debit_usd_total,
                         "reserved_inflight_usd": snapshot.reserved_inflight_usd,
                         "active_reservations": snapshot.active_reservations,
                         "oldest_reservation_age_seconds": snapshot.oldest_reservation_age_seconds,
@@ -281,6 +283,10 @@ def build_router(
             },
             credit_group_available_credit_usd={
                 group: snapshot.available_credit_usd for group, snapshot in credit_snapshots.items()
+            },
+            credit_group_debits={
+                group: (snapshot.debited_usd_total, snapshot.recovered_debit_usd_total)
+                for group, snapshot in credit_snapshots.items()
             },
             backend_rate_limit_snapshots=rate_limit_snapshots,
             model_aliases=dict(getattr(settings, "model_aliases", {}) or {}),

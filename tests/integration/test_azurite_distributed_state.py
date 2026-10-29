@@ -54,6 +54,8 @@ async def test_settlement_and_recovery_obey_cloud_property_names(azurite: Azurit
     )
     balance = await client.get_entity("account", "balance")
     assert balance["estimated_remaining_usd"] == 5
+    assert balance["debited_usd_total"] == 5
+    assert balance["recovered_debit_usd_total"] == 3
     assert balance["reserved_inflight_usd"] == 0
     assert await client.get_entity("account", "req-settle") is None
     assert await client.get_entity("account", "req-recover") is None
@@ -243,6 +245,8 @@ async def test_recovery_retains_intent_and_retries_reservation_etag_conflict(
     assert balance is not None
     assert balance["estimated_remaining_usd"] == 7
     assert balance["reserved_inflight_usd"] == 0
+    assert balance["debited_usd_total"] == 3
+    assert balance["recovered_debit_usd_total"] == 3
     assert raced
 
 

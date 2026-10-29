@@ -52,6 +52,22 @@ def _render_exclusion_lines(
     return lines
 
 
+def _render_credit_debit_lines(debits: dict[str, tuple[float, float]] | None) -> list[str]:
+    lines = []
+    for name, index, description in (
+        ("debited", 0, "Actual ledger reductions from settlement and recovery"),
+        ("recovered_debit", 1, "Subset of ledger reductions applied by expiry recovery"),
+    ):
+        metric_name = f"foundry_router_credit_group_{name}_usd_total"
+        lines.append(f"# HELP {metric_name} {description}")
+        lines.append(f"# TYPE {metric_name} counter")
+        for group, totals in sorted((debits or {}).items()):
+            lines.append(
+                f'{metric_name}{{credit_group="{_escape_label(group)}"}} {totals[index]:.9f}'
+            )
+    return lines
+
+
 class InMemoryMetricsStore:
     """Thread-safe metric snapshots rendered in Prometheus text format."""
 
@@ -112,13 +128,14 @@ class InMemoryMetricsStore:
             self._exclusion_entries.clear()
             self._exclusion_resets.clear()
 
-    async def render_prometheus(
+    async def render_prometheus(  # noqa: PLR0913 -- preserve the existing keyword-only diagnostics API
         self,
         *,
         backend_health_states: dict[str, str],
         backend_available_credit_usd: dict[str, float],
         backend_rate_limit_snapshots: dict[str, Any] | None = None,
         credit_group_available_credit_usd: dict[str, float] | None = None,
+        credit_group_debits: dict[str, tuple[float, float]] | None = None,
         model_aliases: dict[str, str] | None = None,
     ) -> str:
         async with self._lock:
@@ -192,6 +209,7 @@ class InMemoryMetricsStore:
             )
 
         lines.extend(_render_exclusion_lines(exclusion_entries, exclusion_resets))
+        lines.extend(_render_credit_debit_lines(credit_group_debits))
 
         lines.append(
             "# HELP foundry_router_backend_health_state Backend health state gauge "

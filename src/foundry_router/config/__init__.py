@@ -352,12 +352,30 @@ class PricingConfig(BaseModel):
 
     input_per_million: float = Field(ge=0, allow_inf_nan=False)
     output_per_million: float = Field(ge=0, allow_inf_nan=False)
+    cached_input_per_million: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     image_input_tokens: int | None = Field(default=None, ge=258, exclude=True)
     pdf_document_tokens: int | None = Field(default=None, ge=258, exclude=True)
     audio_file_tokens: int | None = Field(default=None, ge=96, exclude=True)
     video_file_tokens: int | None = Field(default=None, ge=558, exclude=True)
     image_output_per_image: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     audio_output_per_second: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+    @field_validator("cached_input_per_million", mode="before")
+    @classmethod
+    def validate_cached_price_type(cls, value: object) -> object:
+        if isinstance(value, bool):
+            # Pydantic exposes ValueError as validation failure; TypeError escapes validation.
+            raise ValueError("Cached input price must be numeric, not boolean")  # noqa: TRY004
+        return value
+
+    @model_validator(mode="after")
+    def validate_cached_price(self) -> PricingConfig:
+        if (
+            self.cached_input_per_million is not None
+            and self.cached_input_per_million > self.input_per_million
+        ):
+            raise ValueError("Cached input price must not exceed ordinary input price")
+        return self
 
 
 class Settings(BaseSettings):

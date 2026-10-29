@@ -4,6 +4,15 @@
 
 Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Retry/cooldown/failover settings are runtime behavior, and Phase 04 local credit estimation settings are runtime-enforced.
 
+Text pricing in `FOUNDRY_PRICING_JSON` accepts optional `cached_input_per_million`, in USD/M
+tokens, alongside ordinary `input_per_million` and `output_per_million`. The cached rate must be
+finite, nonnegative, nonboolean and no greater than the ordinary input rate. Use exact-provider
+pricing evidence; no default discount is inferred. Settlement discounts only a valid explicit
+cached subset in Responses `input_tokens_details.cached_tokens` or compatible
+`prompt_tokens_details.cached_tokens`, with matching explicit input totals. Missing, malformed
+or conflicting cache details retains the ordinary input rate. Admission still prices all input
+at the ordinary rate until the provider reports actual cache usage. Public usage stays unchanged.
+
 ## Backend and Model Pools
 
 The configuration must support an arbitrary number of backends and an independent backend pool per model. A backend should identify subscription, project, region, endpoint, and deployment even if the first release uses only two subscriptions. Forwarding-capable backends require a deployment identifier.
