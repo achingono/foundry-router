@@ -548,35 +548,46 @@ class FakeAzure:
         self.ticks = "10"
         self.balances = h.accounts(snapshot()["admin"])
         self.calls: list[list[str]] = []
+        self.rest_calls: list[list[str]] = []
         FakeAzure.instances[name] = self
 
     def show(self) -> dict[str, Any]:
         return copy.deepcopy(self.deployment)
 
     def app_command(self, command: list[str]) -> Any:
+        assert command[0] != "update", "CLI update would normalize secretRef-only env records"
         self.calls.append(command)
         if command[:2] == ["revision", "deactivate"]:
             self.active = False
-        elif command[0] == "update":
-            assert not self.active, "new image cannot overlap old writer"
-            self.active = True
-            self.env["FOUNDRY_RETRY_ATTEMPTS"] = "0"
-            self.deployment["properties"]["template"]["scale"]["minReplicas"] = 1
-            self.deployment["properties"]["template"]["containers"][0]["env"].append(
-                {"name": "FOUNDRY_RETRY_ATTEMPTS", "value": "0"}
-            )
-            self.ticks = "20"
-            self.deployment["properties"]["latestReadyRevisionName"] = "new"
-            self.deployment["properties"]["template"]["containers"][0]["image"] = command[
-                command.index("--image") + 1
-            ]
         elif command[:2] == ["revision", "restart"]:
             self.ticks = "30"
         elif command[:2] == ["revision", "list"]:
             return [{"name": "old", "properties": {"active": self.active}}]
         return None
 
-    def writers(self, *, allow_none: bool = False) -> list[dict[str, Any]]:
+    def run(self, arguments: list[str]) -> Any:
+        assert arguments[:3] == ["rest", "--method", "patch"]
+        assert not self.active, "template PATCH cannot overlap old writer"
+        pointer = arguments[arguments.index("--body") + 1]
+        assert pointer.startswith("@")
+        path = Path(pointer[1:])
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert (path.parent / "update-consumed.json").exists()
+        assert (path.parent / "update-proposal-binding.json").exists()
+        body = h.read_json(path)
+        assert set(body) == {"properties"} and set(body["properties"]) == {"template"}
+        self.rest_calls.append(arguments)
+        self.deployment["properties"]["template"] = copy.deepcopy(body["properties"]["template"])
+        self.env["FOUNDRY_RETRY_ATTEMPTS"] = "0"
+        self.active = True
+        self.ticks = "20"
+        self.deployment["properties"]["latestReadyRevisionName"] = "new"
+        return None
+
+    def writers(
+        self, *, allow_none: bool = False, allow_draining: bool = False
+    ) -> list[dict[str, Any]]:
+        assert not allow_draining or not self.active
         assert allow_none or self.active
         return (
             [{"name": "replica", "properties": {"containers": [{"ready": True, "started": True}]}}]
@@ -682,6 +693,9 @@ def test_full_program_no_overlap_no_reset_no_production_mutation(
     assert len(list(private.glob("case-*-passed.json"))) == 4
     assert (private / "restart-passed.json").exists()
     assert FakeAzure.instances["production"].calls == []
+    assert FakeAzure.instances["production"].rest_calls == []
+    assert len(FakeAzure.instances["test"].rest_calls) == 1
+    assert not any(command[0] == "update" for command in FakeAzure.instances["test"].calls)
     assert FakeAzure.instances["test"].balances["one"]["estimated_remaining_usd"] < 100
     assert expected["two"]["recovered_debit_usd_total"] == 0
     assert h.read_json(private / "results.json")["ingress"] == "fenced"
@@ -1167,3 +1181,194 @@ def test_fragmented_failed_stream_retains_consumption_not_success(
     assert (private / "observed-http.json").exists()
     assert not (private / "observed.json").exists()
     assert (private / "slot-consumed.json").exists()
+
+
+def test_absence_observes_all_inactive_draining_replicas_before_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    azure = h.Azure("synthetic", "rg", "test")
+    stopped, polls, promoted = False, 0, False
+    replica_reads: list[tuple[int, str]] = []
+
+    def command(arguments: list[str]) -> Any:
+        nonlocal stopped, polls, promoted
+        if arguments[:2] == ["revision", "deactivate"]:
+            stopped = True
+            return None
+        if arguments[:2] == ["revision", "list"]:
+            if stopped:
+                polls += 1
+            return [
+                {"name": "old", "properties": {"active": not stopped}},
+                {"name": "older", "properties": {"active": False}},
+            ]
+        if arguments[:2] == ["replica", "list"]:
+            name = arguments[-1]
+            replica_reads.append((polls, name))
+            remains = name == "old" if not stopped else polls < (3 if name == "old" else 2)
+            return [{"name": name + "-replica"}] if remains else []
+        assert arguments[0] == "update" and stopped and polls >= 3
+        promoted = True
+        return None
+
+    monkeypatch.setattr(azure, "app_command", command)
+    monkeypatch.setattr(h.time, "sleep", lambda _seconds: None)
+    assert len(azure.writers()) == 1  # Active old worker before the deliberate stop.
+    azure.app_command(["revision", "deactivate", "--revision", "old"])
+    h.wait_writers(azure, absent=True)
+    assert not promoted and polls == 3
+    for poll in (1, 2, 3):
+        assert (poll, "old") in replica_reads and (poll, "older") in replica_reads
+    azure.app_command(["update"])
+    assert promoted
+
+
+@pytest.mark.parametrize("active", [False, True])
+def test_absence_deadline_or_unexpected_active_never_promotes(
+    private: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    active: bool,
+) -> None:
+    actual_writers = h.Azure.writers
+    args = mocked_program(private, monkeypatch)
+    h.prepare(args)
+    approval = approve_mock(private)
+    monkeypatch.setattr(FakeAzure, "writers", actual_writers)
+    original = FakeAzure.app_command
+    updates, stopped_polls = 0, 0
+    stopped = False
+
+    def command(self: FakeAzure, arguments: list[str]) -> Any:
+        nonlocal updates, stopped_polls, stopped
+        if arguments[:2] == ["revision", "deactivate"]:
+            stopped = True
+            return original(self, arguments)
+        if arguments[:2] == ["revision", "list"]:
+            if stopped:
+                stopped_polls += 1
+            return [{"name": "old", "properties": {"active": active if stopped else True}}]
+        if arguments[:2] == ["replica", "list"]:
+            return [{"name": "draining-replica"}]
+        if arguments[0] == "update":
+            updates += 1
+        return original(self, arguments)
+
+    monkeypatch.setattr(FakeAzure, "app_command", command)
+    clock = iter([0, 0, 1, 181])
+    monkeypatch.setattr(h.time, "monotonic", lambda: next(clock))
+    reason = "Unexpected active" if active else "Writer transition deadline"
+    with pytest.raises(h.RefusalError, match=reason):
+        h.apply(argparse.Namespace(artifact_dir=private, approval=approval))
+    assert updates == 0 and stopped_polls == (1 if active else 2)
+    assert FakeAzure.instances["test"].rest_calls == []
+    assert (private / "stop-consumed.json").exists()
+    assert not (private / "old-writers-absent.json").exists()
+    assert not (private / "update-consumed.json").exists()
+    assert not (private / "case-0-consumed.json").exists()
+
+
+def test_inactive_workers_still_refused_for_readiness_and_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    azure = h.Azure("synthetic", "rg", "test")
+    monkeypatch.setattr(
+        azure,
+        "app_command",
+        lambda arguments: (
+            [{"name": "old", "properties": {"active": False}}]
+            if arguments[0] == "revision"
+            else [{"name": "draining"}]
+        ),
+    )
+    with pytest.raises(h.RefusalError, match="Inactive revision has workers"):
+        azure.writers(allow_none=True)
+    with pytest.raises(h.RefusalError, match="Inactive revision has workers"):
+        h.wait_writers(azure)
+    with pytest.raises(h.RefusalError, match="Inactive revision has workers"):
+        h.wait_replacement(azure, snapshot())
+
+
+def proposal_original() -> dict[str, Any]:
+    original = app()
+    template = original["properties"]["template"]
+    template["revisionSuffix"] = "old-bound-revision"
+    template["scale"]["rules"] = [
+        {"name": "http", "http": {"metadata": {"concurrentRequests": "10"}}}
+    ]
+    container = template["containers"][0]
+    container["resources"] = {"cpu": 0.25, "memory": "0.5Gi"}
+    container["volumeMounts"] = [{"volumeName": "synthetic", "mountPath": "/synthetic"}]
+    container["env"] = [
+        entry for entry in container["env"] if entry["name"] != "FOUNDRY_CLIENT_API_KEYS_JSON"
+    ]
+    container["env"].append(
+        {"name": "FOUNDRY_CLIENT_API_KEYS_JSON", "secretRef": "synthetic-client"}
+    )
+    return original
+
+
+def test_template_patch_preserves_refs_resources_and_input_without_cli_normalization() -> None:
+    original = proposal_original()
+    unchanged_input = copy.deepcopy(original)
+    image = "synthetic@sha256:" + "b" * 64
+    body = h.template_proposal(original, image)
+    assert original == unchanged_input
+    assert set(body) == {"properties"} and set(body["properties"]) == {"template"}
+    actual = body["properties"]["template"]
+    expected = copy.deepcopy(original["properties"]["template"])
+    expected.pop("revisionSuffix")
+    expected["scale"].update(minReplicas=1, maxReplicas=1)
+    expected["containers"][0]["image"] = image
+    expected["containers"][0]["env"].append({"name": "FOUNDRY_RETRY_ATTEMPTS", "value": "0"})
+    assert actual == expected
+    refs = [entry for entry in actual["containers"][0]["env"] if "secretRef" in entry]
+    assert refs == [{"name": "FOUNDRY_CLIENT_API_KEYS_JSON", "secretRef": "synthetic-client"}]
+    assert all("value" not in entry for entry in refs)
+    h.verify_template_proposal(original, body, image)
+    actual["containers"][0]["resources"]["cpu"] = 1
+    assert original == unchanged_input  # Returned nested values do not alias the original.
+
+
+@pytest.mark.parametrize(
+    "drift", ["secret_value", "resources", "rules", "ingress", "identity", "image"]
+)
+def test_template_proposal_rejects_unreviewed_changes(drift: str) -> None:
+    original = proposal_original()
+    image = "synthetic@sha256:" + "b" * 64
+    body = h.template_proposal(original, image)
+    container = body["properties"]["template"]["containers"][0]
+    if drift == "secret_value":
+        next(entry for entry in container["env"] if "secretRef" in entry)["value"] = ""
+    elif drift == "resources":
+        container["resources"]["cpu"] = 1
+    elif drift == "rules":
+        body["properties"]["template"]["scale"]["rules"] = []
+    elif drift in {"ingress", "identity"}:
+        body["properties"][drift] = {"changed": True}
+    else:
+        container["image"] = "changed"
+    with pytest.raises(h.RefusalError):
+        h.verify_template_proposal(original, body, image)
+
+
+def test_malformed_proposal_refused_before_consumption_or_azure_mutation(
+    private: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = mocked_program(private, monkeypatch)
+    h.prepare(args)
+    approval = approve_mock(private)
+    original_proposal = h.template_proposal
+
+    def drifted(original: dict[str, Any], image: str) -> dict[str, Any]:
+        body = original_proposal(original, image)
+        body["properties"]["template"]["containers"][0]["image"] = "unreviewed"
+        return dict(body)
+
+    monkeypatch.setattr(h, "template_proposal", drifted)
+    with pytest.raises(h.RefusalError, match="proposal binding drift"):
+        h.apply(argparse.Namespace(artifact_dir=private, approval=approval))
+    assert not (private / "consumed.json").exists()
+    assert not (private / "update-proposal.json").exists()
+    assert not args.program_ledger.exists()
+    assert not FakeAzure.instances["test"].calls and not FakeAzure.instances["test"].rest_calls

@@ -15,7 +15,8 @@ read-only prepare, execution evidence, staging and incremental commits.
   four sequential Azure Responses cases, and one targeted revision restart.
 - Prepare first makes one public `/health/ready` GET to cold-start the existing
   min0 app, with an absolute 60-second deadline and 60-second inactivity bound.
-  It then waits at most 60 seconds for exactly one ready replica before exec
+  It then uses a 60-second polling window with individually bounded Azure CLI
+  calls to find exactly one ready replica before exec
   diagnostics. This is readiness intake only: no Azure configuration mutation,
   provider inference or HTTP retry. A failed warm/wait leaves no prepared packet,
   reservation ledger or consumption marker.
@@ -31,6 +32,9 @@ read-only prepare, execution evidence, staging and incremental commits.
   The new script/test hashes, private current Azure projection, secret versions
   and value hashes, original process, ingress, min replicas, Table coordinates,
   prices, cases and budget are bound in `prepared.json`.
+  The template-only PATCH proposal's semantic SHA-256 is also bound there;
+  independent review can reconstruct the exact body from the bound original
+  template and the pure proposal helper.
 - Key Vault references must already include immutable secret versions. Values
   exist only in memory. Inline app secrets are refused. Exec diagnostics read
   admin credentials inside the target child; command arguments contain code,
@@ -71,12 +75,28 @@ migration allocations or authorize additional liability.
    Metrics are process-local; no nonexistent forwarding-inflight metric is
    claimed. Readiness is checked locally. Capture the quiet old process.
 3. Consume stop operation; deactivate the old revision. Enumerate **all**
-   revisions/replicas, prove no old worker and no active revision. Then consume
-   image update; reuse existing configuration/tables/auth, change only the
+   revisions/replicas, counting inactive draining replicas as remaining workers
+   only in this deliberate absence-observation path. Poll through that state
+   using the bounded 180-second window and individually bounded CLI calls; an
+   unexpected active revision is still refused. Prove no worker in any revision
+   and no active revision before proceeding. Deadline failure leaves the fence
+   and consumption records intact, without update or automatic recovery. Then consume
+   image promotion via a **template-only Azure REST PATCH**, not Container Apps
+   CLI update; reuse existing configuration/tables/auth, change only the
    current immutable image, `FOUNDRY_RETRY_ATTEMPTS=0`, and min1/max1. Require
    sole ready successor, actual effective environment hashes, unchanged
    financial state and current debit/recovery counters. State-sync errors stop;
    no reset or stale-writer reactivation is available.
+   The exact original template is deep-copied; every unrelated environment
+   record, secretRef-only entry, resource setting and scale rule is retained.
+   The old `revisionSuffix` is omitted so Azure generates the new suffix, as
+   permitted by the successor predicate. No secrets, identity, ingress, table
+   names or prices are patched. Before consumption, validate the allowed diff
+   and persist owner-only `update-proposal.json` plus its semantic/file hashes
+   in `update-proposal-binding.json`. After old-worker absence, recheck the
+   original template and proposal bytes before the durable update marker, then
+   pass the body to `az rest` via `@` private file, never inline configuration
+   values in command arguments. Existing successor validation remains intact.
 4. Restrict public ingress to the bound executor IPv4 only. Four slots are
    pre-reserved inside the **entire program's** USD 1 / 16 attempt bounds; Phase
    1 consumes at most four attempts, each with max128 output and zero retries.
@@ -224,3 +244,59 @@ transport change. Those remain coordinator observations, not developer reruns.
 The new transport hashes need fresh verification, the planned fresh `c` prepare
 and binding, then independent exact review before any apply; previous attempts and
 historical artifacts remain untouched. No prepared approval or G1 pass exists.
+
+### EP-M1 absence-transition remediation (fresh packet required)
+
+The exact review of coordinator's unconsumed `c` packet identified expected
+inactive-but-draining replica metadata being rejected immediately. The harness
+now permits that state **only** via `writers(allow_draining=True)` in the
+deliberate absence wait. All revisions and replicas remain counted, including
+multiple inactive draining revisions; zero workers and zero active revisions
+are prerequisites to image promotion. Active revisions during absence wait,
+steady-state inactive workers, readiness conflicts and replacement conflicts
+remain refused. No deactivation retry, old-revision reactivation or rollback
+was added. Tests cover active/one → inactive/draining → inactive/empty, all-revision
+enumeration, no promotion on persistent drainage/deadline, unexpected active
+revision rejection and unchanged strict readiness/replacement guards.
+
+Changing helper/test hashes invalidates the unconsumed `c` binding. Preserve it
+unchanged and use coordinator's planned fresh `d` preparation after verification,
+then independent exact review. The frozen 76 runtime Python files, immutable
+image, financial chain, paid-call bounds and staged fenced/min1 disposition are
+unchanged. No new prepared approval or execution evidence is claimed here.
+
+EP-M1 focused verification: **87 passed / 96.95% harness coverage**; focused
+Ruff check/format and mypy pass. This is local mocked evidence, not an Azure
+deactivation observation or full source-suite rerun. Developer made no Azure,
+prepare/apply, provider calls, staging, commits or runtime/Docker changes.
+
+### EP-M2 CLI normalization avoidance (fresh packet required)
+
+Coordinator's installed Azure CLI 2.91.0 source inspection found that Container
+Apps CLI update adds `value: ""` to environment entries without `value`, including
+secretRef-only entries. Historical Table metadata evidence records the same
+normalization causing a binding failure. This is source-observed evidence, not
+a developer-run Azure mutation. The old image/retry/min CLI update path would
+therefore predictably violate the exact successor predicate after stopping the
+old worker.
+
+Only that mutation is replaced with a narrow REST PATCH of `properties.template`
+from the exact bound/current original template. The pure helper validates the
+existing allowed-difference predicate before any consumption, preserves all
+secretRef-only entries without introducing `value`, and does not mutate its
+input. The private proposal and hashes are persisted before mutation consumption;
+the request uses the bound app ID and an owner-mode-600 body file. No CLI update
+is invoked. Tests cover preservation, original-input isolation, resource/rule
+and secret-reference drift refusal, PATCH scope, pre-consumption binding failure
+and REST-only orchestration. No cleanup/restoration feature was added.
+
+Coordinator reports 2,974 full tests / 90.46% source coverage for the previous
+frozen hashes. EP-M2 changes helper/test hashes, invalidating the unconsumed `d`
+packet; preserve it and require a fresh preparation and independent exact review
+after verification. All 76 runtime Python files, Docker/source/image pins and
+user work remain unchanged. No mutation, inference or execution approval is
+claimed by this remediation.
+
+EP-M2 focused verification: **95 passed / 97.10% harness coverage**; focused
+Ruff check/format and mypy pass. This verifies local mocked proposal/orchestration
+behavior only; the REST promotion remains an independently approved live gate.

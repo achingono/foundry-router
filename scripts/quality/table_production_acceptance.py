@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import copy
 import errno
 import fcntl
 import hashlib
@@ -122,22 +123,29 @@ class Azure:
     def show(self) -> Json:
         return dict(self.app_command(["show"]))
 
-    def writers(self, *, allow_none: bool = False) -> list[Json]:
+    def writers(self, *, allow_none: bool = False, allow_draining: bool = False) -> list[Json]:
         revisions = self.app_command(["revision", "list"])
+        active_count = sum(revision["properties"].get("active") is True for revision in revisions)
         require(
-            sum(revision["properties"].get("active") is True for revision in revisions) <= 1,
+            active_count <= 1,
             "Overlapping active revisions",
         )
+        if allow_draining:
+            require(
+                all(revision["properties"].get("active") is False for revision in revisions),
+                "Unexpected active or unknown revision during absence wait",
+            )
         writers: list[Json] = []
         for revision in revisions:
             replicas = self.app_command(["replica", "list", "--revision", revision["name"]])
-            if replicas:
+            if replicas and not allow_draining:
                 require(
                     revision["properties"].get("active") is True, "Inactive revision has workers"
                 )
             writers.extend({"revision": revision["name"], **replica} for replica in replicas)
         require(
-            len(writers) == 1 or (allow_none and not writers), "Conflicting or missing replicas"
+            allow_draining or len(writers) == 1 or (allow_none and not writers),
+            "Conflicting or missing replicas",
         )
         return writers
 
@@ -305,6 +313,37 @@ def verify_successor(original: Json, successor: Json, image: str) -> None:
         require(
             expected_props.get(key) == actual_props.get(key), "Successor app configuration drift"
         )
+
+
+def verify_template_proposal(original: Json, body: Json, image: str) -> None:
+    require(
+        set(body) == {"properties"} and set(body["properties"]) == {"template"},
+        "Template-only PATCH required",
+    )
+    candidate = copy.deepcopy(original)
+    candidate["properties"]["template"] = copy.deepcopy(body["properties"]["template"])
+    # Ingress is already fenced when PATCH executes, but is never included in this body.
+    candidate["properties"]["configuration"]["ingress"]["ipSecurityRestrictions"] = copy.deepcopy(
+        DENY
+    )
+    verify_successor(original, candidate, image)
+
+
+def template_proposal(original: Json, image: str) -> Json:
+    """Preserve exact secretRef records; never use CLI update's env normalization."""
+    template = copy.deepcopy(original["properties"]["template"])
+    require(len(template["containers"]) == 1, "One proposal container required")
+    container = template["containers"][0]
+    container["image"] = image
+    env = {entry["name"]: entry for entry in container["env"]}
+    env["FOUNDRY_RETRY_ATTEMPTS"] = {"name": "FOUNDRY_RETRY_ATTEMPTS", "value": "0"}
+    container["env"] = list(env.values())
+    template["scale"]["minReplicas"] = 1
+    template["scale"]["maxReplicas"] = 1
+    template.pop("revisionSuffix", None)  # Azure generates a fresh revision suffix.
+    body = {"properties": {"template": template}}
+    verify_template_proposal(original, body, image)
+    return body
 
 
 def source_binding(metadata: Path, image: str) -> Json:
@@ -633,7 +672,12 @@ def wait_writers(
 ) -> None:
     deadline = time.monotonic() + (POLL_SECONDS if deadline_seconds is None else deadline_seconds)
     while time.monotonic() < deadline:
-        writers = azure.writers(allow_none=True)
+        # Only deliberate absence observation may count inactive draining workers.
+        writers = (
+            azure.writers(allow_none=True, allow_draining=True)
+            if absent
+            else azure.writers(allow_none=True)
+        )
         if absent and not writers:
             return
         if not absent and writers:
@@ -811,6 +855,7 @@ def prepare(args: argparse.Namespace) -> None:
         "production_rg": args.production_rg,
         "production_app": args.production_app,
         "image": image,
+        "template_proposal_sha256": digest(template_proposal(test_app, image)),
         "binding": binding,
         "prior_metadata": str(args.prior_metadata),
         "test_projection": projection(test_app),
@@ -940,11 +985,28 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- explicit single
         "Old process drift",
     )
     unchanged(accounts(initial["admin"], legacy=True), packet["original_accounts"])
+    proposed_body = template_proposal(app, packet["image"])
+    require(
+        digest(proposed_body) == packet["template_proposal_sha256"],
+        "Template proposal binding drift",
+    )
     ledger = Path(packet["program_ledger"])
     private_directory(ledger.parent)
     with (directory / "execution.lock").open("a+b") as lock:
         (directory / "execution.lock").chmod(0o600)
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        proposal_path = directory / "update-proposal.json"
+        create(proposal_path, proposed_body)
+        proposal_file_sha256 = file_hash(proposal_path)
+        create(
+            directory / "update-proposal-binding.json",
+            {
+                "body_sha256": packet["template_proposal_sha256"],
+                "file_sha256": proposal_file_sha256,
+                "app_id": app["id"],
+                "scope": "properties.template only",
+            },
+        )
         # Neither ledger nor execution marker can ever be replayed, even after uncertain failure.
         create(
             ledger,
@@ -984,18 +1046,25 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- explicit single
             "Old revision still active",
         )
         create(directory / "old-writers-absent.json", {"verified": True})
-        create(directory / "update-consumed.json", {"image": packet["image"]})
-        azure.app_command(
+        require(
+            azure.show()["properties"]["template"] == app["properties"]["template"],
+            "Original template drift before PATCH",
+        )
+        require(file_hash(proposal_path) == proposal_file_sha256, "Private PATCH file drift")
+        verify_template_proposal(app, read_json(proposal_path), packet["image"])
+        create(
+            directory / "update-consumed.json",
+            {"image": packet["image"], "proposal_file_sha256": proposal_file_sha256},
+        )
+        azure.run(
             [
-                "update",
-                "--image",
-                packet["image"],
-                "--min-replicas",
-                "1",
-                "--max-replicas",
-                "1",
-                "--set-env-vars",
-                "FOUNDRY_RETRY_ATTEMPTS=0",
+                "rest",
+                "--method",
+                "patch",
+                "--url",
+                app["id"] + "?api-version=2024-03-01",
+                "--body",
+                "@" + str(proposal_path),
             ]
         )
         wait_writers(azure)
