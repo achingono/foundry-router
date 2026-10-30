@@ -1,6 +1,6 @@
 # Table production and autoscaling Evidence
 
-## Status: Partially implemented (preflight verification); production migration Planned
+## Status: Partially implemented (current-release Table test rollout); production migration Planned
 
 Plan authored 2026-10-30. No implementation, Azure calls, deployment, paid dispatch, restart, benchmark or verification suite was run by this planner. All execution/approval gates in [exit criteria](exit-criteria.md) remain open.
 
@@ -54,6 +54,15 @@ Plan authored 2026-10-30. No implementation, Azure calls, deployment, paid dispa
 - Provider discovery lists `2025-01-01` as supported. A full-resource ARM validation using that API and the unchanged proposed image/retry/minimum template **Succeeded** (private template SHA-256 `ffc9c3e051b9b0c8fe407773899c06ad3d3fdd719defa2d7f1c8f09a7c58948a`). Finite read-only what-if **Succeeded**: exactly one Container App `Modify`, all other listed resources `Ignore`. Validation/what-if performed no deployment.
 - [New API continuation plan](g1-api-continuation/activities.md) and [independent plan review](g1-api-continuation/plan-review.md) approve implementation only: one new versioned promotion action from the verified stopped-writer state, then the original four unstarted slots and restart check. No old apply/recovery replay, new allocation, refund, old writer reactivation or production mutation is authorized by these planning artifacts.
 - Unfinished production source/test/packet drafts were paused and moved byte-for-byte to approved private storage; all three hashes still match their author's handoff. This preserves that work while allowing isolated continuation verification. Existing user work is untouched.
+
+## Current-release Table test rollout and ready-only acceptance gate
+
+- The API continuation capsule was verified (**68 focused tests, 99.64% coverage; 3,086 full tests, 21 skipped, 90.46% runtime coverage**) and exactly approved against the complete revision inventory. Its inactive-revision enumeration fix was committed as `daab4b3`; one approved apply was invoked.
+- **API2025 promotion succeeded:** the isolated app now uses the exact current production digest at Table/min1/max1. The capsule stopped during activation because its strict worker check observed the **new candidate** temporarily inactive with a worker. It did not reach a paid slot. This failure is retained, not reclassified as completed acceptance.
+- Subsequent read-only settled-state inspection proved **one active revision, one ready current worker, four total revisions, zero old-image workers, retry0, live HTTP403**, and both current canonical account maps exactly matching the bound pre-promotion drained state. Current debit/recovery fields are present. The ready-evidence capture SHA-256 is `aa820b62968cc4c44ba8c28589e697c4cd7320faecf882de9aba0ade435e5fbc`. No inference slot has started.
+- The [ready-only finish plan](g1-ready-finish/activities.md) and [independent review](g1-ready-finish/plan-review.md) authorize implementation only. It contains **no deployment replay**: validate the settled current image, advance the original four unstarted slots, then prove restart persistence. Exact executable approval remains mandatory.
+- Read-only production storage preflight confirmed shared-key access disabled, HTTPS-only and TLS1.2. The operator's scoped management permissions include Table-resource creation and role-assignment write; no production table or grant was created by that check.
+- Production remains unchanged, memory/one. Real current-release inference and the post-inference restart gate remain open; the observed test-image rollout/readiness does not close them.
 
 ## Execution evidence to append later
 
