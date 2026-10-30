@@ -1,14 +1,82 @@
 # G1 API2025 continuation verification
 
-**Status: Partially implemented — current M3 candidate passed local mocked
+**Status: Partially implemented — current M4 candidate passed local mocked
 verification; Azure execution gates remain.** Updated 2026-10-30. This is local
 verification of the [continuation packet](packet.md), [operator](../../../../scripts/quality/table_production_acceptance_continue.py),
 and [focused tests](../../../../tests/unit/test_table_production_acceptance_continue.py).
 It is not an execution approval or evidence of Azure acceptance.
 
-## Final M3 phase-boundary verification
+## Final M4 full-revision inventory verification
 
 The current candidate is source-frozen at these exact SHA-256 values:
+
+| File | SHA-256 |
+| --- | --- |
+| Continuation operator | `a2b3e20c24141528ff92560c9675eebb6289a29339bb51257ea16566724280ee` |
+| Continuation tests | `c912b9f8eaa93f1066819999cc8e19a8897d130a528ebb5b5d240708375b1191` |
+| Continuation packet | `43fe06467626fbe9ceab6898b8b87966d098c9a8be3bc154ac338b8d0b669677` |
+| Frozen original G1 operator / tests | `701cca098ce005703cc97d298adde7c7072e61ce8bf233b0f941c815ffa7e922` / `04b79e5fea57bb527dbf4015d401aff59697069dfa3c7fc2aee66851585e2a8b` |
+| Frozen recovery operator / tests | `e3c47d6c7b7634c5578032df06795d4363205804f475d58d80f4560e7c8b6f45` / `762df8cb9e932ada219c1afe6b7b709c9e2dc4438cde732bcf6a5b041ef1f887` |
+
+| Check | Actual final result |
+| --- | --- |
+| Focused continuation tests | **68 passed**, 15 dependency deprecation warnings, 2.02 s |
+| Focused operator coverage | **99.64%** — 275 statements, 1 missed |
+| Full repository pytest | **3,086 passed, 21 skipped**, 8,969 warnings, 58.70 s |
+| Full `src/foundry_router` coverage | **90.46%** — 11,472 statements, 1,095 missed |
+| Ruff lint | Passed for `src`, continuation operator and focused tests: “All checks passed!” |
+| Ruff format | Passed for the same paths: “78 files already formatted.” |
+| Mypy source | `.venv/bin/mypy src` passed: no issues in 76 source files |
+| Mypy continuation operator | `MYPYPATH=src:scripts/quality .venv/bin/mypy scripts/quality/table_production_acceptance_continue.py` passed: no issues in one file |
+| SonarQube | N/A — `scripts/quality/sonarqube-scan.sh` is absent |
+
+The continuation-local `AllRevisionsAzure` wrapper copies CLI argument lists
+and appends `--all` to every `revision list` call, including revision-list calls
+made through inherited G1/recovery helpers; it leaves other commands and frozen
+helper bytes unchanged. Tests verify target/subscription argument preservation,
+that the original list is not mutated, and that the stopped proof inventories
+exactly three inactive revisions with zero workers. The hidden-inactive-worker
+regression is tested at prepare, apply, and immediately after promotion: an
+ordinary active-only list conceals the worker, but the full-inventory guard
+refuses before any case marker; prepare/apply refusal occurs before mutation, and
+the post-promotion case stops after the one fake PATCH. Tests run against mocks
+and temporary artifacts only.
+
+Focused and full logs are private mode-600 captures in the approved temporary
+directory; coverage data is outside the repository. Commands run:
+
+```text
+COVERAGE_FILE=<approved-temp>/continue-m4-final-focused.coverage \
+  .venv/bin/python -m coverage run --source=scripts/quality -m pytest \
+  tests/unit/test_table_production_acceptance_continue.py
+COVERAGE_FILE=<approved-temp>/continue-m4-final-focused.coverage \
+  .venv/bin/python -m coverage report -m \
+  --include=scripts/quality/table_production_acceptance_continue.py
+COVERAGE_FILE=<approved-temp>/continue-m4-final-full.coverage \
+  .venv/bin/python -m pytest --cov=src/foundry_router --cov-report=term-missing
+.venv/bin/ruff check src scripts/quality/table_production_acceptance_continue.py \
+  tests/unit/test_table_production_acceptance_continue.py
+.venv/bin/ruff format --check src scripts/quality/table_production_acceptance_continue.py \
+  tests/unit/test_table_production_acceptance_continue.py
+.venv/bin/mypy src
+MYPYPATH=src:scripts/quality .venv/bin/mypy \
+  scripts/quality/table_production_acceptance_continue.py
+```
+
+Current private capture SHA-256 values:
+
+| Capture | SHA-256 |
+| --- | --- |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-focused.log` | `112e36b489b092c93ff565a191b495cbac072bccf71bcd54090f25708a02d44d` |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-full.log` | `8bcb77cbe7910d2b16c1c27c07d85677717a084a96c978e8d82a175429b488a4` |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-ruff-check.log` | `82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18` |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-ruff-format.log` | `1a3c6aa46d7f5260e23740995cfa3cf8617f1bd5d18465e940eb76f39be45866` |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-mypy-src.log` | `b1d14a638cdcd6b7a7d5368e3cc2ca927b3e1f1b4e26cbe9b1844d7698aabdf2` |
+| `/private/var/folders/yb/v29g2l750ms2bky383fkb6j00000gn/T/opencode/continue-m4-final-mypy-operator.log` | `5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e` |
+
+## Earlier M3 phase-boundary verification (historical; superseded by M4)
+
+The M3 candidate was source-frozen at these exact SHA-256 values:
 
 | File | SHA-256 |
 | --- | --- |
@@ -18,7 +86,7 @@ The current candidate is source-frozen at these exact SHA-256 values:
 | Frozen original G1 operator / tests | `701cca098ce005703cc97d298adde7c7072e61ce8bf233b0f941c815ffa7e922` / `04b79e5fea57bb527dbf4015d401aff59697069dfa3c7fc2aee66851585e2a8b` |
 | Frozen recovery operator / tests | `e3c47d6c7b7634c5578032df06795d4363205804f475d58d80f4560e7c8b6f45` / `762df8cb9e932ada219c1afe6b7b709c9e2dc4438cde732bcf6a5b041ef1f887` |
 
-| Check | Actual final result |
+| Check | Earlier actual result |
 | --- | --- |
 | Focused continuation tests | **63 passed**, 15 dependency deprecation warnings, 1.62 s |
 | Focused operator coverage | **99.63%** — 268 statements, 1 missed |
@@ -68,7 +136,7 @@ MYPYPATH=src:scripts/quality .venv/bin/mypy \
   scripts/quality/table_production_acceptance_continue.py
 ```
 
-Current private capture SHA-256 values:
+M3 private capture SHA-256 values:
 
 | Capture | SHA-256 |
 | --- | --- |
@@ -242,21 +310,23 @@ the properly configured operator mypy command.
 
 ## Scope and outstanding gates
 
-The current M3 mocked verification and full source suite pass their coverage gates.
+The current M4 mocked verification and full source suite pass their coverage gates.
 No Azure/ARM/CLI calls, actual prepare/apply, worker inspection, paid provider call,
 staging, operator/runtime source edit, Docker build, Azurite rerun, or commit was
 performed; only this verification document was updated. A separate exact-prepared
-checker was reported as read-only; this verifier did not inspect or change its
-private metadata/artifacts. A separate exact review was also reported as read-only;
-it was not part of this run. The reported stopped/no-worker state, absence of paid
-markers and archived private partial artifacts were not independently inspected
-here. The three archived production-source drafts and their body-hash preservation
-were not accessed or altered by this verifier; that preservation remains a
-coordinator/user report. Pre-existing dirty user work was preserved. Prior evidence
-for the immutable image and matching 76 runtime Python file hashes is reused only
-as historical baseline; Docker/image and Azurite checks were not repeated. Frozen
-G1/recovery helper/test hashes were rechecked and match. The continuation operator
-remains outside `src/foundry_router`.
+checker and exact-packet review were reported as concurrent read-only checks; the
+fresh-prepare report included a full three-inactive-revision inventory and no active
+jobs. This verifier did not inspect or change their private metadata/artifacts, and
+those live-state reports are not independently verified here. The reported
+stopped/no-worker state, absence of paid markers and archived private partial
+artifacts likewise remain external reports. The three out-of-scope production/P2
+drafts and their body-hash-preserved archive were not accessed, moved, or altered by
+this verifier; that preservation remains a coordinator/user report. No such drafts
+were added by this verifier. Pre-existing dirty user work was preserved. Prior
+evidence for the immutable image and matching 76 runtime Python file hashes is
+reused only as historical baseline; Docker/image and Azurite checks were not
+repeated. Frozen G1/recovery helper/test hashes were rechecked and match. The
+continuation operator remains outside `src/foundry_router`.
 
 Independent contextual/exact review, actual read-only preparation, separate
 execution approval, and any live continuation remain separate gates. Production

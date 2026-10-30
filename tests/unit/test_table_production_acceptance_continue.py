@@ -183,24 +183,74 @@ def capsule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]: 
     )
     mutations_before = test.mutations.copy()
     original_command = recovery_tests.FakeAzure.app_command
+    enumeration_calls: list[list[str]] = []
 
     def metadata(self: Any, arguments: list[str]) -> Any:
         if arguments[:2] == ["revision", "list"]:
-            return [
-                {
-                    "name": self.deployment["properties"]["latestReadyRevisionName"],
-                    "properties": {"active": self.active},
-                }
+            enumeration_calls.append(arguments.copy())
+            current = self.deployment["properties"]["latestReadyRevisionName"]
+            names = list(dict.fromkeys([current, "old", "historical-1", "historical-2"]))
+            revisions = [
+                {"name": name, "properties": {"active": self.active and name == current}}
+                for name in names
             ]
-        if arguments[:2] == ["replica", "list"]:
             return (
-                [{"name": "remaining-worker"}]
-                if self.draining or (self.active and self.live)
-                else []
+                revisions
+                if "--all" in arguments
+                else [rev for rev in revisions if rev["properties"]["active"]]
             )
+        if arguments[:2] == ["replica", "list"]:
+            name = arguments[arguments.index("--revision") + 1]
+            if (self.draining and name == "old") or name == getattr(
+                self, "hidden_worker_revision", None
+            ):
+                return [{"name": "hidden-inactive-worker", "properties": {"containers": []}}]
+            if (
+                self.active
+                and self.live
+                and name == self.deployment["properties"]["latestReadyRevisionName"]
+            ):
+                return [
+                    {
+                        "name": "replica",
+                        "properties": {
+                            "containers": [
+                                {
+                                    "ready": True,
+                                    "started": True,
+                                    "containerId": self.container,
+                                    "restartCount": self.restart_count,
+                                }
+                            ]
+                        },
+                    }
+                ]
+            return []
         return original_command(self, arguments)
 
     monkeypatch.setattr(recovery_tests.FakeAzure, "app_command", metadata)
+
+    # Base is the already-loaded dynamic script class; real wrapper behavior remains under test.
+    class MockAllRevisions(c.AllRevisionsAzure):  # type: ignore[name-defined,misc]
+        def __init__(self, subscription: str, resource_group: str, app: str, budget: Any):
+            super().__init__(subscription, resource_group, app, budget)
+            self.state = recovery_tests.FakeAzure.instances[app]
+            self.env = self.state.env
+
+        def run(self, arguments: list[str]) -> Any:
+            if arguments[0] == "containerapp":
+                assert arguments[-4:] == ["-g", self.resource_group, "-n", self.app]
+                command = arguments[1:-4]
+                return self.state.show() if command == ["show"] else self.state.app_command(command)
+            return self.state.run(arguments)
+
+        def ingress(self, app_id: str, policy: list[dict[str, Any]]) -> None:
+            self.state.ingress(app_id, policy)
+
+        def snapshot(self) -> dict[str, Any]:
+            return dict(self.state.snapshot())
+
+    monkeypatch.setattr(c, "AllRevisionsAzure", MockAllRevisions)
     original_public = c.h.get_public_async
 
     async def phase_public(origin: str, path: str, key: str | None = None) -> tuple[int, bytes]:
@@ -229,6 +279,7 @@ def capsule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]: 
         "test": test,
         "before": mutations_before,
         "original_value": original,
+        "enumeration_calls": enumeration_calls,
     }
 
 
@@ -293,6 +344,8 @@ def test_complete_continuation_only2025_preserves_all_failed_history_and_slots(
     )
     assert result["api_version"] == "2025-01-01" and len(result["case_hashes"]) == 4
     assert result["recovery_link"] and result["continuation_link"]
+    assert len(capsule["enumeration_calls"]) >= 4  # prepare/apply stopped, successor and restart
+    assert all(call.count("--all") == 1 for call in capsule["enumeration_calls"])
     with pytest.raises(c.h.RefusalError, match="already consumed"):
         c.apply(argparse.Namespace(artifact_dir=capsule["new"], approval=approval))
 
@@ -667,3 +720,71 @@ def test_live404_never_proves_fence_or_completes_g1(
     else:
         assert (capsule["original"] / "case-3-passed.json").exists()
         assert not (capsule["original"] / "restart-passed.json").exists()
+
+
+def test_all_flag_wrapper_preserves_arguments_and_target_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    azure = c.AllRevisionsAzure(
+        "synthetic-subscription", "synthetic-rg", "synthetic-app", recovery_tests.FastBudget()
+    )
+    calls: list[list[str]] = []
+
+    def capture(arguments: list[str]) -> list[dict[str, Any]]:
+        calls.append(arguments)
+        return []
+
+    monkeypatch.setattr(azure, "run", capture)
+    original = ["revision", "list"]
+    azure.app_command(original)
+    azure.app_command(["revision", "list", "--all"])
+    azure.app_command(["show"])
+    assert original == ["revision", "list"]
+    assert all(call.count("--all") == 1 for call in calls[:2])
+    assert "--all" not in calls[2]
+    assert all(call[-4:] == ["-g", "synthetic-rg", "-n", "synthetic-app"] for call in calls)
+    assert azure.subscription == "synthetic-subscription"
+
+
+def test_three_inactive_zero_worker_revisions_are_in_prepared_inventory(
+    capsule: dict[str, Any],
+) -> None:
+    # The mock CLI's default really is active-only and therefore empty in this phase.
+    assert capsule["test"].app_command(["revision", "list"]) == []
+    c.prepare(arguments(capsule))
+    proof = c.r.read(capsule["new"] / "prepared.json")["stopped_route_proof"]
+    assert proof["revision_names"] == ["old", "historical-1", "historical-2"]
+    assert proof["workers"] == 0 and proof["all_revisions_inactive"]
+    assert all(call.count("--all") == 1 for call in capsule["enumeration_calls"][1:])
+
+
+@pytest.mark.parametrize("phase", ["prepare", "apply", "after_promotion"])
+def test_hidden_inactive_worker_cannot_bypass_all_revision_guards(
+    capsule: dict[str, Any], monkeypatch: pytest.MonkeyPatch, phase: str
+) -> None:
+    if phase != "prepare":
+        approval = prepared(capsule)
+    if phase == "after_promotion":
+        original_run = recovery_tests.FakeAzure.run
+
+        def with_hidden_worker(self: Any, arguments: list[str]) -> Any:
+            result = original_run(self, arguments)
+            self.hidden_worker_revision = "historical-2"
+            return result
+
+        monkeypatch.setattr(recovery_tests.FakeAzure, "run", with_hidden_worker)
+    else:
+        capsule["test"].hidden_worker_revision = "historical-2"
+    # An ordinary CLI revision list conceals the problematic inactive worker.
+    assert capsule["test"].app_command(["revision", "list"]) == []
+    with pytest.raises(c.h.RefusalError, match="workers"):
+        if phase == "prepare":
+            c.prepare(arguments(capsule))
+        else:
+            c.apply(argparse.Namespace(artifact_dir=capsule["new"], approval=approval))
+    assert not (capsule["original"] / "case-0-consumed.json").exists()
+    if phase in {"prepare", "apply"}:
+        assert not (capsule["original"] / c.GUARD).exists()
+        assert capsule["test"].mutations == capsule["before"]
+    else:
+        assert capsule["test"].mutations[len(capsule["before"]) :] == ["patch"]

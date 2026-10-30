@@ -57,6 +57,16 @@ RECOVERY_FILES = {
 }
 
 
+class AllRevisionsAzure(r.Azure):
+    """Confine CLI revision-list completeness to this capsule, including inherited helpers."""
+
+    def app_command(self, arguments: list[str]) -> Any:
+        command = list(arguments)
+        if command[:2] == ["revision", "list"] and "--all" not in command:
+            command.append("--all")
+        return super().app_command(command)
+
+
 def files(directory: Path, expected: set[str], *, optional: set[str] | None = None) -> Json:
     r.directory(directory)
     entries = {path.name for path in directory.iterdir()}
@@ -216,7 +226,10 @@ def inactive_revisions(azure: r.Azure) -> list[str]:
 
 
 def stopped(budget: r.Budget, original: Json) -> tuple[r.Azure, Json, dict[str, str], Json, Json]:
-    azure, app, values, pins = r.discovery(budget, original)
+    discovered, app, values, pins = r.discovery(budget, original)
+    azure = AllRevisionsAzure(
+        discovered.subscription, discovered.resource_group, discovered.app, budget
+    )
     names = budget.call(inactive_revisions, azure, limit=r.WORKER_SECONDS)
     h.require(
         app["properties"]["configuration"]["ingress"]["ipSecurityRestrictions"] == h.DENY,

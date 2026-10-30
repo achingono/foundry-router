@@ -134,6 +134,10 @@ or conflicting journals. Frozen helper/test/runtime/image and new capsule/test
 hashes are bound. Current test/production configurations, secret versions/value
 hashes, model/pricing/resource mapping, exact bound DENY configuration and
 **all revisions inactive/all workers absent** are checked without warming.
+The continuation-local `AllRevisionsAzure` wrapper injects `--all` exactly once
+for every `containerapp revision list` call. It is constructed after frozen
+read-only discovery and used throughout stopped preflight, successor/snapshot
+and restart helpers. No frozen helper source or global module is patched.
 In this stopped phase only, one bounded public GET may return403 or the known
 inactive-route404;200 or any active/unknown revision or remaining replica is
 refused. `prepared.json.stopped_route_proof` binds status, phase classification,
@@ -285,3 +289,30 @@ reference-kind/capture hashes, read-only exclusions and frozen source guards
 remain unchanged. Coordinator reports the prior verifier3075 passed /90.46%;
 this is not an author full-suite rerun. New hashes need fresh verifier/re-review,
 fresh prepare `b` and exact approval before execution.
+
+## M4 complete installed-CLI inventory
+
+Installed CLI revision listing defaults to active-only; an empty default list
+is not proof that inactive revisions or their workers are absent. Independent
+exact review found three inactive zero-worker revisions while unconsumed C's
+default-filtered inventory was empty. C is preserved but its incomplete proof
+must not be carried into the next binding.
+
+The local wrapper requests `--all` at the app-command boundary, so both explicit
+stopped checks and frozen inherited `writers()` calls query every revision and
+each replica set. Command inputs/target subscription/resource group are retained,
+and an existing `--all` is never duplicated. Any hidden inactive worker refuses
+prepare/apply before promotion, or successor acceptance before paid traffic.
+Tests model the actual active-only default, record all three stopped revisions,
+and verify `--all` during preparation, promotion and restart without broadening
+M1/M2/M3 acceptance. Live403 checks and stopped-only404 classification remain.
+
+Coordinator reports the previous63-focused/3081-full verification. New helper/
+test hashes require affected verification, independent re-review and fresh
+prepare D with the actual full inventory, then exact approval. No actual Azure
+enumeration, prepare, mutation, paid call or old-artifact update was performed by
+this author; original G1/recovery/runtime hashes remain unchanged.
+
+M4 focused local verification: **68 passed /99.64% capsule coverage**; Ruff
+check/format and mypy pass using the documented sibling-script type path.
+Only mocks ran; no actual prepare, Azure/Docker/paid calls, staging or commits.
