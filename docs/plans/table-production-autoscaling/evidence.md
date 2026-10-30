@@ -32,6 +32,19 @@ Plan authored 2026-10-30. No implementation, Azure calls, deployment, paid dispa
 - Production remains the immutable pricing release, memory, one replica, 0.25 CPU/0.5 GiB. Its identity has registry/vault access but no Table data grants. Production environment has only the Consumption workload profile.
 - [Independent phased plan review](plan-review.md) approves Phase0 and conditionally approves Phase1; exact packet must close isolated old/new writer overlap. Later payload/scale decisions do not block safe Table/one migration.
 - Sole developer owns only the new isolated acceptance harness/tests and Phase1 packet. Coordinator owns this evidence file. Existing user changes and historical consumed ledgers are preserved.
+- Exact deployed Linux/amd64 image pulled by immutable digest. With networking disabled, runtime imports for main, Table credit/health, quota, Azure SDK and aiohttp passed. Direct comparison of all **76 runtime Python file hashes inside the image** against the working tree found zero mismatches.
+- Dedicated temporary Azurite Table service: **15 integration tests passed** in 1.52 seconds. The task-owned emulator was then stopped; unrelated containers were not touched.
+- Read-only resolved isolated backend configuration uses one dedicated Foundry resource absent from production's configured host set. G1's fresh approved budget is separate from production's four canonical account allocations; exact packet must bind that disjointness before dispatch. Existing synthetic test balances are not provider wallet balances.
+- Azure payload research independently reviewed and corrected: no unresolved Critical/Major. [Research](azure-payload-research.md) and [review](azure-payload-research-review.md) are committed as `6b8d5c2`; research approval is not implementation or deployment approval.
+
+## Isolated execution and recovery gate
+
+- The verified acceptance harness was committed as `389401c`; drain/secret-reference safeguards followed in `eaab2e9`. Final focused selection: **95 passed, 97.10% harness coverage**. Full selection: **2,982 passed, 21 skipped, 90.46% runtime coverage**. Ruff/format/Mypy passed. Runtime image/source files remained unchanged.
+- [Exact review](phase1-exact-packet-review.md) approved packet SHA-256 `721fc9be3e5a862741e3c71eaa327dc8c0e153c789ee0a17029af4ee13a9e8de`, with four isolated cases and USD0.01792 aggregate reserved local estimate. Staged fenced/min1 completion was explicitly accepted; production mutation was not part of this packet.
+- One `apply` invocation **stopped**, returning `Fence denial unproved`, immediately after setting the isolated app's deny-all ingress. It did **not** reach old-writer deactivation, image promotion or any inference slot. The execution and original program ledger remain consumed/immutable; no replay occurred.
+- Post-failure read-only inspection confirmed provisioning succeeded, deny-all ingress present, original corrected test image/revision and min0/max1 retained. Public readiness returned **403** after propagation. Replica-local diagnostics confirmed the **same old process**, **unchanged canonical account state**, **zero case-consumption markers** and **no old-writer stop marker**. These are point-in-time observations, not a claim that min0 prevents later scale-to-zero.
+- Production remains unchanged, memory/one. No provider inference was dispatched by the failed isolated run.
+- A [fresh recovery plan](g1-fence-recovery/activities.md) and [independent review](g1-fence-recovery/plan-review.md) authorize implementation only. Recovery must use a new approved identity, bounded ingress-propagation checks and only the original verified unstarted slots; exact execution approval remains open. The production harness author was paused and released source ownership for recovery.
 
 ## Execution evidence to append later
 
