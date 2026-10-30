@@ -93,7 +93,7 @@ Live Zen compatibility remains an exact upstream/model gate.
 | `GET /metrics` | Implemented (single-process Prometheus text via `InMemoryMetricsStore`); multi-process aggregation Planned |
 | `POST /openai/v1/chat/completions` | Optional **Planned**; must not delay Responses support |
 
-Malformed requests return a clear 4xx without contacting Foundry. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
+Malformed requests return a clear 4xx without contacting Foundry. Known Responses cost-estimation input size/depth/shape failures and invalid `max_output_tokens` return `422 request_estimation_unavailable` before reservation or egress. Missing or invalid configured pricing retains `503 pricing_unavailable`; unavailable media pricing is not treated as a caller validation error. Unknown models return an OpenAI-compatible model-not-found error. When credit-safe estimated capacity is unavailable, the router returns `503` with `insufficient_credit_capacity` and does not dispatch upstream. Retry/failover occurs only for retryable upstream failures and never after meaningful streaming output has begun.
 
 Shared-resource credit is **Implemented**. `/admin/status` adds canonical `credit_groups` account
 snapshots and a `credit_group` on each backend. Backend credit views are compatible but nonadditive.

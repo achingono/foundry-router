@@ -47,6 +47,8 @@ the telemetry status is 502. See [operations](shared-resource-credit.md).
 
 `GET /health/ready` reports `backend_credit_config_complete` and `model_pricing_complete`, plus `state_store_reachable` in table mode. The storage check verifies each unique routable metered credit group has a balance row and checks health-table reachability; probes are cached for at most five seconds. `rate_limit_share_valid` and a `rate_limit_share_<group>_<dimension>_valid` check identify any per-replica RPM, input-TPM, or RPD share that floors to zero. Readiness returns `503` for any failed check; this is a readiness-level signal, not a configuration-load failure. Request-time credit and quota admission still fail closed independently of the cached readiness result.
 
+A `pricing_unavailable` routing failure historically also covered request estimation bounds. The [estimation correction](../plans/pricing-estimation-503/evidence.md) is **Implemented and deployed**: Responses estimates honor the existing configured intake cap, and known unestimable request shapes log `request_estimation_unavailable` and return HTTP 422 before egress. Missing/invalid token or media pricing remains HTTP 503. Check `model_pricing_complete` and loaded pricing to separate configuration failures from request-specific failures. Never collect prompts, tool outputs, images or credentials to diagnose this distinction.
+
 ## Prometheus & OpenTelemetry Metrics (Implemented single-process; opt-in OTLP aggregation implemented locally; deployed collector unverified)
 
 The router exposes a Prometheus-compatible `/metrics` endpoint for in-process metrics:

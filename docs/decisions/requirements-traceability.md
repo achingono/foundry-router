@@ -388,3 +388,5 @@ Grok/Muse are excluded on the recorded over-bound failure. See the
 | Existing Terra/Sonnet/MAI deployment registration and price-backed production acceptance | Implemented and deployed;22backends/14pools, scoped live acceptance passed | [three-model evidence](../plans/foundry-three-models/evidence.md) |
 
 MAI native metadata and one bounded CRC-valid caBX chunk are supported through a server-owned inspection profile; default Google inspection remains strict. See [final production evidence](../plans/foundry-three-models/production-evidence.md).
+
+Responses estimation matches the validated intake size while preserving bounded work and conservative credit admission; known unestimable requests receive 422 separately from 503 pricing failures. **Implemented and deployed** with estimator boundary/no-egress API regressions and guarded production no-egress acceptance; [incident evidence](../plans/pricing-estimation-503/evidence.md).

@@ -1250,6 +1250,68 @@ class TestOpenAIEndpoints:
         assert not route.called
 
     @respx.mock
+    @pytest.mark.parametrize("with_tools", [False, True])
+    def test_large_accepted_response_input_reaches_backend(self, with_tools) -> None:
+        route = respx.post("https://a.openai.azure.com/openai/v1/responses").mock(
+            return_value=Response(
+                200, json={"id": "large", "usage": {"input_tokens": 1, "output_tokens": 1}}
+            )
+        )
+        body = {"model": "gpt-4", "input": "x" * 2_010_000, "max_output_tokens": 1}
+        if with_tools:
+            body["tools"] = []
+        response = client.post(
+            "/openai/v1/responses", headers={"api-key": "client-key-123"}, json=body
+        )
+        assert response.status_code == 200
+        assert route.call_count == 1
+        assert json.loads(route.calls[0].request.content)["input"] == body["input"]
+
+    @respx.mock
+    def test_exact_intake_limit_tool_request_reaches_backend(self, setup_settings) -> None:
+        route = respx.post("https://a.openai.azure.com/openai/v1/responses").mock(
+            return_value=Response(
+                200, json={"id": "exact", "usage": {"input_tokens": 1, "output_tokens": 1}}
+            )
+        )
+        body = {"model": "gpt-4", "input": "", "tools": [], "max_output_tokens": 1}
+        overhead = len(json.dumps(body, separators=(",", ":")).encode())
+        body["input"] = "x" * (setup_settings.max_request_body_bytes - overhead)
+        wire = json.dumps(body, separators=(",", ":")).encode()
+        assert len(wire) == setup_settings.max_request_body_bytes
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123", "Content-Type": "application/json"},
+            content=wire,
+        )
+        assert response.status_code == 200
+        assert route.call_count == 1
+
+    @respx.mock
+    def test_unestimable_request_is_validation_error_without_egress(self) -> None:
+        route = respx.post("https://a.openai.azure.com/openai/v1/responses").mock(
+            return_value=Response(200, json={"id": "must-not-run"})
+        )
+        response = client.post(
+            "/openai/v1/responses",
+            headers={"api-key": "client-key-123"},
+            json={
+                "model": "gpt-4",
+                "input": "x" * 2_010_000,
+                "tools": [],
+                "max_output_tokens": True,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["type"] == "request_estimation_unavailable"
+        assert "max_output_tokens" in response.json()["error"]["message"]
+        assert not route.called
+        status = client.get("/admin/status", headers={"x-admin-key": "admin-key-789"}).json()
+        for group in status["credit_groups"].values():
+            assert group["live"]["active_reservations"] == 0
+            assert group["live"]["debited_usd_total"] == 0
+
+    @respx.mock
     def test_missing_pricing_fails_closed_without_egress(self, monkeypatch) -> None:
         no_pricing_settings = Settings(
             backends_json='{"backend_a": {"endpoint": "https://a.openai.azure.com", "credential": "key-a", "deployment": "gpt-4"}}',

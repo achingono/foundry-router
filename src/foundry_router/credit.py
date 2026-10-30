@@ -264,6 +264,10 @@ def calculate_cycle_window(now_utc: datetime, cycle_start_day: int) -> CycleWind
     )
 
 
+class RequestEstimationError(ValueError):
+    """Known request shape/bound failure, independent of configured pricing."""
+
+
 def estimate_request_cost(
     *,
     model: str,
@@ -272,7 +276,24 @@ def estimate_request_cost(
     pricing: dict[str, Any],
     settings: Any | None = None,
 ) -> RequestEstimate | None:
-    """Estimate a request cost from configured pricing; missing pricing fails closed."""
+    """Compatibility estimator: every unestimable request fails closed with None."""
+    try:
+        return estimate_request_cost_checked(
+            model=model, operation=operation, body=body, pricing=pricing, settings=settings
+        )
+    except RequestEstimationError:
+        return None
+
+
+def estimate_request_cost_checked(
+    *,
+    model: str,
+    operation: str,
+    body: dict[str, Any],
+    pricing: dict[str, Any],
+    settings: Any | None = None,
+) -> RequestEstimate | None:
+    """Keep pricing failures closed; distinguish known invalid Responses inputs."""
     model_pricing = pricing.get(model)
     if model_pricing is None:
         return None
@@ -358,11 +379,19 @@ def estimate_request_cost(
     input_tokens = 0
     output_tokens = 0
     if operation == "responses":
+        configured_bound = getattr(settings, "max_request_body_bytes", MAX_TEXT_WALK_CHARS)
+        max_chars = max(MAX_TEXT_WALK_CHARS, configured_bound)
         input_tokens = _estimate_response_input(
-            body, model_pricing, force_bytes=bool(signature_bound)
+            body,
+            model_pricing,
+            force_bytes=bool(signature_bound),
+            max_chars=max_chars,
+            max_wire_bytes=2 * max_chars if settings is not None else MAX_TEXT_WALK_CHARS,
         )
         if input_tokens < 0:
-            return None
+            raise RequestEstimationError(
+                "Request input exceeds supported cost-estimation size, depth or shape bounds"
+            )
         instructions = body.get("instructions")
         if isinstance(instructions, str):
             instruction_tokens = (
@@ -379,15 +408,7 @@ def estimate_request_cost(
             input_tokens += 4 * len(history_input)
         if input_tokens < 0:
             return None
-        max_output_tokens = body.get("max_output_tokens")
-        if max_output_tokens is None:
-            output_tokens = DEFAULT_MAX_OUTPUT_TOKENS
-        elif isinstance(max_output_tokens, bool) or not isinstance(max_output_tokens, int):
-            return None
-        elif max_output_tokens < 0:
-            return None
-        else:
-            output_tokens = max_output_tokens
+        output_tokens = _estimate_max_output_tokens(body)
     elif operation == "embeddings":
         input_tokens = _estimate_embeddings_tokens(body.get("input"))
     else:
@@ -403,6 +424,15 @@ def estimate_request_cost(
         output_tokens=output_tokens,
         estimated_cost_usd=estimated_cost,
     )
+
+
+def _estimate_max_output_tokens(body: dict[str, Any]) -> int:
+    value = body.get("max_output_tokens")
+    if value is None:
+        return DEFAULT_MAX_OUTPUT_TOKENS
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RequestEstimationError("max_output_tokens must be a non-negative integer")
+    return int(value)
 
 
 def _estimate_image_pool(
@@ -526,7 +556,12 @@ def generated_image_billable_cost(estimate: RequestEstimate) -> float:
 
 
 def _estimate_response_input(
-    body: dict[str, Any], model_pricing: Any, *, force_bytes: bool = False
+    body: dict[str, Any],
+    model_pricing: Any,
+    *,
+    force_bytes: bool = False,
+    max_chars: int = MAX_TEXT_WALK_CHARS,
+    max_wire_bytes: int = MAX_TEXT_WALK_CHARS,
 ) -> int:
     value = body.get("input")
     media_tokens = 0
@@ -567,21 +602,27 @@ def _estimate_response_input(
                     parts.append(part)
             copied.append({**item, "content": parts})
         value = copied
-    text_tokens = _estimate_text_tokens(value)
+    text_tokens = _estimate_text_tokens(value, max_chars=max_chars)
     if text_tokens < 0:
         return -1
     # Existing text-only estimates retain their behavior. Tool/schema requests use
     # UTF-8 serialized bytes as a conservative token ceiling including keys/overhead.
     if force_bytes or _feature_estimate_required(body, model_pricing):
         try:
+            projection = {key: body[key] for key in ("input", "tools", "text") if key in body}
+            if "input" in projection:
+                projection["input"] = value
             wire = json.dumps(
-                {"input": value, "tools": body.get("tools", []), "text": body.get("text")},
+                projection,
                 ensure_ascii=False,
                 allow_nan=False,
+                separators=(",", ":"),
             ).encode()
         except (ValueError, TypeError, RecursionError):
             return -1
-        if len(wire) > MAX_TEXT_WALK_CHARS:
+        # Normalized JSON can expand numeric spellings; input was independently
+        # intake-bounded. Keep scratch serialization bounded and charge every byte.
+        if len(wire) > max_wire_bytes:
             return -1
         text_tokens = len(wire) + 64
     return text_tokens + media_tokens
@@ -760,20 +801,20 @@ def _estimate_embeddings_tokens(value: Any) -> int:
     return -1
 
 
-def _estimate_text_tokens(value: Any) -> int:
+def _estimate_text_tokens(value: Any, *, max_chars: int = MAX_TEXT_WALK_CHARS) -> int:
     if value is None:
         return 0
-    total_chars = _walk_text_chars(value)
+    total_chars = _walk_text_chars(value, max_chars=max_chars)
     return _chars_to_tokens_from_count(total_chars)
 
 
-def _walk_text_chars(value: Any, *, depth: int = 0) -> int:
+def _walk_text_chars(value: Any, *, depth: int = 0, max_chars: int = MAX_TEXT_WALK_CHARS) -> int:
     if depth > MAX_TEXT_WALK_DEPTH:
         return -1
     if value is None:
         return 0
     if isinstance(value, str):
-        return len(value) if len(value) <= MAX_TEXT_WALK_CHARS else -1
+        return len(value) if len(value) <= max_chars else -1
     if isinstance(value, (int, float, bool)):
         return 0
     if isinstance(value, (bytes, bytearray, memoryview)):
@@ -781,21 +822,21 @@ def _walk_text_chars(value: Any, *, depth: int = 0) -> int:
     if isinstance(value, list):
         total = 0
         for item in value:
-            chars = _walk_text_chars(item, depth=depth + 1)
+            chars = _walk_text_chars(item, depth=depth + 1, max_chars=max_chars)
             if chars < 0:
                 return -1
             total += chars
-            if total > MAX_TEXT_WALK_CHARS:
+            if total > max_chars:
                 return -1
         return total
     if isinstance(value, dict):
         total = 0
         for item in value.values():
-            chars = _walk_text_chars(item, depth=depth + 1)
+            chars = _walk_text_chars(item, depth=depth + 1, max_chars=max_chars)
             if chars < 0:
                 return -1
             total += chars
-            if total > MAX_TEXT_WALK_CHARS:
+            if total > max_chars:
                 return -1
         return total
     return -1

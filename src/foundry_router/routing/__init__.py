@@ -26,7 +26,9 @@ from foundry_router.credit import (
     CreditAssessmentContext,
     CreditReservePolicy,
     CreditState,
+    RequestEstimationError,
     estimate_request_cost,
+    estimate_request_cost_checked,
     score_credit_assessment,
 )
 from foundry_router.credit_groups import CreditStoreError, credit_membership, resolve_credit_group
@@ -492,13 +494,35 @@ async def select_candidate_backend(
     snapshots = await health_store.snapshot_backend_health(ranked_candidates)
     await credit_store.sync_from_settings(settings)
 
-    estimate = estimate_request_cost(
-        model=model,
-        operation=operation,
-        body=body,
-        pricing=settings.pricing,
-        settings=settings,
-    )
+    try:
+        estimate = estimate_request_cost_checked(
+            model=model,
+            operation=operation,
+            body=body,
+            pricing=settings.pricing,
+            settings=settings,
+        )
+    except RequestEstimationError as exc:
+        _emit_routing_decision(
+            logger,
+            model=model,
+            requested_model=effective_requested,
+            resolved_model=effective_resolved,
+            is_alias=effective_is_alias,
+            operation=operation,
+            request_id=request_id,
+            selected_backend=None,
+            reason="request_estimation_unavailable",
+            estimated_request_cost_usd=None,
+            candidates=[],
+        )
+        return BackendSelectionResult(
+            None,
+            ranked_candidates,
+            snapshots,
+            False,
+            feature_rejection=AdapterRejection(422, "request_estimation_unavailable", str(exc)),
+        )
     if estimate is None:
         _emit_routing_decision(
             logger,

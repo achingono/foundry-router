@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from fastapi import Response
@@ -106,6 +108,142 @@ class TestRequestCostEstimation:
     def test_walk_text_chars_bounds_total_char_count(self) -> None:
         oversized = ["x" * (credit.MAX_TEXT_WALK_CHARS // 2 + 1) for _ in range(3)]
         assert credit._walk_text_chars(oversized) == -1
+
+
+class TestResponsesEstimationBounds:
+    @pytest.mark.parametrize("with_tools", [False, True])
+    @pytest.mark.parametrize("limit", [2_097_152, 3_000_000])
+    def test_accepted_intake_above_old_bound_is_estimated(self, with_tools, limit) -> None:
+        body = {"input": "x" * (limit - 128), "max_output_tokens": 1}
+        if with_tools:
+            body["tools"] = []
+        assert len(json.dumps(body).encode()) < limit
+        estimate = estimate_request_cost(
+            model="gpt-4",
+            operation="responses",
+            body=body,
+            pricing=_pricing(),
+            settings=SimpleNamespace(max_request_body_bytes=limit),
+        )
+        assert estimate is not None
+        assert estimate.input_tokens >= len(body["input"]) // 3
+        assert estimate.estimated_cost_usd > 0
+
+    def test_no_settings_preserves_old_feature_wire_bound(self) -> None:
+        body = {"input": "x" * 2_010_000, "tools": []}
+        assert (
+            estimate_request_cost(
+                model="gpt-4", operation="responses", body=body, pricing=_pricing()
+            )
+            is None
+        )
+
+    def test_compact_projection_does_not_invent_absent_keys(self) -> None:
+        value = [{"type": "function_call_output", "output": "é" * 100}]
+        body = {"input": value}
+        estimate = estimate_request_cost(
+            model="gpt-4",
+            operation="responses",
+            body=body,
+            pricing=_pricing(),
+            settings=SimpleNamespace(max_request_body_bytes=2_097_152),
+        )
+        expected = len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+        assert estimate is not None
+        assert estimate.input_tokens == expected + 64 + 4
+
+    def test_exact_intake_cap_and_normalized_numeric_expansion(self) -> None:
+        limit = 2_097_152
+        # Raw numerical spelling is shorter than json.dumps normalization.
+        prefix = '{"model":"gpt-4","tools":[],"input":[1e1,"'
+        suffix = '"]}'
+        wire = prefix + "x" * (limit - len(prefix) - len(suffix)) + suffix
+        assert len(wire.encode()) == limit
+        body = json.loads(wire)
+        estimate = estimate_request_cost(
+            model="gpt-4",
+            operation="responses",
+            body=body,
+            pricing=_pricing(),
+            settings=SimpleNamespace(max_request_body_bytes=limit),
+        )
+        assert estimate is not None
+        assert estimate.input_tokens > limit - 64
+
+    def test_checked_estimator_rejects_request_bound_but_wrapper_fails_closed(self) -> None:
+        body = {"input": "x" * 2_097_153}
+        settings = SimpleNamespace(max_request_body_bytes=2_097_152)
+        with pytest.raises(credit.RequestEstimationError, match="bounds"):
+            credit.estimate_request_cost_checked(
+                model="gpt-4",
+                operation="responses",
+                body=body,
+                pricing=_pricing(),
+                settings=settings,
+            )
+        assert (
+            estimate_request_cost(
+                model="gpt-4",
+                operation="responses",
+                body=body,
+                pricing=_pricing(),
+                settings=settings,
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize("invalid", [True, -1, "128", 1.5])
+    def test_known_invalid_output_shape_has_specific_failure(self, invalid) -> None:
+        with pytest.raises(credit.RequestEstimationError, match="max_output_tokens"):
+            credit.estimate_request_cost_checked(
+                model="gpt-4",
+                operation="responses",
+                body={"input": "hi", "max_output_tokens": invalid},
+                pricing=_pricing(),
+            )
+
+    def test_checked_estimator_still_returns_none_for_price_failure(self) -> None:
+        for pricing in ({}, _pricing(input_price=float("nan"))):
+            assert (
+                credit.estimate_request_cost_checked(
+                    model="gpt-4", operation="responses", body={"input": "hi"}, pricing=pricing
+                )
+                is None
+            )
+
+    def test_missing_media_price_with_valid_token_prices_remains_price_failure(self) -> None:
+        settings = SimpleNamespace(
+            models={"gpt-4": SimpleNamespace(backends={"mai": 1})},
+            backends={"mai": SimpleNamespace(provider="azure_mai")},
+        )
+        assert (
+            credit.estimate_request_cost_checked(
+                model="gpt-4",
+                operation="responses",
+                pricing=_pricing(),
+                settings=settings,
+                body={
+                    "input": "synthetic",
+                    "tools": [
+                        {"type": "image_generation", "output_format": "png", "size": "1024x1024"}
+                    ],
+                },
+            )
+            is None
+        )
+
+    def test_depth_guard_remains_with_increased_intake_bound(self) -> None:
+        nested: object = "leaf"
+        for _ in range(credit.MAX_TEXT_WALK_DEPTH + 5):
+            nested = [nested]
+        with pytest.raises(credit.RequestEstimationError, match="depth"):
+            credit.estimate_request_cost_checked(
+                model="gpt-4",
+                operation="responses",
+                body={"input": nested},
+                pricing=_pricing(),
+                settings=SimpleNamespace(max_request_body_bytes=3_000_000),
+            )
 
 
 class TestResponseUsageEstimation:
