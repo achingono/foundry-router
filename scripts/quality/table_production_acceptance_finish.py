@@ -195,10 +195,7 @@ def topology(
         h.require(not found and item["image"] == image, "Approved current revision/image mismatch")
         found = True
         if template is not None:
-            actual, expected = copy.deepcopy(item["template"]), copy.deepcopy(template)
-            actual.pop("revisionSuffix", None)
-            expected.pop("revisionSuffix", None)
-            h.require(actual == expected, "Current revision settings drift")
+            h.require(item["template"] == template, "Current revision settings drift")
         if rolling:
             h.require(
                 len(item["workers"]) <= MAX_ROLLING_WORKERS,
@@ -217,6 +214,62 @@ def topology(
             h.generation(owned[0])
     h.require(found or rolling, "Approved current revision missing")
     return owned
+
+
+def revision_template(items: list[Json], revision: str) -> Json:
+    matches = [item for item in items if item["name"] == revision]
+    h.require(len(matches) == 1, "Approved current revision template missing or duplicated")
+    template = matches[0].get("template")
+    if not isinstance(template, dict):
+        raise h.RefusalError("Approved current revision template unavailable")
+    return dict(template)
+
+
+def compare_template_views(revision_view: Json, app_view: Json) -> None:
+    """Compare configured template fields across ARM's app and revision views."""
+    actual, expected = copy.deepcopy(revision_view), copy.deepcopy(app_view)
+    if actual.get("revisionSuffix") is None:
+        actual.pop("revisionSuffix", None)
+        expected.pop("revisionSuffix", None)
+    actual_containers = actual.get("containers", [])
+    expected_containers = expected.get("containers", [])
+    h.require(
+        len(actual_containers) == len(expected_containers),
+        "App/revision container template mismatch",
+    )
+    for actual_container, expected_container in zip(
+        actual_containers, expected_containers, strict=True
+    ):
+        if "probes" in actual_container and "probes" not in expected_container:
+            actual_container.pop("probes")
+        actual_resources = actual_container.get("resources", {})
+        expected_resources = expected_container.get("resources", {})
+        h.require(
+            isinstance(actual_resources, dict) and isinstance(expected_resources, dict),
+            "Invalid app/revision resource template",
+        )
+        if "ephemeralStorage" in expected_resources and "ephemeralStorage" not in actual_resources:
+            expected_resources.pop("ephemeralStorage")
+            if not expected_resources:
+                expected_container.pop("resources", None)
+    actual_scale = actual.get("scale", {})
+    expected_scale = expected.get("scale", {})
+    h.require(
+        isinstance(actual_scale, dict) and isinstance(expected_scale, dict),
+        "Invalid app/revision scale template",
+    )
+    for field in ("cooldownPeriod", "pollingInterval"):
+        if field in expected_scale and actual_scale.get(field) is None:
+            expected_scale.pop(field)
+            actual_scale.pop(field, None)
+    h.require(actual == expected, "Current revision settings drift")
+
+
+def verify_revision_binding(actual: list[Json], expected: list[Json], revision: str) -> None:
+    h.require(
+        revision_template(actual, revision) == revision_template(expected, revision),
+        "Approved revision template drift",
+    )
 
 
 def evidence(path: Path, original: Json, hashes: Json) -> Json:
@@ -285,7 +338,16 @@ def current(
         "Original pricing/pool/slot drift",
     )
     items = budget.call(inventory, azure, limit=r.WORKER_SECONDS)
-    topology(items, ready["snapshot"]["revision"], original["image"], app["properties"]["template"])
+    compare_template_views(
+        revision_template(items, ready["snapshot"]["revision"]),
+        app["properties"]["template"],
+    )
+    topology(
+        items,
+        ready["snapshot"]["revision"],
+        original["image"],
+        None,
+    )
     snapshot = r.snapshot(budget, azure, values)
     h.require(
         snapshot["ready"] is True
@@ -485,18 +547,23 @@ def verify_case_evidence(
 
 
 def restart_wait(
-    budget: r.Budget, azure: c.AllRevisionsAzure, template: Json, before: Json, image: str
+    budget: r.Budget,
+    azure: c.AllRevisionsAzure,
+    templates: tuple[Json, Json],
+    before: Json,
+    image: str,
 ) -> None:
+    app_template, revision_view_template = templates
     end = min(budget.end, time.monotonic() + r.WORKER_SECONDS)
     while time.monotonic() + r.CLEANUP_SECONDS < end:
         app = azure.show()
         h.require(
             app["properties"]["configuration"]["ingress"]["ipSecurityRestrictions"] == h.DENY
-            and app["properties"]["template"] == template,
+            and app["properties"]["template"] == app_template,
             "Restart fence/settings drift",
         )
         items = budget.call(inventory, azure, limit=end - time.monotonic())
-        owned = topology(items, before["revision"], image, template, rolling=True)
+        owned = topology(items, before["revision"], image, revision_view_template, rolling=True)
         active = [item for item in items if item["name"] == before["revision"] and item["active"]]
         if len(active) == 1 and len(owned) == 1:
             containers = owned[0]["properties"]["containers"]
@@ -543,7 +610,8 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- no deployment p
         )
         ready = evidence(Path(packet["ready_path"]), original, hashes)
         production(budget, original)
-        azure, app, values, baseline, _details = current(budget, original, ready)
+        azure, app, values, baseline, details = current(budget, original, ready)
+        verify_revision_binding(details["inventory"], packet["inventory"], baseline["revision"])
         h.require(
             h.process_identity(baseline) == h.process_identity(packet["baseline"])
             and baseline["generation"] == packet["baseline"]["generation"],
@@ -601,7 +669,12 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- no deployment p
         settings = h.settings_from(values)
         for index, case in enumerate(original["cases"]):
             immutable()
-            _azure, _app, _values, before, _info = current(budget, original, ready, allow=allow)
+            _azure, _app, _values, before, before_details = current(
+                budget, original, ready, allow=allow
+            )
+            verify_revision_binding(
+                before_details["inventory"], packet["inventory"], before["revision"]
+            )
             h.require(
                 h.process_identity(before) == h.process_identity(baseline),
                 "Finish paid worker changed",
@@ -646,7 +719,12 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- no deployment p
                 "Finish charge exceeds original slot",
             )
             assert debit is not None
-            _azure, _app, _values, after, _info = current(budget, original, ready, allow=allow)
+            _azure, _app, _values, after, after_details = current(
+                budget, original, ready, allow=allow
+            )
+            verify_revision_binding(
+                after_details["inventory"], packet["inventory"], after["revision"]
+            )
             h.require(
                 h.process_identity(after) == h.process_identity(baseline),
                 "Finish settlement worker changed",
@@ -668,7 +746,8 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- no deployment p
             )
         ingress("final-deny", h.DENY, h.HTTP_DENIED)
         budget.pause(r.DRAIN_SECONDS)
-        _azure, final_app, _values, final, _info = current(budget, original, ready)
+        _azure, final_app, _values, final, final_details = current(budget, original, ready)
+        verify_revision_binding(final_details["inventory"], packet["inventory"], final["revision"])
         h.require(
             h.process_identity(final) == h.process_identity(baseline)
             and final["request_counters"] == after["request_counters"],
@@ -682,9 +761,19 @@ def apply(args: argparse.Namespace) -> None:  # noqa: PLR0915 -- no deployment p
                 ["revision", "restart", "--revision", final["revision"]],
             )
             restart_wait(
-                budget, azure, final_app["properties"]["template"], final, original["image"]
+                budget,
+                azure,
+                (
+                    final_app["properties"]["template"],
+                    revision_template(final_details["inventory"], final["revision"]),
+                ),
+                final,
+                original["image"],
             )
-            _azure, _app, _values, restarted, _info = current(budget, original, ready)
+            _azure, _app, _values, restarted, restarted_details = current(budget, original, ready)
+            verify_revision_binding(
+                restarted_details["inventory"], packet["inventory"], restarted["revision"]
+            )
             h.require(
                 h.process_identity(restarted) != h.process_identity(final),
                 "No actual finish process replacement",

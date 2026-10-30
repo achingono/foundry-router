@@ -290,6 +290,104 @@ def test_prepared_bytes_are_locked_and_rechecked_before_mutation(
     assert not (capsule["original"] / f.GUARD).exists()
 
 
+def test_revision_view_uses_captured_revision_template_not_app_projection(
+    capsule: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready = f.r.read(capsule["ready"] / "ready.json")
+    revision = ready["snapshot"]["revision"]
+    app_template = ready["app_projection"]["properties"]["template"]
+    revision_view = copy.deepcopy(app_template)
+    revision_view["containers"][0]["probes"] = [{"type": "readiness"}]
+    assert revision_view != app_template
+
+    original_metadata = previous.recovery_tests.FakeAzure.app_command
+
+    def normalized_revision_list(self: Any, arguments: list[str]) -> Any:
+        rows = original_metadata(self, arguments)
+        if arguments[:2] == ["revision", "list"]:
+            current = next(row for row in rows if row["name"] == revision)
+            current["properties"]["template"]["containers"][0]["probes"] = [{"type": "readiness"}]
+        return rows
+
+    monkeypatch.setattr(previous.recovery_tests.FakeAzure, "app_command", normalized_revision_list)
+    f.prepare(args(capsule))
+    packet = f.r.read(capsule["own"] / "prepared.json")
+    assert f.revision_template(packet["inventory"], revision)["containers"][0]["probes"] == [
+        {"type": "readiness"}
+    ]
+    assert capsule["test"].mutations == capsule["finish_before"]
+
+
+def test_template_view_normalization_does_not_ignore_unlisted_drift() -> None:
+    app_view = {
+        "revisionSuffix": "captured-suffix",
+        "containers": [
+            {
+                "name": "router",
+                "resources": {"cpu": 0.25, "memory": "0.5Gi", "ephemeralStorage": "1Gi"},
+            }
+        ],
+        "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 1,
+            "cooldownPeriod": 300,
+            "pollingInterval": 30,
+        },
+    }
+    revision_view = copy.deepcopy(app_view)
+    revision_view["revisionSuffix"] = None
+    revision_view["containers"][0]["resources"].pop("ephemeralStorage")
+    revision_view["containers"][0]["probes"] = [{"type": "readiness"}]
+    revision_view["scale"]["cooldownPeriod"] = None
+    revision_view["scale"]["pollingInterval"] = None
+    f.compare_template_views(revision_view, app_view)
+    revision_view["scale"]["maxReplicas"] = 2
+    with pytest.raises(f.h.RefusalError, match="Current revision settings drift"):
+        f.compare_template_views(revision_view, app_view)
+    revision_view["scale"]["maxReplicas"] = 1
+    revision_view["revisionSuffix"] = "different-suffix"
+    with pytest.raises(f.h.RefusalError, match="Current revision settings drift"):
+        f.compare_template_views(revision_view, app_view)
+
+
+def test_rolling_topology_rejects_nonnull_revision_suffix_drift(
+    capsule: dict[str, Any],
+) -> None:
+    test = capsule["test"]
+    azure = f.c.AllRevisionsAzure("synthetic", "rg", "test", f.r.Budget())
+    rows = f.inventory(azure)
+    revision = "current"
+    actual = next(item for item in rows if item["name"] == revision)
+    actual["template"]["revisionSuffix"] = "observed-suffix"
+    expected = copy.deepcopy(actual["template"])
+    expected["revisionSuffix"] = "different-suffix"
+    with pytest.raises(f.h.RefusalError, match="Current revision settings drift"):
+        f.topology(rows, revision, capsule["original_value"]["image"], expected, rolling=True)
+    assert test.mutations == capsule["finish_before"]
+
+
+def test_probe_change_after_prepare_refuses_before_ingress_or_inference(
+    capsule: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    approval = approved(capsule)
+    original_metadata = previous.recovery_tests.FakeAzure.app_command
+
+    def changed_probe(self: Any, arguments: list[str]) -> Any:
+        rows = original_metadata(self, arguments)
+        if arguments[:2] == ["revision", "list"]:
+            current = next(row for row in rows if row["name"] == "current")
+            current["properties"]["template"]["containers"][0]["probes"] = [
+                {"type": "readiness", "port": 9000}
+            ]
+        return rows
+
+    monkeypatch.setattr(previous.recovery_tests.FakeAzure, "app_command", changed_probe)
+    with pytest.raises(f.h.RefusalError, match="Approved revision template drift"):
+        f.apply(argparse.Namespace(artifact_dir=capsule["own"], approval=approval))
+    assert capsule["test"].mutations == capsule["finish_before"]
+    assert not (capsule["original"] / f.GUARD).exists()
+
+
 def test_restart_phase_budget_caps_nested_work_and_restores_overall_deadline() -> None:
     budget = f.r.Budget()
     overall_end = budget.end
@@ -467,6 +565,7 @@ def test_restart_observation_never_accepts_unapproved_or_unsettled_topology(
     ready = f.r.read(capsule["ready"] / "ready.json")
     azure = f.c.AllRevisionsAzure("synthetic", "rg", "test", f.r.Budget())
     original_metadata = previous.recovery_tests.FakeAzure.app_command
+    revision_view = f.revision_template(f.inventory(azure), ready["snapshot"]["revision"])
     if state == "old_worker":
         test.hidden_worker_revision = "old"
     elif state == "wrong_current_image":
@@ -488,7 +587,10 @@ def test_restart_observation_never_accepts_unapproved_or_unsettled_topology(
         f.restart_wait(
             f.r.Budget(),
             azure,
-            ready["app_projection"]["properties"]["template"],
+            (
+                ready["app_projection"]["properties"]["template"],
+                revision_view,
+            ),
             ready["snapshot"],
             capsule["original_value"]["image"],
         )

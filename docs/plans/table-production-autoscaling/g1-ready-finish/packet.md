@@ -78,7 +78,13 @@ IPv4. Neither a warm replacement nor zero-worker baseline is allowed here.
 ## Independent approval
 
 A separate reviewer verifies the actual private packet, source/tests, live
-settled state, ownership and original-unused-slot proof and supplies exactly:
+settled state, ownership and original-unused-slot proof. Inspect the complete
+approved current revision template in `prepared.json`—including revision-only
+probe values—and confirm the app/revision comparison removes only the observed
+null/missing `revisionSuffix`, revision-only `probes`, app-only
+`ephemeralStorage`, and revision-null cooldown/polling fields. Any other template
+difference or unsuitable probe configuration refuses approval. The reviewer
+then supplies exactly:
 
 ```json
 {
@@ -180,8 +186,8 @@ infrastructure spend is not capped by the inference reservation or runner
 deadline. This does not migrate production or qualify autoscaling/provider
 admission/embeddings. P2 drafts and all production/user work remain untouched.
 
-Latest local verification after review fixes: focused finish tests **44 passed /
-99.04% finish-runner coverage**; full repository suite **3,130 passed, 21
+Latest local verification after review fixes: focused finish tests **48 passed /
+98.58% finish-runner coverage**; full repository suite **3,134 passed, 21
 skipped, 90.46% runtime coverage**; full Ruff check/format, source Mypy, and
 operator Mypy with `MYPYPATH=src:scripts/quality` and
 `--explicit-package-bases` passed. The independent contextual review found no
