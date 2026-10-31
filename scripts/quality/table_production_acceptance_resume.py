@@ -438,14 +438,17 @@ def reconciliation(
         == h.process_identity(r.read(finish_dir / "prepared.json")["baseline"]),
         "Case-2 reconciliation snapshot process/readiness drift",
     )
+    previous_pass_hashes = [
+        h.file_hash(original_dir / f"case-{index}-passed.json")
+        for index in range(ACCEPTED_CASE_COUNT)
+    ]
     h.require(
         data["current_allow_sha256"] == h.digest(expected_allow)
         and data["executor_ip_sha256"] == h.digest(finish_packet["executor_ip"])
-        and data["previous_pass_hashes"]
-        == [
-            h.file_hash(original_dir / f"case-{index}-passed.json")
-            for index in range(ACCEPTED_CASE_COUNT)
-        ],
+        and (
+            "previous_pass_hashes" not in data
+            or data["previous_pass_hashes"] == previous_pass_hashes
+        ),
         "Case-2 reconciliation ownership/fence/prior-result binding drift",
     )
     return data

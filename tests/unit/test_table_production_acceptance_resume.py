@@ -93,9 +93,6 @@ def _reconciliation(data: dict[str, Any]) -> None:
         "case_ownership_sha256": h.file_hash(
             finish_dir / f"case-{resume.RECONCILED_CASE_INDEX}-ownership.json"
         ),
-        "previous_pass_hashes": [
-            h.file_hash(original_dir / f"case-{index}-passed.json") for index in (0, 1)
-        ],
         "case2_debit_usd": debit,
         "case2_reserve_usd": case["reserve_usd"],
         "before_accounts": before,
@@ -295,8 +292,47 @@ def test_prepare_rejects_reconciliation_finish_link_drift(partial_run: dict[str,
 
     with pytest.raises(finish.h.RefusalError, match="Case-2 reconciliation provenance"):
         resume.prepare(resume_args(partial_run))
-
     assert partial_run["test"].mutations == before
+
+
+def test_reconciliation_accepts_v1_without_prior_pass_hash_field(
+    partial_run: dict[str, Any],
+) -> None:
+    original_dir, finish_dir = partial_run["original"], partial_run["own"]
+    finish_packet = finish.r.read(finish_dir / "prepared.json")
+    finish_link = finish.r.read(original_dir / finish.GUARD)["finish_link"]
+    data = finish.r.read(finish_dir / "case-2-reconciliation.json")
+
+    assert "previous_pass_hashes" not in data
+    assert (
+        resume.reconciliation(
+            original_dir,
+            finish_dir,
+            finish_packet,
+            finish_link,
+            data,
+        )
+        == data
+    )
+
+
+def test_reconciliation_rejects_mismatched_optional_prior_pass_hashes(
+    partial_run: dict[str, Any],
+) -> None:
+    original_dir, finish_dir = partial_run["original"], partial_run["own"]
+    finish_packet = finish.r.read(finish_dir / "prepared.json")
+    finish_link = finish.r.read(original_dir / finish.GUARD)["finish_link"]
+    data = finish.r.read(finish_dir / "case-2-reconciliation.json")
+    data["previous_pass_hashes"] = ["0" * 64, "0" * 64]
+
+    with pytest.raises(finish.h.RefusalError, match="prior-result binding drift"):
+        resume.reconciliation(
+            original_dir,
+            finish_dir,
+            finish_packet,
+            finish_link,
+            data,
+        )
 
 
 def test_pre_dispatch_drift_attempts_one_deny_without_case3_or_restart(
