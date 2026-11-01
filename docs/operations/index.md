@@ -6,6 +6,11 @@ IaC is **Implemented** in `infra/main.bicep` and typed resource modules; CI/CD i
 
 ## Initial Container App
 
+The isolated ingress-watchdog operator primitives are **Partially implemented**
+locally; proxy/control/supervisor/verifier wiring and Azure validation remain
+open. They do not authorize a live G1 run or production change. See the
+[remediation evidence](../plans/table-watchdog-review-remediation-20261101/evidence.md).
+
 To verify a client base URL and API key, run `scripts/operations/test-client-connection.sh
 https://<container-app-fqdn>/openai/v1`. Set `FOUNDRY_ROUTER_API_KEY` or enter the key at the
 hidden prompt; the script checks the authenticated models endpoint.

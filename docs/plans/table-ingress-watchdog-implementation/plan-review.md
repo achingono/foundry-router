@@ -1,6 +1,6 @@
 # Independent Implementation Plan Review
 
-**Verdict: Conditionally approved as a plan; implementation remains blocked.**
+**Verdict: Conditionally approved as a plan; implementation may proceed locally.**
 An independent session found nine Majors in the first candidate and three more
 on re-review. The final re-review found those twelve addressed as plan
 requirements and no remaining Critical/Major plan finding. No source files,
@@ -21,8 +21,12 @@ Azure resources, or provider requests were changed by the reviewer.
 | Budget-record retention might expire while liability remains | Use a separate budget WORM container with cycle/audit retention and legal hold until liabilities are independently resolved. |
 | Witness did not explicitly require G1 success | Require HTTP 200, completed status, valid bounded usage and clean EOF; reject other 2xx, failed/incomplete/duplicate terminal events and malformed usage. |
 
-The review does **not** resolve or approve the full-host-suspension design
-decision. That decision and its independent review must precede implementation.
+The original review did **not** resolve the full-host-suspension design decision.
+The later amendment explicitly narrowed the guarantee to a running host, made
+whole-host suspension terminal, and disclaimed finite socket closure while
+suspended. A separate independent review passed that amendment; live use remains
+blocked unless resume-before-accept ordering is proven or an independent enforcer
+is reviewed.
 Clock, WORM, network/identity isolation, financial quiescence, diagnostic
 attribution and provider-attempt properties remain unverified. Separate local
 implementation review, non-paid Azure feasibility, and exact infrastructure,

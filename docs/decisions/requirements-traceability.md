@@ -25,6 +25,12 @@ The rewritten documents preserve the safety-critical requirements: credit versus
 
 ## Shared Resource Credit Traceability (Implemented runtime)
 
+### Isolated acceptance watchdog
+
+| Requirement | Implementation status | Evidence |
+| --- | --- | --- |
+| Budget fencing, bounded request/response validation and one-use diagnostic/restart primitives | Partially implemented locally; process wiring and Azure validation remain open | [Remediation evidence](../plans/table-watchdog-review-remediation-20261101/evidence.md) |
+
 ### Configurable compatible upstreams
 
 **Implemented with mocked verification**; live upstream support remains **Planned**.

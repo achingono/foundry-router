@@ -3,7 +3,8 @@
 ## Planning gate
 
 - [x] Independent reviewer conditionally approves this implementation plan and protocol with no unresolved Critical/Major plan findings.
-- [ ] The full-host-suspension guarantee is resolved by an independently reviewed design amendment or a separately specified and verified independent data-plane enforcer; no implementation begins before that decision.
+- [x] The guarantee is explicitly limited to a running gateway host; whole-host suspension/loss has no finite socket-closure bound, invalidates the session, and must not be represented as meeting the TTL guarantee.
+- [ ] Resume behavior checks trusted UTC and `CLOCK_BOOTTIME` and closes inherited sockets before accepting any traffic; if that ordering cannot be proven, live use requires a separately reviewed independent data-plane enforcer.
 - [x] User approved all stages in principle; implementation, Azure resources and paid execution are not performed by the planning request.
 
 ## Local implementation gate
@@ -12,7 +13,7 @@
 - [ ] Runner and supervisor have distinct OS identities, inaccessible credentials and denied ptrace/descriptor/memory/token access; actual Linux subprocess bypass tests pass.
 - [ ] Session, dispatch, progression, close and probe records are durable create-only, and ambiguous acknowledgements or restart cannot grant permission.
 - [ ] Locked WORM retention covers at least the signed validity plus replay/forensics window; actual policy is attested and short/unverifiable retention is refused.
-- [ ] Clock health, single-use heartbeat, process liveness, hard deadline, active/idle stream termination and close-versus-dispatch ordering pass race and subprocess fault injection.
+- [ ] Clock health, single-use heartbeat, process liveness, hard deadline, active/idle stream termination while host is running, terminal refusal after host resume, and close-versus-dispatch ordering pass race and subprocess fault injection.
 - [ ] Fresh sole-writer baseline and independent per-case signed financial/identity/config snapshots are verified after slot consumption and immediately before forwarding; any drift/staleness stops.
 - [ ] External Table writers, active reconciliation/reaper/ownership mutation and cycle rollover cannot intervene between snapshot and forwarding; this is proven for the current release, otherwise live dispatch is blocked for a separately reviewed amendment.
 - [ ] Four distinct fresh cases are ordered and bound to signed exact body, model, budget and one-shot records; zero retries and singleton pools are independently verified and fault-tested.
@@ -35,6 +36,6 @@
 | Role | Status | Scope |
 |---|---|---|
 | Operator | Stages approved in principle | Exact Azure and paid G1 packets remain to be prepared and independently approved |
-| Independent plan reviewer | Conditionally approved | No remaining Critical/Major plan findings; host-suspension decision still blocks coding |
-| Implementer | Pending | Local artifacts only after plan gate |
+| Independent plan reviewer | Conditionally approved | Suspension amendment passed; host resume ordering remains a live-use gate |
+| Implementer | In progress | Local artifacts only; no Azure changes or paid requests |
 | Verifier and implementation reviewer | Pending | Independent checks and deep review after implementation |

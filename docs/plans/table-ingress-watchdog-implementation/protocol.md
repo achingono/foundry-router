@@ -1,8 +1,10 @@
 # Concrete Watchdog Protocol
 
-**Status: Planned, subject to implementation-plan review.** These are candidate
-local contracts, not evidence that Azure or the chosen transport supports them.
-No endpoint, key, credential, model ID or resource ID is hard-coded.
+**Status: Partially implemented locally.** Canonical signing, state/ledger
+primitives, bounded ingress parsing, TLS identity helpers and response inspection
+exist with unit tests. No end-to-end proxy, process isolation, Azure behavior or
+live G1 run is established. No endpoint, key, credential, model ID or resource
+ID is hard-coded.
 
 ## Components and trust
 
@@ -55,7 +57,7 @@ sign reviewer, verifier or heartbeat objects.
 
 The signed packet contains: random session ID, packet hash and signer/key ID;
 fixed origin hostname/port and approved route/method set; exact gateway and
-runner identity fingerprints; VM image/config and private-boundary evidence
+runner client-certificate SHA-256 fingerprints; VM image/config and private-boundary evidence
 hashes; absolute UTC expiry and timing/resource caps; four ordered case IDs,
 exact request-body SHA-256, model, stream flag, output ceiling and reserve; and
 two distinct pre/post-restart probe scopes. The independently reviewed exact
@@ -75,6 +77,11 @@ shared-key/default credential fallback. Use the pinned managed identity and
 primary endpoint. Check locked container policy, account/endpoint ownership,
 role scope and retention before arming; the trusted operator attests the
 control-plane properties because the gateway has no ARM read/write authority.
+The local adapter requires a fresh signed operator attestation bound to the
+exact HTTPS account URL, container, managed-identity client ID, locked policy,
+retention, denied overwrite/delete, primary endpoint, disabled retries and
+disabled environment-proxy use. It also checks the configured SDK client before
+writing; a local attestation test is not Azure policy evidence.
 No deletion or reset is allowed. A new session is not a recovery of a consumed
 slot or a second allocation.
 
@@ -114,15 +121,18 @@ locks alone do not establish this global property. Test competing sessions on
 different hosts and failures between the budget-slot and dispatch writes.
 
 Budget allocation and budget-slot markers use a **separate** WORM container from
-the eight-day session replay records. Its locked retention must cover at least the
-funding-cycle end plus the separately approved audit window; a container legal
-hold remains in place until every liability and reconciliation is resolved. The
-budget authority independently attests policy, hold and role scope before any
-allocation. Clearing the hold or changing the budget epoch requires a separately
-reviewed closure decision, never an automatic cleanup. If retention, hold or
-financial-scope uniqueness cannot be demonstrated, refuse all dispatches. Test
-attempted reallocation across expiry, unresolved liabilities and rejected
-premature hold clearance. Eight days of session retention alone is insufficient.
+the eight-day session replay records. A third independently pinned, create-only
+registry fences the program scope across budget containers. A reviewer-signed
+registry binding and a separately budget-authority-signed namespace/cycle/audit
+binding must match the independently provisioned configuration. All three
+containers must be distinct; the registry and budget containers require a locked
+policy, denied hold-clear permission and active legal hold. The signed audit
+horizon must extend at least one day beyond the funding-cycle end and the
+attested retention must cover it. The hold remains until every liability and
+reconciliation is resolved. Clearing the hold or changing the budget epoch
+requires a separately reviewed closure decision, never automatic cleanup. Test
+conflicting namespaces, short retention and expired attestations, including after
+a write. Local signed test attestations are not Azure policy evidence.
 
 The default packet keeps the original 64-input/128-output ceilings. Before any
 dispatch the verifier must prove a conservative input-token and price ceiling
@@ -172,19 +182,22 @@ and its sockets; if the watchdog dies or is stopped while the proxy runs, the
 proxy independently expires and cancels streams. Test both independently with
 real TLS sockets, queued bytes and stalled event loops.
 
-**Blocking design decision before implementation:** the original design promises
-stream termination within the approved TTL even for host loss/suspend. A single
-fully suspended VM cannot establish that promise. An independent design
-amendment must either specify and validate a separate failure-domain data-plane
-enforcer that can terminate active connections within the bound even while the
-gateway VM is suspended, or explicitly narrow the guarantee and its acceptance
-criteria to acknowledge buffered/in-flight bytes and no finite close bound during
-total host suspension. Until that amendment is independently reviewed, do not
-implement or claim the design's host-suspension guarantee. On resume, regardless
-of the chosen amendment, recheck boot-time deadline before any new forwarding;
-an expired session remains terminally closed and dispatched provider work remains
-uncertain. Test proxy SIGSTOP, watchdog SIGSTOP, simultaneous stop, VM suspend,
-resume and host loss separately.
+**Guarantee boundary:** bounded termination applies while the gateway host and
+kernel are running. During total host suspension or loss, there is no finite
+socket-closure bound; already-queued bytes or provider work may continue. The
+implementation and acceptance packet must state this limitation and must never
+claim the original unconditional TTL guarantee. A host-suspend event is a
+terminal session failure, not a reason to renew or resume a case. On resume,
+before accepting control/client traffic or initiating any upstream write, compare
+`CLOCK_BOOTTIME` and trusted UTC against the last persisted/in-memory health
+sample and signed deadlines, close all inherited sockets, and refuse the session.
+If the process cannot prove that this check happens before any listener accepts
+data, live use is blocked pending a separately reviewed independent enforcer.
+Already-initiated writes remain dispatched liabilities. Test proxy SIGSTOP,
+watchdog SIGSTOP, simultaneous stop, VM suspend/resume and host loss separately;
+only SIGSTOP with an independently running enforcer can assert bounded active
+termination. Whole-host suspension tests establish terminal refusal on resume,
+not bounded closure while suspended.
 
 ## Case transaction and race ordering
 
@@ -228,7 +241,9 @@ unreviewed test-only router change.
    recovery counters, cycles, process identity and zero reservations/inflight to
    the initial baseline or last accepted result; it signs a short-lived one-use
    receipt binding session, case, dispatch-record hash, full snapshot digest,
-   config and observation time. Receipt delivery is part of that one snapshot
+   predecessor state, config, observed time and uncertainty, and a conservative
+   body-bound input-token/price proof within the slot reserve. A strict stateless
+   text-only body is required. Receipt delivery is part of that one snapshot
    transaction; no further remote operation or wait is allowed after verification.
 4. On receipt, locally verify signature, freshness, slot and prior advancement,
    then under the same phase lock recheck lease/deadline/phase and initiate the
@@ -270,8 +285,9 @@ raw payloads or model output.
 
 ## One-way close and proof
 
-After all four settlements, require a successful pinned-origin TLS-validated
-`GET /health/ready` returning HTTP 200 from the same gateway route. A signed,
+After all four settlements, issue an unpredictable challenge and require its
+successful pinned-origin TLS-validated `GET /health/ready` attestation returning
+HTTP 200 from the same gateway route. A signed,
 one-use `close_for_deny` then closes normal forwarding **before** attempting its
 durable marker. If marker creation is uncertain, remain closed and refuse
 probes/restart. The separately trusted operator consumes a distinct durable
@@ -289,7 +305,10 @@ blocks continuation. No probe path can proxy other routes or paid traffic.
 
 The verifier validates exact ARM state and authorizes the signed, single-use
 pre-restart probe. The proxy consumes its phase-specific marker before the GET and
-attests TLS-validated upstream **403**, fixed origin and unique request ID. The
+attests TLS-validated upstream **403**, fixed origin, unique request ID, request
+start and response-observation timestamps. The marker has an unpredictable nonce;
+an independently signed ingress-start observation must fall conservatively after
+the marker and between the request start and response observation. The
 independent verifier requires the calibrated ingress-policy
 `ResponseCodeDetails`, **zero upstream attempts**, complete app logs with no
 matching request, and a fresh exact ARM GET; neither status alone nor proxy errors
@@ -301,7 +320,9 @@ revision **before** making the single restart mutation. A lost acknowledgement,
 crash or uncertain outcome is retained and never automatically retried. The
 operator independently observes an actual changed process, readiness, sole-worker
 topology and unchanged Table accounts, and signs a restart-completion attestation
-bound to that marker. Only then can the verifier authorize the distinct one-use
+bound to that marker. A nonce-bound nonblocking initiation gate enforces the
+operator authorization deadline, and a separate verifier signs timely operation
+start against the exact restart target. Only then can the verifier authorize the distinct one-use
 post-restart probe. It must independently meet the same TLS-validated 403,
 calibrated details, zero attempts, complete app-log and fresh ARM conditions with
 a new request ID. The verifier signs final combined evidence. Probe timeout,

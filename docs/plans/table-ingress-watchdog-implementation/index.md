@@ -1,11 +1,12 @@
 # Isolated Ingress Watchdog Implementation Plan
 
-**Status: Planned; implementation blocked.** Independent review conditionally
-approved this plan with no remaining Critical/Major plan findings. Before coding,
-the whole-host-suspension guarantee requires a separately reviewed design
-decision. This is not an implementation, deployment, live validation, or exact
-G1 packet. The operator approved stages in principle; infrastructure, budget and
-execution packet gates remain open.
+**Status: Partially implemented; local-only.** Independent review
+conditionally approved the plan and passed the suspension-guarantee amendment
+with no material Critical/Major findings. The guarantee is explicitly
+limited to a running gateway host; total suspension/loss invalidates the session
+and has no finite socket-closure bound. Local protocol primitives and focused
+tests are in progress. Resume ordering, end-to-end process wiring and all Azure,
+budget and exact G1 packet gates remain open.
 
 ## Objective
 
@@ -32,12 +33,12 @@ Implement and locally verify the independently reviewed [watchdog design](../tab
 
 ## Work ordering
 
-1. Independent review of this concrete plan; resolve all Critical/Major findings before implementation. Independently amend the original host-suspension guarantee or specify a proven external data-plane enforcer before implementing it.
+1. Independent review of this concrete plan and the narrowed suspension guarantee; resolve all Critical/Major findings before implementation. **Complete:** plan amendment passed review; total host suspension has no finite close bound and invalidates the session.
 2. Build and test the local, default-closed gateway/supervisor/verifier and fresh G1 harness as specified in [activities](activities.md) and [protocol](protocol.md).
 3. Independently review implementation, complete applicable verification and resolve findings. A local pass is not Azure evidence.
 4. Separately prepare and independently review the Azure what-if, identities, costs and disposable feasibility packet; perform only the approved non-paid verification. Block if any isolation, time, WORM, diagnostics or attempt-limit assumption fails.
 5. Prepare a fresh exact four-case G1 packet with independently verified budget and signatures. Execute only after its separate independent approval and all preceding gates pass.
 
-No step above is carried out by this planning request. Resource provisioning,
-clock confidence, diagnostics, privilege separation and financial evidence remain
-feasibility gates, not established facts.
+Resource provisioning, clock confidence, diagnostics, privilege separation and
+financial evidence remain feasibility gates, not established facts. This local
+implementation does not authorize or perform Azure mutation or paid requests.
