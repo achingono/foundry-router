@@ -1,6 +1,6 @@
 # Public API
 
-## Status: Implemented locally; scoped Google Responses text live verification passed; embeddings live verification and `chat/completions` remain unverified/Planned respectively
+## Status: Implemented locally; provider and deployment acceptance are environment-specific
 
 The service exposes an OpenAI-compatible base URL such as `https://<host>/openai/v1`. Clients provide the logical model name; the current implementation forwards Responses and embeddings requests using deterministic weighted ordering with health-aware retry, cooldown, and single failover. Equal-weight candidates use the lexicographically smallest backend ID.
 
@@ -764,3 +764,11 @@ unverified token usage from the public response. Its bounded inspection profile
 preserves one `caBX` provenance chunk without parsing or trusting it; all image
 bytes and their digest are preserved. See [configuration](../configuration/index.md)
 and [live compatibility remediation](../plans/foundry-three-models/mai-remediation.md).
+
+## Optional Azure preparation intake (Implemented, disabled by default)
+
+`FOUNDRY_AZURE_INTAKE_ENABLED=true` selects bounded capture and isolated preparation for Responses and embeddings. Azure pools using `azure_foundry`, `azure_anthropic` or `azure_mai` can use their configured Azure request bound. Other provider pools retain the ordinary request bound and supported shapes. Native Azure payloads preserve their original file-backed JSON; translated Azure requests are validated, estimated and encoded in isolated child processes. Credential injection remains in the parent backend client.
+
+The configured limit counts wire bytes, including JSON and Base64. The configuration ceiling is 1 GiB of wire input, which is a design ceiling rather than a proven deployment capacity. Encoded translated output also has a bound and may be larger than its input. Oversized or malformed input returns an explicit validation error before provider dispatch; intake capacity and preparation availability failures return `503 router_intake_busy` or `503 router_intake_unavailable`. Credit and quota admission still run before egress. Cancellation and stream finalization retain preparation ownership through cleanup; no retry or failover occurs after meaningful streaming output.
+
+The public request shapes and provider-specific capability restrictions remain in force. A larger intake setting does not enable unsupported parameters, streaming modes, generated media or provider limits. See [configuration](../configuration/index.md#optional-azure-intake-budgets) and [deployment gates](../operations/production-deployment.md).

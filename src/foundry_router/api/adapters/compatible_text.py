@@ -52,6 +52,7 @@ class CompatibleTextAdapter(OpenAICompatibleAdapter[TextRequestContext]):
 
     null_tolerated_message_fields = frozenset({"reasoning"})
     stream_decoder_class = CompatibleTextStreamDecoder
+    request_text_budget = MAX_TEXT_BYTES
 
     def request_context(self, body: dict[str, Any]) -> TextRequestContext:
         _ = body
@@ -80,7 +81,7 @@ class CompatibleTextAdapter(OpenAICompatibleAdapter[TextRequestContext]):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError("Compatible histories require nonempty text")
             used_bytes += len(value.encode())
-            if used_bytes > MAX_TEXT_BYTES:
+            if used_bytes > self.request_text_budget:
                 raise ValueError("Compatible text history exceeds its byte bound")
             return value
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from functools import partial
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
@@ -19,8 +19,14 @@ from foundry_router.api.adapters.google_image_request import (
     image_output_request,
     validate_image_output_request,
 )
+from foundry_router.api.azure_intake import (
+    AzureIntakeQuotaStore,
+    AzureIntakeRequest,
+    intake_delivery_owner,
+)
 from foundry_router.api.common import (
     api_error,
+    azure_request_body,
     finalize_non_streaming_credit,
     forward_headers,
     request_body,
@@ -118,12 +124,156 @@ def build_router(
             ],
         }
 
+    async def captured_response(
+        request: Request,
+        settings: Any,
+        started: float,
+        ordinary_deadline: float,
+        operation: Literal["responses", "embeddings"],
+    ) -> Response:
+        context = await azure_request_body(
+            request,
+            operation,
+            settings=settings,
+            started=started,
+            ordinary_deadline=ordinary_deadline,
+            offload_json=operation == "responses"
+            and any(
+                pool.continuation_policy == "bound_history_required"
+                for pool in settings.models.values()
+            ),
+        )
+        if isinstance(context, JSONResponse):
+            return context
+        transferred = False
+        try:
+            if context.prepared is not None:
+                result = await prepared_azure_response(request, settings, context)
+            else:
+                assert context.body is not None
+                handler = ordinary_responses if operation == "responses" else ordinary_embeddings
+                result = await handler(request, settings, ordinary_deadline, context.body, context)
+            owner = intake_delivery_owner(request.state)
+            if context.delivery_deadline is not None and owner is not None:
+                owner.transfer(context.lease, context.delivery_deadline)
+                transferred = True
+            return result
+        finally:
+            if not transferred:
+                await context.lease.close()
+
+    async def prepared_azure_response(
+        request: Request, settings: Any, context: AzureIntakeRequest
+    ) -> Response:
+        value = context.prepared
+        assert value is not None
+        headers = forward_headers(request)
+        output_lease = None
+        output_transferred = False
+        if any(settings.backends[name].provider == "azure_mai" for name in value.accepted_backends):
+            if sys.platform != "linux":
+                return api_error(503, "Generated output requires Linux", "upstream_error")
+            try:
+                output_lease = OutputInspectionLease(slots=1, allow_c2pa=True)
+            except ValueError:
+                return api_error(503, "Generated output inspection is busy", "upstream_error")
+            try:
+                output_ready = await output_lease.ready(deadline=context.intake_deadline)
+            except BaseException:
+                output_lease.close()
+                raise
+            if not output_ready:
+                output_lease.close()
+                return api_error(503, "Generated output inspector is unavailable", "upstream_error")
+        quota = (
+            AzureIntakeQuotaStore(rate_limit_store, context, settings)
+            if rate_limit_store is not None
+            else None
+        )
+
+        async def execute(
+            backend_id: str,
+            *,
+            reservation_deadline_monotonic: float,
+            quota_attempt_id: str | None = None,
+        ) -> BackendRequestResult:
+            if quota is not None:
+                quota.bind_backend(backend_id, quota_attempt_id or request.state.request_key)
+            options = {
+                "settings": settings,
+                "backend_id": backend_id,
+                "headers": headers,
+                "body": None,
+                "get_backend_client": get_backend_client_fn,
+                "set_backend_active": health_store.set_backend_active,
+                "set_backend_cooldown": health_store.set_backend_cooldown,
+                "sleep": sleep_fn,
+                "api_error": api_error,
+                "reservation_deadline_monotonic": reservation_deadline_monotonic,
+                "azure_intake": context,
+            }
+            if value.stream:
+                return await forward_streaming_with_retries(
+                    **options,
+                    request_id=request.state.request_key,
+                    credit_store=credit_store,
+                    metrics_store=metrics_store,
+                    rate_limit_store=quota,
+                )
+            return await forward_non_streaming_with_retries(
+                **options,
+                operation=value.operation,
+                output_lease=output_lease,
+            )
+
+        try:
+            result = await execute_with_single_failover(
+                settings,
+                value.model,
+                operation=value.operation,
+                body=None,
+                request_id=request.state.request_key,
+                execute_backend=execute,
+                health_store=health_store,
+                credit_store=credit_store,
+                rate_limit_store=quota,
+                metrics_store=metrics_store,
+                logger=logger,
+                api_error=api_error,
+                finalize_non_streaming_credit=partial(
+                    finalize_non_streaming_credit,
+                    credit_store=credit_store,
+                    rate_limit_store=quota,
+                ),
+                requested_model=value.requested_model,
+                is_alias=value.requested_model != value.model,
+                intake_deadline_monotonic=context.intake_deadline,
+                exclusion_store=exclusion_store,
+                azure_intake=context,
+            )
+
+            owner = delivery_owner(request.state)
+            if output_lease is not None and result.status_code == 200 and owner is not None:
+                if output_lease.delivery_deadline is None:
+                    return api_error(
+                        502, "Generated output delivery is unavailable", "upstream_error"
+                    )
+                owner.transfer(output_lease, output_lease.delivery_deadline)
+                output_transferred = True
+            return result
+        finally:
+            if output_lease is not None and not output_transferred:
+                output_lease.close()
+
     @router.post(
         "/openai/v1/responses", tags=["OpenAI"], dependencies=[Depends(verify_client_auth)]
     )
     async def create_response(request: Request) -> Response:
         settings = load_settings_fn()
-        intake_deadline = time.monotonic() + settings.intake_timeout_seconds
+        started = time.monotonic()
+        intake_deadline = started + settings.intake_timeout_seconds
+        if settings.azure_intake_enabled:
+            return await captured_response(request, settings, started, intake_deadline, "responses")
         body = await request_body(
             request,
             "responses",
@@ -140,6 +290,15 @@ def build_router(
         )
         if isinstance(body, JSONResponse):
             return body
+        return await ordinary_responses(request, settings, intake_deadline, body)
+
+    async def ordinary_responses(
+        request: Request,
+        settings: Any,
+        intake_deadline: float,
+        body: dict[str, Any],
+        intake_context: AzureIntakeRequest | None = None,
+    ) -> Response:
         aliases = getattr(settings, "model_aliases", {}) or {}
         resolution = resolve_model_alias(body["model"], aliases)
         if resolution.resolved_model not in settings.models:
@@ -372,6 +531,7 @@ def build_router(
                     is_alias=resolution.is_alias,
                     intake_deadline_monotonic=intake_deadline,
                     exclusion_store=exclusion_store,
+                    azure_intake=intake_context,
                     **media_options,
                 )
 
@@ -418,6 +578,7 @@ def build_router(
                 is_alias=resolution.is_alias,
                 intake_deadline_monotonic=intake_deadline,
                 exclusion_store=exclusion_store,
+                azure_intake=intake_context,
                 **media_options,
             )
             owner = delivery_owner(request.state)
@@ -441,7 +602,12 @@ def build_router(
     )
     async def create_embeddings(request: Request) -> Response:
         settings = load_settings_fn()
-        intake_deadline = time.monotonic() + settings.intake_timeout_seconds
+        started = time.monotonic()
+        intake_deadline = started + settings.intake_timeout_seconds
+        if settings.azure_intake_enabled:
+            return await captured_response(
+                request, settings, started, intake_deadline, "embeddings"
+            )
         body = await request_body(
             request,
             "embeddings",
@@ -450,6 +616,15 @@ def build_router(
         )
         if isinstance(body, JSONResponse):
             return body
+        return await ordinary_embeddings(request, settings, intake_deadline, body)
+
+    async def ordinary_embeddings(
+        request: Request,
+        settings: Any,
+        intake_deadline: float,
+        body: dict[str, Any],
+        intake_context: AzureIntakeRequest | None = None,
+    ) -> Response:
         aliases = getattr(settings, "model_aliases", {}) or {}
         resolution = resolve_model_alias(body["model"], aliases)
         if resolution.resolved_model not in settings.models:
@@ -498,6 +673,7 @@ def build_router(
             is_alias=resolution.is_alias,
             intake_deadline_monotonic=intake_deadline,
             exclusion_store=exclusion_store,
+            azure_intake=intake_context,
         )
 
     return router

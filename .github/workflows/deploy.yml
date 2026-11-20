@@ -22,6 +22,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.environment != 'production'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,64 +157,15 @@ jobs:
             --retry-delay 10
 
   deploy-production:
-    runs-on: ubuntu-latest
-    needs: validate-bicep
+    name: Production requires reviewed maintenance
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'
-    environment: production
-    permissions:
-      contents: read
-      packages: read
-    env:
-      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Azure CLI
-        run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
-      - name: Login to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS_PRODUCTION }}
-
-      - name: Deploy to production
-        run: |
-          az deployment group create \
-            --name foundry-router-prod-$(date +%s) \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
-            --template-file infra/main.bicep \
-            --parameters infra/parameters.prod.json \
-            --parameters registryAuthMode=secret registryServer=ghcr.io registryUsername=${{ github.actor }} \
-              imageRepository=${{ vars.FOUNDRY_IMAGE_REPOSITORY }} imageTag=main-${{ github.sha }} \
-              registryPassword="$GHCR_TOKEN" alertEmailAddress=${{ vars.FOUNDRY_ALERT_EMAIL }}
-
-  smoke-test-production:
     runs-on: ubuntu-latest
-    needs: deploy-production
-
+    permissions: {}
+    concurrency:
+      group: foundry-router-production
+      cancel-in-progress: false
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Login to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS_PRODUCTION }}
-
-      - name: Get FQDN
-        id: fqdn
+      - name: Refuse sample-based production deployment
         run: |
-          FQDN=$(az deployment group show \
-            --name foundry-router-prod-* \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP_PRODUCTION }} \
-            --query 'properties.outputs.containerAppFqdn.value' -o tsv)
-          echo "app_url=https://$FQDN" >> $GITHUB_OUTPUT
-
-      - name: Run smoke tests
-        run: |
-          ./scripts/operations/smoke-test.sh \
-            --url "${{ steps.fqdn.outputs.app_url }}" \
-            --admin-key "${{ secrets.ADMIN_API_KEY_PRODUCTION }}" \
-            --client-key "${{ secrets.CLIENT_API_KEY_PRODUCTION }}"
+          echo "::error::Automatic production deployment is disabled. Follow docs/operations/production-deployment.md for the reviewed maintenance procedure. Production configuration and Table state must be preserved."
+          exit 1

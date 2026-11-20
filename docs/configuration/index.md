@@ -1,6 +1,6 @@
 # Configuration
 
-## Status: Implemented (Google AI Studio quota-aware routing is single-process and the Responses/embeddings adapter is implemented with mocked verification; distributed quota accounting and real Google inference remain Planned)
+## Status: Implemented; deployment capacity and provider compatibility require acceptance
 
 Configuration is externalized through validated environment variables and dotenv values. Secrets must come from environment variables, Azure Container Apps secrets, or managed identity where supported. They must never be committed to source, Git history, images, logs, or diagnostic responses. Retry/cooldown/failover settings are runtime behavior, and Phase 04 local credit estimation settings are runtime-enforced.
 
@@ -493,3 +493,19 @@ preserves one CRC-valid, nonempty `caBX` provenance chunk up to 64 KiB between
 IHDR and IDAT. Embedded provenance is opaque and its authenticity is unverified.
 The 1 MiB image, 1024 RGB/RGBA raster, chunk and expansion bounds remain. Other
 ancillary chunks fail; the default Google inspection profile rejects `caBX`.
+
+## Optional Azure intake budgets
+
+Status: Implemented locally and disabled by default. Raising the request limit requires measured full-runtime capacity and deployment acceptance.
+
+| Environment variable | Default and validation |
+| --- | --- |
+| `FOUNDRY_AZURE_INTAKE_ENABLED` | `false`; enables bounded capture and isolated preparation |
+| `FOUNDRY_AZURE_MAX_REQUEST_BODY_BYTES` | Unset inherits `FOUNDRY_MAX_REQUEST_BODY_BYTES`; integer from 1,024 through 1,073,741,824 |
+| `FOUNDRY_AZURE_INTAKE_TIMEOUT_SECONDS` | Unset inherits ordinary intake timeout; finite 0.1 through 120 seconds |
+| `FOUNDRY_AZURE_INTAKE_CHILD_WALL_TIMEOUT_SECONDS` | 30 seconds; finite 0.1 through 120 seconds |
+| `FOUNDRY_AZURE_INTAKE_CHILD_ADDRESS_SPACE_BYTES` | Unset; explicit calibrated integer budget required when Azure input bound exceeds the ordinary bound; 67,108,864 through 68,719,476,736 |
+| `FOUNDRY_AZURE_INTAKE_SCRATCH_BYTES` | 2,415,919,104; integer from 1,024 through that ceiling, at least twice the effective Azure input bound |
+| `FOUNDRY_COMPLETION_LOGS_ENABLED` | `false`; independent bounded console completion sink |
+
+Byte budgets reject booleans and noninteger values. Input and prepared output are covered by scratch reservations. Linux address-space limits, JSON/Base64/Unicode expansion, concurrent preparation and stream ownership all affect actual capacity. The 1 GiB wire ceiling does not establish that a configured worker can accept that size. Keep ordinary provider limits independent. Completion console observations do not require enabling OTLP; see [completion logs](../operations/completion-logs.md).
