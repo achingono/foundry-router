@@ -668,15 +668,16 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
     if len(raw_body) > MAX_REQUEST_BYTES:
         return finish("request_bound_exceeded")
     marker = _EntryMarker(transport)
+    # Stream so bounds apply while reading: headers mark dispatch,
+    # raw identity bytes are counted as they arrive, and the
+    # response closes on every exit path below.
     try:
         async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
-            async with httpx.AsyncClient(
-                transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
-            ) as client:
-                # Stream so bounds apply while reading: headers mark dispatch,
-                # raw identity bytes are counted as they arrive, and the
-                # response closes on every exit path below.
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(
+                    transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
+                ) as client,
+                client.stream(
                     "POST",
                     PROBE_URL,
                     headers={
@@ -685,21 +686,22 @@ async def run_probe(  # noqa: PLR0911 -- fixed outcome checklist
                         "content-type": "application/json",
                     },
                     content=raw_body,
-                ) as response:
-                    result["dispatched"] = True
-                    result["http_status"] = response.status_code
-                    if response.headers.get("content-encoding", "identity").lower() != "identity":
-                        return finish("encoded_response")
-                    if response.status_code != HTTPStatus.OK:
-                        return finish(None)
-                    chunks = bytearray()
-                    try:
-                        async for chunk in response.aiter_bytes():
-                            if len(chunks) + len(chunk) > MAX_BODY_BYTES:
-                                return finish("response_bound_exceeded")
-                            chunks.extend(chunk)
-                    except (OSError, RuntimeError, httpx.HTTPError, ValueError):
-                        return finish("transport_failure")
+                ) as response,
+            ):
+                result["dispatched"] = True
+                result["http_status"] = response.status_code
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    return finish("encoded_response")
+                if response.status_code != HTTPStatus.OK:
+                    return finish(None)
+                chunks = bytearray()
+                try:
+                    async for chunk in response.aiter_bytes():
+                        if len(chunks) + len(chunk) > MAX_BODY_BYTES:
+                            return finish("response_bound_exceeded")
+                        chunks.extend(chunk)
+                except (OSError, RuntimeError, httpx.HTTPError, ValueError):
+                    return finish("transport_failure")
     except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError):
         # Transport entry may precede headers: preserve conservative dispatch
         # intent instead of reporting zero egress. Raised values carry no
@@ -753,10 +755,11 @@ async def run_stream_probe(  # noqa: PLR0911, PLR0912 -- fixed outcome checklist
     state = new_stream_state()
     try:
         async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
-            async with httpx.AsyncClient(
-                transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
-            ) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(
+                    transport=marker, timeout=PROBE_TIMEOUT_SECONDS, trust_env=False
+                ) as client,
+                client.stream(
                     "POST",
                     PROBE_URL,
                     headers={
@@ -765,38 +768,39 @@ async def run_stream_probe(  # noqa: PLR0911, PLR0912 -- fixed outcome checklist
                         "content-type": "application/json",
                     },
                     content=raw_body,
-                ) as response:
-                    result["dispatched"] = True
-                    result["http_status"] = response.status_code
-                    if response.headers.get("content-encoding", "identity").lower() != "identity":
-                        return finish("encoded_response")
-                    if response.status_code != HTTPStatus.OK:
-                        return finish(None)
-                    observed = 0
-                    pending = bytearray()
-                    try:
-                        async for chunk in response.aiter_bytes():
-                            observed += len(chunk)
-                            if observed > MAX_BODY_BYTES:
+                ) as response,
+            ):
+                result["dispatched"] = True
+                result["http_status"] = response.status_code
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    return finish("encoded_response")
+                if response.status_code != HTTPStatus.OK:
+                    return finish(None)
+                observed = 0
+                pending = bytearray()
+                try:
+                    async for chunk in response.aiter_bytes():
+                        observed += len(chunk)
+                        if observed > MAX_BODY_BYTES:
+                            return finish("response_bound_exceeded")
+                        pending.extend(chunk)
+                        while True:
+                            event, rest = _split_sse_frame(bytes(pending))
+                            if event is None:
+                                break
+                            pending = bytearray(rest)
+                            if len(event) > MAX_FRAME_BYTES:
                                 return finish("response_bound_exceeded")
-                            pending.extend(chunk)
-                            while True:
-                                event, rest = _split_sse_frame(bytes(pending))
-                                if event is None:
-                                    break
-                                pending = bytearray(rest)
-                                if len(event) > MAX_FRAME_BYTES:
-                                    return finish("response_bound_exceeded")
-                                classify_stream_frame(event, state)
-                            # Bound only the residual incomplete frame: the
-                            # buffer above may hold several individually valid
-                            # frames depending on transport chunking.
-                            if len(pending) > MAX_FRAME_BYTES:
-                                return finish("response_bound_exceeded")
-                    except (OSError, RuntimeError, httpx.HTTPError, ValueError):
-                        return finish("transport_failure")
-                    if pending.strip():
-                        state["truncated"] = True
+                            classify_stream_frame(event, state)
+                        # Bound only the residual incomplete frame: the
+                        # buffer above may hold several individually valid
+                        # frames depending on transport chunking.
+                        if len(pending) > MAX_FRAME_BYTES:
+                            return finish("response_bound_exceeded")
+                except (OSError, RuntimeError, httpx.HTTPError, ValueError):
+                    return finish("transport_failure")
+                if pending.strip():
+                    state["truncated"] = True
     except (TimeoutError, OSError, RuntimeError, httpx.HTTPError, ValueError):
         result["dispatched"] = marker.entered
         return finish("transport_failure")

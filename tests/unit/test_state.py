@@ -86,9 +86,8 @@ class FakeTableClient:
                     return False
                 self.entities[key] = dict(op.entity) if op.entity else {}
                 self.entities[key]["odata.etag"] = f"v{len(self.entities)}"
-            elif op.operation == "Delete":
-                if key in self.entities:
-                    del self.entities[key]
+            elif op.operation == "Delete" and key in self.entities:
+                del self.entities[key]
         return True
 
     async def query_entities(
