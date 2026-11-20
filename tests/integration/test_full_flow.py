@@ -7,6 +7,8 @@ import json
 import logging
 import subprocess
 import time
+import uuid
+from pathlib import Path
 
 import httpx
 import pytest
@@ -264,14 +266,15 @@ class TestDockerBuild:
 
     @pytest.mark.slow
     @pytest.mark.docker
-    def test_docker_build_and_health(self):
+    def test_docker_build_and_health(self, tmp_path):
         """Build Docker image and verify health endpoint."""
         # This test requires Docker and is marked as slow
         # Run with: pytest -m docker tests/integration/test_full_flow.py::TestDockerBuild::test_docker_build_and_health
 
-        # Build image
+        image = f"foundry-router:verification-{uuid.uuid4().hex}"
+        cid_file = tmp_path / "container.cid"
         result = subprocess.run(
-            ["docker", "build", "-t", "foundry-router:test-integration", "."],
+            ["docker", "build", "-t", image, "."],
             capture_output=True,
             text=True,
             timeout=120,
@@ -285,10 +288,10 @@ class TestDockerBuild:
                     "docker",
                     "run",
                     "-d",
-                    "--name",
-                    "foundry-router-test",
+                    "--cidfile",
+                    str(cid_file),
                     "-p",
-                    "18000:8000",
+                    "127.0.0.1::8000",
                     "-e",
                     'FOUNDRY_BACKENDS_JSON={"mock": {"endpoint": "https://mock.openai.azure.com", "credential": "key", "deployment": "gpt-4"}}',
                     "-e",
@@ -301,24 +304,35 @@ class TestDockerBuild:
                     "FOUNDRY_PRICING_JSON={}",
                     "-e",
                     "FOUNDRY_BACKEND_CYCLE_START_DAY_JSON={}",
-                    "foundry-router:test-integration",
+                    image,
                 ],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
             assert run_result.returncode == 0, f"Docker run failed: {run_result.stderr}"
-
-            # Wait for startup
-            time.sleep(3)
+            container_id = _owned_docker_id(cid_file)
+            assert container_id is not None, "Docker did not record an owned container ID"
+            assert run_result.stdout.strip() == container_id, "Docker container identity mismatch"
+            port_result = subprocess.run(
+                ["docker", "inspect", "--format", "{{json .NetworkSettings.Ports}}", container_id],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            assert port_result.returncode == 0, "Docker port discovery failed"
+            bindings = json.loads(port_result.stdout)["8000/tcp"]
+            assert len(bindings) == 1 and bindings[0]["HostIp"] == "127.0.0.1"
+            port = int(bindings[0]["HostPort"])
+            assert 0 < port < 65536
 
             # Test health endpoint
             for _ in range(10):
                 try:
-                    response = httpx.get("http://localhost:18000/health/live", timeout=2)
+                    response = httpx.get(f"http://127.0.0.1:{port}/health/live", timeout=2)
                     if response.status_code == 200:
                         break
-                except Exception:
+                except httpx.HTTPError:
                     pass
                 time.sleep(1)
             else:
@@ -327,6 +341,80 @@ class TestDockerBuild:
             assert response.json() == {"status": "alive"}
 
         finally:
-            # Cleanup
-            subprocess.run(["docker", "stop", "foundry-router-test"], capture_output=True)
-            subprocess.run(["docker", "rm", "foundry-router-test"], capture_output=True)
+            container_id = _owned_docker_id(cid_file)
+            if container_id is not None:
+                # Only the CID written for this invocation may be removed, including
+                # when the Docker client timed out after daemon-side creation.
+                removed = subprocess.run(
+                    ["docker", "rm", "--force", container_id], capture_output=True, timeout=30
+                )
+                if removed.returncode == 0:
+                    subprocess.run(
+                        ["docker", "image", "rm", image], capture_output=True, timeout=30
+                    )
+
+
+def _owned_docker_id(cid_file: Path) -> str | None:
+    if not cid_file.is_file() or cid_file.is_symlink():
+        return None
+    container_id = cid_file.read_text().strip()
+    if len(container_id) == 64 and all(c in "0123456789abcdef" for c in container_id):
+        return container_id
+    return None
+
+
+class TestDockerOwnership:
+    """Exercise cleanup ownership without contacting the Docker daemon."""
+
+    @pytest.mark.parametrize("cid", [None, "invalid", "a" * 64])
+    @pytest.mark.parametrize("timeout", [False, True])
+    def test_failed_start_only_cleans_its_recorded_container(
+        self, monkeypatch, tmp_path, cid, timeout
+    ):
+        calls = []
+
+        def run(args, **_kwargs):
+            calls.append(args)
+            if args[1] == "run":
+                if cid is not None:
+                    Path(args[args.index("--cidfile") + 1]).write_text(cid)
+                if timeout:
+                    raise subprocess.TimeoutExpired(args, 30)
+                return subprocess.CompletedProcess(args, 1, "", "container startup failed")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", run)
+        with pytest.raises(subprocess.TimeoutExpired if timeout else AssertionError):
+            TestDockerBuild().test_docker_build_and_health(tmp_path)
+        removals = [call for call in calls if call[1] == "rm"]
+        assert removals == ([["docker", "rm", "--force", cid]] if cid == "a" * 64 else [])
+        assert not any("foundry-router-test" in call for call in calls)
+
+    def test_success_uses_owned_identity_and_loopback_port(self, monkeypatch, tmp_path):
+        cid = "b" * 64
+        calls = []
+        urls = []
+
+        def run(args, **_kwargs):
+            calls.append(args)
+            output = ""
+            if args[1] == "run":
+                assert args[args.index("-p") + 1] == "127.0.0.1::8000"
+                Path(args[args.index("--cidfile") + 1]).write_text(cid)
+                output = cid
+            elif args[1] == "inspect":
+                assert args[-1] == cid
+                output = json.dumps({"8000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "32123"}]})
+            return subprocess.CompletedProcess(args, 0, output, "")
+
+        def get(url, **_kwargs):
+            urls.append(url)
+            return httpx.Response(200, json={"status": "alive"})
+
+        monkeypatch.setattr(subprocess, "run", run)
+        monkeypatch.setattr(httpx, "get", get)
+        TestDockerBuild().test_docker_build_and_health(tmp_path)
+        assert urls == ["http://127.0.0.1:32123/health/live"]
+        assert [call for call in calls if call[1] == "rm"] == [["docker", "rm", "--force", cid]]
+        image = calls[0][calls[0].index("-t") + 1]
+        assert ["docker", "image", "rm", image] in calls

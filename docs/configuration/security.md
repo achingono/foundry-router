@@ -139,3 +139,9 @@ Google stateless compatible text may omit only the exact bounded opaque thought-
 wrapper after validating its shape/encoding. Signature bytes never enter public output or
 logs, are never persisted/replayed, and grant no tools/history/continuation capability. Other
 provider state, unknown wrapper fields and malformed/oversize signatures still fail closed.
+
+## Isolated Azure preparation and completion observations
+
+Optional Azure intake uses bounded file-backed capture and isolated child preparation. Child inputs contain payload/configuration required for validation and estimation, with credentials excluded; the parent selects and authenticates the backend. Scratch ownership survives request cancellation and streaming until cleanup is confirmed. Child wall time, address space, input/output size and concurrent leases are bounded. Activation requires actual Linux and full-runtime capacity acceptance; a configuration maximum does not prove containment for every deployment.
+
+The default-off completion sink serializes an allowlist of bounded fields and never merges ambient request context. It excludes prompts, outputs, credentials, headers, URLs, correlation IDs and exception text. Console backpressure cannot block request execution; overflow drops observations and exposes counters through authenticated diagnostics. See [completion observations](../operations/completion-logs.md). Retain environment-specific acceptance records privately and review public release contents before publication.

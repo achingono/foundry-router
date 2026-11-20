@@ -4,11 +4,13 @@ Contributor and coding-agent instructions for Foundry Router.
 
 ## Repository Status
 
-Runtime phases through Phase 09, typed Bicep resource modules/public adapter and Phase 11 distributed-state code are implemented. Azure template validation, one/two-replica synthetic Table verification and existing-account cross-RG synthetic runtime passed, including managed-identity reservations, shared diagnostics, targeted container restart persistence and idempotent scoped grants. Production cut-over remains pending; production must remain memory-backed with `maxReplicas: 1` until remaining gates pass. Real inference, provider admission traffic and multi-worker metrics aggregation remain unverified. See docs/plans/table-runtime-validation/evidence.md, docs/plans/table-two-replica/evidence.md and docs/plans/table-existing-cross-rg/evidence.md for exact scope. Do not describe unverified Azure behavior as deployed, invent resource IDs, or assume documented endpoints are runnable. Use `Implemented`, `Partially implemented`, `Planned`, and `Design target` consistently.
+Runtime phases through Phase 09, typed Bicep modules and distributed Table state are implemented. Optional Azure native/translated intake and completion logging are implemented and disabled by default. Environment-specific provider, ingress, capacity, persistence, ingestion and scale acceptance are operator responsibilities. Keep a single replica until the relevant distributed-state and scale gates pass. Do not describe unverified Azure behavior as deployed, invent resource IDs, or assume documented endpoints are runnable. Use Implemented, Partially implemented, Planned and Design target consistently.
+
+Preserve existing account ledgers during maintenance. Never reseed authoritative Table balances or revive a stale memory revision. Keep environment-specific allocations, resource identities and acceptance records outside public release commits.
 
 ## Canonical References
 
-Real non-streaming/streaming Responses and usage settlement also passed for the two configured models in the dedicated memory/one test app; see docs/plans/foundry-inference/evidence.md. Table-backed real inference, embeddings, provider failure/admission traffic and production cut-over remain unverified. Azure Responses uses resource-level v1 routing; embeddings retains its deployment-scoped versioned route.
+Azure Responses uses resource-level v1 routing; embeddings retains its deployment-scoped versioned route. Automatic production dispatch is guarded; use the reviewed maintenance procedure in [production deployment](docs/operations/production-deployment.md).
 
 - Documentation hub: [`docs/index.md`](docs/index.md)
 - Getting started: [`docs/getting-started/index.md`](docs/getting-started/index.md)

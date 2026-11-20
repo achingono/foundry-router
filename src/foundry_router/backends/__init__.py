@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from foundry_router.api.azure_intake import AzureIntakeRequest
 from urllib.parse import quote
 
 import httpx
@@ -264,12 +270,31 @@ class AllowedBackendClient:
         *,
         method: str = "POST",
         headers: dict[str, str] | None = None,
+        azure_intake: AzureIntakeRequest | None = None,
         **kwargs: Any,
     ) -> httpx.Response:
         """Request a configured deployment with its server-side credential."""
         url = self._backend_url(backend_id, operation)
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
+        if azure_intake is not None:
+            if any(k in kwargs for k in ("json", "data", "files", "content")):
+                raise SecurityError("Prepared content cannot be overridden")
+            if azure_intake.prepared is None:
+                raise SecurityError("Prepared input binding required")
+            azure_intake.validate(self._settings, azure_intake.prepared.model, operation)
+            content = azure_intake.content(backend_id)
+            bound_headers = self._backend_headers(backend_id, headers)
+            bound_headers = {
+                key: value
+                for key, value in bound_headers.items()
+                if key.lower() not in {"content-length", "content-type"}
+            }
+            bound_headers["Content-Length"] = str(content.attempt.output_bytes)
+            bound_headers["Content-Type"] = "application/json"
+            return await self._request_spool(
+                method, url, backend_id, azure_intake, content, bound_headers, kwargs
+            )
         if isinstance(kwargs.get("json"), dict):
             kwargs = {
                 **kwargs,
@@ -279,13 +304,14 @@ class AllowedBackendClient:
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )
 
-    def stream_backend(
+    def stream_backend(  # noqa: PLR0913 -- backend boundary
         self,
         backend_id: str,
         operation: str,
         *,
         method: str = "POST",
         headers: dict[str, str] | None = None,
+        azure_intake: AzureIntakeRequest | None = None,
         native_generation_stream: bool = True,
         **kwargs: Any,
     ) -> Any:
@@ -298,6 +324,25 @@ class AllowedBackendClient:
         )
         self._validate_url(url, backend_id)
         self._validate_request_kwargs(kwargs)
+        if azure_intake is not None:
+            if (
+                any(k in kwargs for k in ("json", "data", "files", "content"))
+                or azure_intake.prepared is None
+            ):
+                raise SecurityError("Prepared input binding required")
+            azure_intake.validate(self._settings, azure_intake.prepared.model, operation)
+            content = azure_intake.content(backend_id)
+            bound_headers = self._backend_headers(backend_id, headers)
+            bound_headers = {
+                key: value
+                for key, value in bound_headers.items()
+                if key.lower() not in {"content-length", "content-type"}
+            }
+            bound_headers["Content-Length"] = str(content.attempt.output_bytes)
+            bound_headers["Content-Type"] = "application/json"
+            return self._stream_spool(
+                method, url, backend_id, azure_intake, content, bound_headers, kwargs
+            )
         if isinstance(kwargs.get("json"), dict):
             kwargs = {
                 **kwargs,
@@ -306,6 +351,44 @@ class AllowedBackendClient:
         return self._client.stream(
             method, url, headers=self._backend_headers(backend_id, headers), **kwargs
         )
+
+    async def _request_spool(  # noqa: PLR0913, PLR0917 -- transport boundary
+        self,
+        method: str,
+        url: httpx.URL,
+        backend: str,
+        intake: AzureIntakeRequest,
+        content: Any,
+        headers: dict[str, str],
+        kwargs: dict[str, Any],
+    ) -> httpx.Response:
+        try:
+            intake.mark_dispatch(backend)
+            return await self._client.request(
+                method, url, headers=headers, content=content, **kwargs
+            )
+        finally:
+            await content.aclose()
+
+    @asynccontextmanager
+    async def _stream_spool(  # noqa: PLR0913, PLR0917 -- transport boundary
+        self,
+        method: str,
+        url: httpx.URL,
+        backend: str,
+        intake: AzureIntakeRequest,
+        content: Any,
+        headers: dict[str, str],
+        kwargs: dict[str, Any],
+    ) -> AsyncIterator[httpx.Response]:
+        try:
+            intake.mark_dispatch(backend)
+            async with self._client.stream(
+                method, url, headers=headers, content=content, **kwargs
+            ) as response:
+                yield response
+        finally:
+            await content.aclose()
 
     def _validate_request_kwargs(self, kwargs: dict[str, Any]) -> None:
         if kwargs.get("follow_redirects"):

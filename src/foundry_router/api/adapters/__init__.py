@@ -59,7 +59,14 @@ def get_adapter(
     seal_context: SealContext | None = None,
     backend_id: str | None = None,
     prepared_continuation: PreparedContinuation | None = None,
+    azure_request_text_budget: int | None = None,
 ) -> ProviderAdapter:
+    if azure_request_text_budget is not None:
+        if provider == "azure_anthropic":
+            return AzureAnthropicAdapter(request_text_budget=azure_request_text_budget)
+        if provider == "azure_mai":
+            return AzureMaiAdapter(request_text_budget=azure_request_text_budget)
+        raise ValueError("Request text budget overrides require a translated Azure adapter")
     if provider == "opencode_google":
         # Error translation selects the provider without a configured profile.
         # Actual requests receive their validated text-only backend profile.

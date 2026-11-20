@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from foundry_router.api.azure_intake import AzureIntakeRuntime, intake_runtime
 from foundry_router.auth import verify_admin_auth
 from foundry_router.credit_groups import credit_membership, metered_credit_groups
 
@@ -201,6 +202,9 @@ def build_router(
 
         return {
             "version": "0.1.0",
+            "azure_intake": (intake_runtime(_request) or AzureIntakeRuntime(settings)).status(
+                settings
+            ),
             "credit_groups": {
                 group: {
                     "cycle_start_day": settings.backend_cycle_start_day.get(group),

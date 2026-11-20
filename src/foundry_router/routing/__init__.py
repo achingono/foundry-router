@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from foundry_router.api.adapters import get_adapter
 from foundry_router.api.adapters.base import AdapterRejection
+from foundry_router.api.azure_intake import AzureIntakeError, AzureIntakeRequest
 from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
 from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
@@ -26,6 +27,7 @@ from foundry_router.credit import (
     CreditAssessmentContext,
     CreditReservePolicy,
     CreditState,
+    RequestEstimate,
     RequestEstimationError,
     estimate_request_cost,
     estimate_request_cost_checked,
@@ -91,17 +93,47 @@ def _backend_supports_operation(settings: Any, backend_id: str, operation: str) 
     return operation in declared
 
 
+def _request_estimate(
+    settings: Any,
+    model: str,
+    operation: str,
+    body: dict[str, Any] | None,
+    azure_intake: AzureIntakeRequest | None,
+    *,
+    checked: bool = False,
+) -> RequestEstimate | None:
+    if azure_intake is not None and azure_intake.prepared is not None:
+        azure_intake.validate(settings, model, operation)
+        return azure_intake.estimate
+    if body is None:
+        raise ValueError("Ordinary request body required")
+    estimator = estimate_request_cost_checked if checked else estimate_request_cost
+    return estimator(
+        model=model,
+        operation=operation,
+        body=body,
+        pricing=getattr(settings, "pricing", {}),
+        settings=settings,
+    )
+
+
 def _backend_feature_rejection(
     settings: Any,
     backend_id: str,
     operation: str,
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     *,
     deadline_monotonic: float | None = None,
+    azure_intake: AzureIntakeRequest | None = None,
     prepared_media: PreparedGoogleMedia | None = None,
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
 ) -> Any | None:
+    if azure_intake is not None and azure_intake.prepared is not None:
+        if backend_id not in azure_intake.prepared.accepted_backends:
+            return AdapterRejection(413, "invalid_request", "Native Azure pool required")
+        return None
+    assert body is not None
     backends = getattr(settings, "backends", None)
     if not isinstance(backends, dict) or backend_id not in backends:
         # Legacy test doubles without backend configs keep the legacy allow-all behavior.
@@ -276,7 +308,7 @@ async def select_candidate_backend(
     model: str,
     *,
     operation: str,
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     request_id: str,
     health_store: Any,
     credit_store: Any,
@@ -291,8 +323,22 @@ async def select_candidate_backend(
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
     exclusion_store: Any = None,
+    azure_intake: AzureIntakeRequest | None = None,
     _quota_attempts: list[str] | None = None,
 ) -> BackendSelectionResult:
+    if azure_intake is not None and azure_intake.prepared is not None:
+        try:
+            azure_intake.validate(settings, model, operation)
+        except AzureIntakeError:
+            return BackendSelectionResult(
+                None,
+                [],
+                {},
+                False,
+                feature_rejection=AdapterRejection(
+                    503, "router_intake_unavailable", "Prepared input binding failed"
+                ),
+            )
     if _quota_attempts is None:
         _quota_attempts = []
     if intake_deadline_monotonic is not None:
@@ -325,6 +371,7 @@ async def select_candidate_backend(
                     prepared_media=prepared_media,
                     seal_context=seal_context,
                     prepared_continuation=prepared_continuation,
+                    azure_intake=azure_intake,
                     exclusion_store=exclusion_store,
                     _quota_attempts=_quota_attempts,
                 )
@@ -410,6 +457,7 @@ async def select_candidate_backend(
     effective_is_alias = bool(is_alias)
     ranked_candidates = ranked_model_backends(settings, model, excluded=excluded)
     if prepared_continuation is not None:
+        assert body is not None
         try:
             if seal_context is None:
                 prepared_continuation.validate(body)
@@ -463,6 +511,7 @@ async def select_candidate_backend(
             prepared_media=prepared_media,
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
+            azure_intake=azure_intake,
         )
         if seal_context is None:
             rejection = validate()
@@ -495,13 +544,7 @@ async def select_candidate_backend(
     await credit_store.sync_from_settings(settings)
 
     try:
-        estimate = estimate_request_cost_checked(
-            model=model,
-            operation=operation,
-            body=body,
-            pricing=settings.pricing,
-            settings=settings,
-        )
+        estimate = _request_estimate(settings, model, operation, body, azure_intake, checked=True)
     except RequestEstimationError as exc:
         _emit_routing_decision(
             logger,
@@ -603,6 +646,11 @@ async def select_candidate_backend(
         if exhausted_groups:
             snapshots = await health_store.snapshot_backend_health(ranked_candidates)
 
+    reservation_cost = estimate.estimated_cost_usd * (
+        max(1, settings.retry_attempts)
+        if azure_intake is not None and azure_intake.prepared is not None
+        else 1
+    )
     health_eligible = [
         backend_id
         for backend_id in ranked_candidates
@@ -766,14 +814,12 @@ async def select_candidate_backend(
                 ),
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
-            assessment = await credit_store.assess_with_context(
-                backend_id, estimate.estimated_cost_usd, ctx
-            )
+            assessment = await credit_store.assess_with_context(backend_id, reservation_cost, ctx)
         else:
             group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             assessment = await credit_store.assess(
                 backend_id,
-                estimate.estimated_cost_usd,
+                reservation_cost,
                 min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
                 min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
@@ -872,14 +918,14 @@ async def select_candidate_backend(
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
             )
             reserved = await credit_store.try_assign_with_context(
-                request_id, backend_id, estimate.estimated_cost_usd, ctx2
+                request_id, backend_id, reservation_cost, ctx2
             )
         else:
             group_policy = settings.resolve_reserve_policy(credit_group_by_backend[backend_id])
             reserved = await credit_store.try_assign_reservation(
                 request_id,
                 backend_id,
-                estimate.estimated_cost_usd,
+                reservation_cost,
                 min_credit_reserve_usd=group_policy.min_credit_reserve_usd,
                 min_credit_reserve_percent=group_policy.min_credit_reserve_percent,
                 reservation_max_age_seconds=settings.reservation_max_age_seconds,
@@ -1060,8 +1106,10 @@ def _deadline_exceeded_result(
     settings: Any,
     model: str,
     operation: str,
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     api_error: Any,
+    *,
+    azure_intake: AzureIntakeRequest | None = None,
 ) -> BackendRequestResult:
     """Synthesize a terminal billable outcome for an expired reservation.
 
@@ -1069,21 +1117,37 @@ def _deadline_exceeded_result(
     non-generation, and the attempt may already have dispatched upstream.
     """
     try:
-        estimate = estimate_request_cost(
-            model=model,
-            operation=operation,
-            body=body,
-            pricing=getattr(settings, "pricing", {}),
-            settings=settings,
-        )
+        estimate = _request_estimate(settings, model, operation, body, azure_intake)
     except Exception:
         estimate = None
+    if (
+        azure_intake is not None
+        and azure_intake.prepared is not None
+        and not azure_intake.possible_dispatch
+    ):
+        return BackendRequestResult(
+            response=api_error(408, "Backend preparation deadline exceeded", "request_timeout"),
+            retryable_failure=False,
+            confirmed_pre_dispatch=True,
+        )
     return BackendRequestResult(
         response=api_error(502, "Backend request exceeded its deadline", "upstream_error"),
         retryable_failure=False,
-        settlement_cost_usd=estimate.estimated_cost_usd if estimate is not None else None,
-        settlement_input_tokens=estimate.input_tokens if estimate is not None else None,
-        force_charge=True,
+        settlement_cost_usd=(
+            azure_intake.uncertain_cost
+            if azure_intake is not None and azure_intake.prepared is not None
+            else estimate.estimated_cost_usd
+            if estimate is not None
+            else None
+        ),
+        settlement_input_tokens=azure_intake.settlement_input_tokens
+        if azure_intake is not None and azure_intake.prepared is not None
+        else estimate.input_tokens
+        if estimate is not None
+        else None,
+        force_charge=azure_intake.has_liability
+        if azure_intake is not None and azure_intake.prepared is not None
+        else True,
     )
 
 
@@ -1095,8 +1159,9 @@ async def _execute_backend_with_deadline(
     settings: Any,
     model: str,
     operation: str,
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     api_error: Any,
+    azure_intake: AzureIntakeRequest | None = None,
     quota_attempt_id: str | None = None,
 ) -> BackendRequestResult:
     """Run one backend attempt bounded by the reservation deadline.
@@ -1121,7 +1186,9 @@ async def _execute_backend_with_deadline(
             backend_result: BackendRequestResult = await execute_backend(backend_id, **kwargs)
             return backend_result
     except TimeoutError:
-        return _deadline_exceeded_result(settings, model, operation, body, api_error)
+        return _deadline_exceeded_result(
+            settings, model, operation, body, api_error, azure_intake=azure_intake
+        )
 
 
 async def execute_with_single_failover(
@@ -1129,7 +1196,7 @@ async def execute_with_single_failover(
     model: str,
     *,
     operation: str,
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     request_id: str,
     execute_backend: Any,
     health_store: Any,
@@ -1146,9 +1213,14 @@ async def execute_with_single_failover(
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
     exclusion_store: Any = None,
+    azure_intake: AzureIntakeRequest | None = None,
 ) -> Response:
     started_at = time.monotonic()
-    stream_mode = exclusion_stream_mode(body)
+    stream_mode = (
+        azure_intake.prepared.stream
+        if azure_intake is not None and azure_intake.prepared is not None
+        else exclusion_stream_mode(body)
+    )
     # Start before admission so storage latency cannot grant a fresh lifetime
     # to a reservation already created inside initial selection. The intake
     # deadline bounds admission/selection only; execution uses the reservation
@@ -1164,6 +1236,16 @@ async def execute_with_single_failover(
         backend_id: str | None,
         actual_cost_usd: float | None = None,
     ) -> Response:
+        if azure_intake is not None:
+            google = (
+                backend_id is not None
+                and settings.backends[backend_id].provider == "google_ai_studio"
+            )
+            azure_intake.delivery_deadline = (
+                min(reservation_deadline, azure_intake.intake_deadline)
+                if google
+                else reservation_deadline
+            )
         if isinstance(response, StreamingResponse):
             return response
         await metrics_store.observe_request(
@@ -1192,6 +1274,7 @@ async def execute_with_single_failover(
             prepared_media=prepared_media,
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
+            azure_intake=azure_intake,
             exclusion_store=exclusion_store,
         )
     except QuotaStoreError:
@@ -1309,6 +1392,8 @@ async def execute_with_single_failover(
                 charge_reserved=True,
                 charged_cost_usd=cost,
             )
+            if azure_intake is not None and azure_intake.prepared is not None:
+                azure_intake.financially_finalized()
 
         operations: list[Any] = [credit]
         if rate_limit_store is not None:
@@ -1323,6 +1408,8 @@ async def execute_with_single_failover(
 
     try:
         possible_dispatch = True
+        if azure_intake is not None and azure_intake.prepared is not None:
+            azure_intake.begin_backend(first_backend_id)
         first_result = await _execute_backend_with_deadline(
             execute_backend,
             first_backend_id,
@@ -1333,6 +1420,7 @@ async def execute_with_single_failover(
             operation=operation,
             body=body,
             api_error=api_error,
+            azure_intake=azure_intake,
         )
         possible_dispatch = not first_result.confirmed_pre_dispatch
         await _record_combination_attempt(
@@ -1378,21 +1466,34 @@ async def execute_with_single_failover(
         # creates an independent reservation; without this release the first
         # partition's req-* row would orphan until the reaper runs.
         credit_finalization_attempted = True
-        try:
-            await credit_store.finalize_request(
-                request_id,
-                backend_id=first_backend_id,
-                charge_reserved=False,
-                charged_cost_usd=None,
-            )
-        except TypeError as exc:
-            if "backend_id" not in str(exc):
-                raise
-            await credit_store.finalize_request(
-                request_id,
-                charge_reserved=False,
-                charged_cost_usd=None,
-            )
+
+        async def finalize_first_credit() -> None:
+            try:
+                await credit_store.finalize_request(
+                    request_id,
+                    backend_id=first_backend_id,
+                    charge_reserved=bool(first_result.force_charge),
+                    charged_cost_usd=first_result.settlement_cost_usd
+                    if first_result.force_charge
+                    else None,
+                )
+            except TypeError as exc:
+                if "backend_id" not in str(exc):
+                    raise
+                await credit_store.finalize_request(
+                    request_id,
+                    charge_reserved=bool(first_result.force_charge),
+                    charged_cost_usd=first_result.settlement_cost_usd
+                    if first_result.force_charge
+                    else None,
+                )
+            if azure_intake is not None and azure_intake.prepared is not None:
+                azure_intake.financially_finalized()
+
+        if azure_intake is not None and azure_intake.prepared is not None:
+            await protected_cleanup([finalize_first_credit])
+        else:
+            await finalize_first_credit()
         credit_finalization_attempted = False
         # Retain the dispatched first attempt's quota consumption: convert its
         # reservation into recorded usage so the failover admission for the
@@ -1400,21 +1501,23 @@ async def execute_with_single_failover(
         # upstream dispatches share a single quota entry.
         if rate_limit_store is not None:
             try:
-                failover_estimate = estimate_request_cost(
-                    model=model,
-                    operation=operation,
-                    body=body,
-                    pricing=getattr(settings, "pricing", {}),
-                    settings=settings,
+                failover_estimate = _request_estimate(
+                    settings, model, operation, body, azure_intake
                 )
             except Exception:
                 failover_estimate = None
-            await rate_limit_store.finalize_request(
+            quota_finalize = partial(
+                rate_limit_store.finalize_request,
                 active_quota_attempt,
-                actual_input_tokens=(
-                    failover_estimate.input_tokens if failover_estimate is not None else None
-                ),
+                actual_input_tokens=failover_estimate.input_tokens
+                if failover_estimate is not None
+                else None,
             )
+            if azure_intake is not None and azure_intake.prepared is not None:
+                await protected_cleanup([quota_finalize])
+            else:
+                await quota_finalize()
+
         possible_dispatch = False
         quota_finalization_attempted = False
         second_selection = await select_candidate_backend(
@@ -1431,9 +1534,14 @@ async def execute_with_single_failover(
             prepared_media=prepared_media,
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
+            azure_intake=azure_intake,
             requested_model=effective_requested,
             is_alias=effective_is_alias,
-            intake_deadline_monotonic=intake_deadline_monotonic,
+            intake_deadline_monotonic=(
+                reservation_deadline
+                if azure_intake is not None and azure_intake.prepared is not None
+                else intake_deadline_monotonic
+            ),
             exclusion_store=exclusion_store,
         )
         second_backend_id = second_selection.backend_id
@@ -1552,6 +1660,8 @@ async def execute_with_single_failover(
 
         possible_dispatch = True
         active_backend = second_backend_id
+        if azure_intake is not None and azure_intake.prepared is not None:
+            azure_intake.begin_backend(second_backend_id)
         second_result = await _execute_backend_with_deadline(
             execute_backend,
             second_backend_id,
@@ -1562,6 +1672,7 @@ async def execute_with_single_failover(
             operation=operation,
             body=body,
             api_error=api_error,
+            azure_intake=azure_intake,
         )
         possible_dispatch = not second_result.confirmed_pre_dispatch
         await _record_combination_attempt(
@@ -1617,6 +1728,8 @@ async def execute_with_single_failover(
             backend_id=first_backend_id,
         )
     finally:
+        if azure_intake is not None and azure_intake.prepared is not None:
+            possible_dispatch = azure_intake.possible_dispatch
         operations: list[Any] = []
         if exclusion_store is not None:
             operations.append(partial(exclusion_store.release, first_selection.admission_ticket))
@@ -1632,7 +1745,15 @@ async def execute_with_single_failover(
             ):
                 if possible_dispatch:
                     operations.append(
-                        partial(rate_limit_store.finalize_request, active_quota_attempt)
+                        partial(
+                            rate_limit_store.finalize_request,
+                            active_quota_attempt,
+                            **(
+                                {"actual_input_tokens": azure_intake.settlement_input_tokens}
+                                if azure_intake is not None and azure_intake.prepared is not None
+                                else {}
+                            ),
+                        )
                     )
                 else:
                     operations.append(
@@ -1644,8 +1765,18 @@ async def execute_with_single_failover(
                         credit_store.finalize_request,
                         request_id,
                         backend_id=active_backend,
-                        charge_reserved=possible_dispatch,
-                        charged_cost_usd=None,
+                        charge_reserved=(
+                            azure_intake.has_liability
+                            if azure_intake is not None and azure_intake.prepared is not None
+                            else possible_dispatch
+                        ),
+                        charged_cost_usd=(
+                            azure_intake.uncertain_cost
+                            if azure_intake is not None
+                            and azure_intake.prepared is not None
+                            and azure_intake.has_liability
+                            else None
+                        ),
                     )
                 )
         if operations:

@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import sys
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from functools import partial
@@ -32,6 +33,7 @@ from foundry_router.api.adapters.google_audio_request import (
 from foundry_router.api.adapters.google_image_output import translate_image_output
 from foundry_router.api.adapters.google_image_request import image_output_request
 from foundry_router.api.adapters.google_schema import load_bounded_json
+from foundry_router.api.azure_intake import AzureIntakeError, AzureIntakeRequest
 from foundry_router.api.google_work import SignedIntakeError, bounded_signed_work
 from foundry_router.cleanup import DEFAULT_CLEANUP_TIMEOUT_SECONDS, protected_cleanup
 from foundry_router.credit import (
@@ -97,6 +99,53 @@ class BackendRequestResult:
     settlement_input_tokens: int | None = None
     force_charge: bool = False
     confirmed_pre_dispatch: bool = False
+
+
+def _prepared_result(
+    intake: AzureIntakeRequest | None, result: BackendRequestResult
+) -> BackendRequestResult:
+    if intake is None or isinstance(result.response, StreamingResponse):
+        return result
+    is_success = 200 <= result.response.status_code < 300
+    if is_success:
+        assert intake.prepared is not None
+        actual = (
+            None
+            if (
+                intake.backend is not None
+                and intake.policy.document.backends[intake.backend].provider == "azure_mai"
+            )
+            else estimate_response_usage_cost(
+                result.response,
+                intake.prepared.model,
+                {intake.prepared.model: intake.policy.document.models[intake.prepared.model].price},
+            )
+        )
+        usage = extract_response_usage_tokens(result.response)
+        intake.succeeded(
+            actual if actual is not None else intake.estimate.estimated_cost_usd,
+            usage[0] if usage is not None else intake.estimate.input_tokens,
+        )
+        return replace(
+            result,
+            force_charge=True,
+            settlement_cost_usd=(
+                actual if actual is not None else intake.estimate.estimated_cost_usd
+            )
+            + intake.prior_uncertain_cost,
+            settlement_input_tokens=(
+                usage[0] if usage is not None else intake.estimate.input_tokens
+            ),
+        )
+    if intake.has_liability:
+        return replace(
+            result,
+            force_charge=True,
+            confirmed_pre_dispatch=False,
+            settlement_cost_usd=intake.uncertain_cost,
+            settlement_input_tokens=intake.settlement_input_tokens,
+        )
+    return replace(result, confirmed_pre_dispatch=not intake.possible_dispatch)
 
 
 def is_retryable_status(status_code: int) -> bool:
@@ -355,13 +404,20 @@ async def stream_response(
     metrics_store: Any,
     rate_limit_store: Any | None = None,
     cleanup_timeout_seconds: float = DEFAULT_CLEANUP_TIMEOUT_SECONDS,
+    azure_intake: AzureIntakeRequest | None = None,
 ) -> Any:
     started_at = time.monotonic()
-    charged_cost: float | None = None
+    charged_cost: float | None = (
+        azure_intake.estimate.estimated_cost_usd + azure_intake.prior_uncertain_cost
+        if azure_intake is not None
+        else None
+    )
     metric_status_code = status_code
     pending_event_bytes = b""
     discarding_event = False
-    actual_input_tokens: int | None = None
+    actual_input_tokens: int | None = (
+        azure_intake.estimate.input_tokens if azure_intake is not None else None
+    )
 
     def process_event_payload(payload: bytes) -> None:
         nonlocal actual_input_tokens, charged_cost
@@ -401,7 +457,9 @@ async def stream_response(
                 actual_input_tokens = usage_tokens[0]
             estimated_cost = estimate_response_usage_cost(usage_response, model, pricing)
             if estimated_cost is not None:
-                charged_cost = estimated_cost
+                charged_cost = estimated_cost + (
+                    azure_intake.prior_uncertain_cost if azure_intake is not None else 0
+                )
 
     def inspect_chunk(chunk: bytes) -> None:
         nonlocal pending_event_bytes, discarding_event
@@ -446,6 +504,15 @@ async def stream_response(
         if not discarding_event and pending_event_bytes.strip():
             process_event_payload(pending_event_bytes)
 
+        if azure_intake is not None:
+            azure_intake.succeeded(
+                (charged_cost if charged_cost is not None else azure_intake.uncertain_cost)
+                - azure_intake.prior_uncertain_cost,
+                actual_input_tokens
+                if actual_input_tokens is not None
+                else azure_intake.estimate.input_tokens,
+            )
+
         async def settle_credit() -> None:
             try:
                 await credit_store.finalize_request(
@@ -464,6 +531,9 @@ async def stream_response(
                     )
                 else:
                     raise
+
+            if azure_intake is not None:
+                azure_intake.financially_finalized()
 
         async def settle_quota() -> None:
             if rate_limit_store is not None:
@@ -488,19 +558,289 @@ async def stream_response(
         )
 
 
+class _PreparedUpstreamCloseError(Exception):
+    """Failed close is terminal delivery cleanup, never a new upload trigger."""
+
+
+class _PreparedTranslatedUpstreamOwner:
+    """Retain one exact close task until both stream and context closure are proved."""
+
+    def __init__(self, context: Any) -> None:
+        self.context = context
+        self.response: Any = None
+        self.entered = False
+        self.stream_closed = False
+        self.context_closed = False
+        self.closed = False
+        self._task: asyncio.Task[None] | None = None
+
+    async def _close(self) -> None:
+        if self.response is not None and not self.stream_closed:
+            # HTTPX marks Response.is_closed before awaiting its stream. A failed
+            # Response.aclose can then become a no-op, so retry the actual stream.
+            await self.response.stream.aclose()
+            self.stream_closed = True
+        if self.entered and not self.context_closed:
+            await self.context.__aexit__(None, None, None)
+            self.context_closed = True
+        self.closed = True
+
+    @staticmethod
+    def _observe(task: asyncio.Task[None]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    async def _join(self) -> None:
+        assert self._task is not None
+        await asyncio.shield(self._task)
+
+    async def close(self) -> None:
+        if self.closed:
+            return
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._close())
+            self._task.add_done_callback(self._observe)
+        # Timed-out joins do not cancel or replace the producer close task. The
+        # intake lease keeps its capacity and callback until that task finishes.
+        await protected_cleanup([self._join], timeout_seconds=DEFAULT_CLEANUP_TIMEOUT_SECONDS)
+
+
+async def _forward_prepared_translated(
+    *,
+    settings: Any,
+    backend_id: str,
+    operation: str,
+    headers: dict[str, str],
+    backend_client: Any,
+    azure_intake: AzureIntakeRequest,
+    set_backend_active: Any,
+    set_backend_cooldown: Any,
+    sleep: Any,
+    api_error: Any,
+    deadline: float,
+    output_lease: OutputInspectionLease | None,
+) -> BackendRequestResult:
+    context = azure_intake.response_context(backend_id)
+    provider = settings.backends[backend_id].provider
+    adapter = get_adapter(provider)
+    assert azure_intake.prepared is not None
+    model = azure_intake.prepared.model
+    for attempt in range(1, max(1, settings.retry_attempts) + 1):
+        if attempt > 1 and azure_intake.quota is not None:  # noqa: SIM102 -- admission precedes dispatch
+            if not await azure_intake.quota.retry(deadline):
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(
+                        response=api_error(
+                            429, "Retry quota capacity is unavailable", "rate_limit_exhausted"
+                        ),
+                        retryable_failure=False,
+                    ),
+                )
+        retry_after_header = None
+        upstream_context = backend_client.stream_backend(
+            backend_id,
+            operation,
+            headers=headers,
+            azure_intake=azure_intake,
+        )
+        owner = _PreparedTranslatedUpstreamOwner(upstream_context)
+        close_upstream = owner.close
+        azure_intake.lease.delivery_cleanup = close_upstream
+        try:
+            try:
+                async with asyncio.timeout_at(deadline):
+                    upstream = await upstream_context.__aenter__()
+                    owner.response = upstream
+                    owner.entered = True
+                    outcome = await _read_google_non_streaming_body(
+                        upstream,
+                        limit_bytes=MAX_GOOGLE_RESPONSE_BYTES,
+                        error_limit_bytes=MAX_UPSTREAM_ERROR_BYTES,
+                    )
+                    if outcome["read_failed"]:
+                        raise httpx.ReadError("Unable to read prepared translated response")
+                    if outcome["breached"]:
+                        return _prepared_result(
+                            azure_intake,
+                            BackendRequestResult(
+                                response=api_error(
+                                    502, "Backend response exceeded size limits", "upstream_error"
+                                ),
+                                retryable_failure=False,
+                            ),
+                        )
+                    if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
+                        # Retain successful-upload liability before context exit or any later await.
+                        azure_intake.succeeded(
+                            azure_intake.estimate.estimated_cost_usd,
+                            azure_intake.estimate.input_tokens,
+                        )
+                        try:
+                            payload = load_bounded_json(
+                                outcome["body"].decode(), max_bytes=MAX_GOOGLE_RESPONSE_BYTES
+                            )
+                            input_tokens, output_tokens = adapter.extract_usage(operation, payload)
+                            if input_tokens is not None and output_tokens is not None:
+                                price = azure_intake.policy.document.models[model].price
+                                assert price is not None
+                                azure_intake.succeeded(
+                                    (
+                                        input_tokens * price.input_per_million
+                                        + output_tokens * price.output_per_million
+                                    )
+                                    / 1_000_000,
+                                    input_tokens,
+                                )
+                            if provider == "azure_mai":
+                                if output_lease is None:
+                                    raise ValueError("Prepared MAI inspection lease required")  # noqa: TRY301 -- bounded local rejection
+                                output_lease.bind_delivery_deadline(deadline)
+                                translated = await translate_mai_image_output(
+                                    payload,
+                                    prepared_context=context,
+                                    backend_id=backend_id,
+                                    logical_model=model,
+                                    lease=output_lease,
+                                    deadline=deadline,
+                                )
+                            else:
+                                context.for_backend(backend_id, provider)
+                                translated = adapter.translate_success(
+                                    operation,
+                                    payload,
+                                    logical_model=model,
+                                    metadata=context.metadata_dict(),
+                                )
+                        except (ValueError, UnicodeDecodeError, OSError):
+                            return _prepared_result(
+                                azure_intake,
+                                BackendRequestResult(
+                                    response=api_error(
+                                        502,
+                                        "Backend response could not be completed",
+                                        "upstream_error",
+                                    ),
+                                    retryable_failure=False,
+                                ),
+                            )
+                        result = _prepared_result(
+                            azure_intake,
+                            BackendRequestResult(
+                                response=Response(
+                                    content=json.dumps(translated.body).encode(),
+                                    status_code=200,
+                                    media_type="application/json",
+                                ),
+                                retryable_failure=False,
+                            ),
+                        )
+                        await set_backend_active(backend_id)
+                        return result
+                    if upstream.status_code >= 500:
+                        # A complete 5xx reply does not prove that generation was
+                        # unbilled; each uploaded attempt retains its estimate.
+                        azure_intake.uncertain()
+                    else:
+                        azure_intake.completed()
+                    status = upstream.status_code
+                    retry_after_header = upstream.headers.get("retry-after")
+            finally:
+                body_cancelled = isinstance(sys.exception(), asyncio.CancelledError)
+                try:
+                    await close_upstream()
+                except (Exception, asyncio.CancelledError) as close_error:
+                    azure_intake.lease.resources.uncertain.add(azure_intake.lease)
+                    _logger.warning(
+                        "azure_prepared_upstream_close_unconfirmed",
+                        error_type=type(close_error).__name__,
+                    )
+                    caller = asyncio.current_task()
+                    caller_cancelled = caller is not None and caller.cancelling() > 0
+                    if (
+                        body_cancelled
+                        or caller_cancelled
+                        or isinstance(close_error, asyncio.CancelledError)
+                    ):
+                        raise asyncio.CancelledError() from close_error
+                    raise _PreparedUpstreamCloseError() from close_error
+                else:
+                    if azure_intake.lease.delivery_cleanup is close_upstream:
+                        azure_intake.lease.delivery_cleanup = None
+        except _PreparedUpstreamCloseError:
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502, "Backend response cleanup could not be confirmed", "upstream_error"
+                    ),
+                    retryable_failure=False,
+                ),
+            )
+        except (httpx.TransportError, TimeoutError):
+            azure_intake.uncertain()
+            status = 502
+        except asyncio.CancelledError:
+            azure_intake.uncertain()
+            raise
+        if not is_retryable_status(status):
+            error = adapter.translate_error(status, None)
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(error.status_code, error.message, error.code),
+                    retryable_failure=False,
+                ),
+            )
+        retry_after_seconds = parse_retry_after(
+            retry_after_header, settings.retry_max_delay_seconds
+        )
+        cooldown_seconds = (
+            settings.retry_max_delay_seconds if retry_after_seconds is None else retry_after_seconds
+        )
+        if status == 429:
+            await _set_quota_group_cooldown(
+                settings,
+                backend_id,
+                set_backend_cooldown=set_backend_cooldown,
+                cooldown_seconds=cooldown_seconds,
+            )
+        else:
+            await set_backend_cooldown(
+                backend_id,
+                state=BackendHealthState.ERROR_COOLDOWN,
+                cooldown_seconds=cooldown_seconds,
+            )
+        if attempt < max(1, settings.retry_attempts):
+            delay = _backend_retry_delay_seconds(
+                settings, backend_id, attempt_number=attempt, retry_after_header=retry_after_header
+            )
+            if delay > 0:
+                await sleep(delay)
+    error = adapter.translate_error(status, None)
+    return _prepared_result(
+        azure_intake,
+        BackendRequestResult(
+            response=api_error(error.status_code, error.message, error.code),
+            retryable_failure=True,
+        ),
+    )
+
+
 async def forward_non_streaming_with_retries(
     *,
     settings: Any,
     backend_id: str,
     operation: str,
     headers: dict[str, str],
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     get_backend_client: Any,
     set_backend_active: Any,
     set_backend_cooldown: Any,
     sleep: Any,
     api_error: Any,
     reservation_deadline_monotonic: float | None = None,
+    azure_intake: AzureIntakeRequest | None = None,
     prepared_media: PreparedGoogleMedia | None = None,
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
@@ -509,38 +849,84 @@ async def forward_non_streaming_with_retries(
     max_attempts = max(1, settings.retry_attempts)
     backend_client = get_backend_client()
     try:
-        build = partial(
-            _build_upstream_body,
-            settings,
-            backend_id,
-            operation,
-            body,
-            prepared_media=prepared_media,
-            seal_context=seal_context,
-            prepared_continuation=prepared_continuation,
-        )
-        upstream_body = (
-            build()
-            if seal_context is None
-            else await bounded_signed_work(
-                build,
-                lease=seal_context.work_lease,
-                deadline=reservation_deadline_monotonic
+        if azure_intake is not None:
+            assert azure_intake.prepared is not None
+            azure_intake.validate(settings, azure_intake.prepared.model, operation)
+            await azure_intake.encode(
+                backend_id,
+                reservation_deadline_monotonic
                 or time.monotonic() + settings.reservation_max_age_seconds,
             )
+            upstream_body = None
+        else:
+            assert body is not None
+            build = partial(
+                _build_upstream_body,
+                settings,
+                backend_id,
+                operation,
+                body,
+                prepared_media=prepared_media,
+                seal_context=seal_context,
+                prepared_continuation=prepared_continuation,
+            )
+            upstream_body = (
+                build()
+                if seal_context is None
+                else await bounded_signed_work(
+                    build,
+                    lease=seal_context.work_lease,
+                    deadline=reservation_deadline_monotonic
+                    or time.monotonic() + settings.reservation_max_age_seconds,
+                )
+            )
+    except AzureIntakeError as exc:
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(exc.status, "Backend preparation failed", exc.code),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            ),
         )
     except SignedIntakeError as exc:
-        return BackendRequestResult(
-            response=api_error(exc.status, str(exc), exc.code),
-            retryable_failure=False,
-            confirmed_pre_dispatch=True,
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(exc.status, str(exc), exc.code),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            ),
         )
     except Exception:
-        return BackendRequestResult(
-            response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
-            retryable_failure=False,
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
+                retryable_failure=False,
+            ),
         )
-    if _uses_translated_forwarding(settings, backend_id):
+    if azure_intake is not None and _provider_of(settings, backend_id) in {
+        "azure_anthropic",
+        "azure_mai",
+    }:
+        return await _forward_prepared_translated(
+            settings=settings,
+            backend_id=backend_id,
+            operation=operation,
+            headers=headers,
+            backend_client=backend_client,
+            azure_intake=azure_intake,
+            set_backend_active=set_backend_active,
+            set_backend_cooldown=set_backend_cooldown,
+            sleep=sleep,
+            api_error=api_error,
+            output_lease=output_lease,
+            deadline=reservation_deadline_monotonic
+            or time.monotonic() + settings.reservation_max_age_seconds,
+        )
+    if azure_intake is None and _uses_translated_forwarding(settings, backend_id):
+        assert body is not None and upstream_body is not None
         return await _forward_google_non_streaming(
             output_lease=output_lease,
             seal_context=seal_context,
@@ -557,7 +943,8 @@ async def forward_non_streaming_with_retries(
             api_error=api_error,
             reservation_deadline_monotonic=reservation_deadline_monotonic,
         )
-    if _is_zen_provider(settings, backend_id):
+    if azure_intake is None and _is_zen_provider(settings, backend_id):
+        assert body is not None and upstream_body is not None
         return await _forward_zen_non_streaming(
             settings=settings,
             backend_id=backend_id,
@@ -573,14 +960,34 @@ async def forward_non_streaming_with_retries(
         )
 
     for attempt in range(1, max_attempts + 1):
+        if azure_intake is not None and attempt > 1 and azure_intake.quota is not None:  # noqa: SIM102 -- admit before dispatch
+            if not await azure_intake.quota.retry(
+                reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds
+            ):
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(
+                        response=api_error(
+                            429, "Retry quota capacity is unavailable", "rate_limit_exhausted"
+                        ),
+                        retryable_failure=False,
+                    ),
+                )
         try:
             upstream = await backend_client.request_backend(
                 backend_id,
                 operation,
                 headers=headers,
-                json=upstream_body,
+                **(
+                    {"azure_intake": azure_intake}
+                    if azure_intake is not None
+                    else {"json": upstream_body}
+                ),
             )
         except httpx.TransportError:
+            if azure_intake is not None:
+                azure_intake.uncertain()
             await set_backend_cooldown(
                 backend_id,
                 state=BackendHealthState.ERROR_COOLDOWN,
@@ -596,24 +1003,34 @@ async def forward_non_streaming_with_retries(
                 if delay_seconds > 0:
                     await sleep(delay_seconds)
                 continue
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to contact the configured backend",
-                    "upstream_error",
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to contact the configured backend",
+                        "upstream_error",
+                    ),
+                    retryable_failure=True,
                 ),
-                retryable_failure=True,
             )
         except httpx.HTTPError:
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to contact the configured backend",
-                    "upstream_error",
+            if azure_intake is not None:
+                azure_intake.uncertain()
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to contact the configured backend",
+                        "upstream_error",
+                    ),
+                    retryable_failure=False,
                 ),
-                retryable_failure=False,
             )
 
+        if azure_intake is not None and not HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
+            azure_intake.completed()
         forwarded_body = (
             upstream.content
             if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT
@@ -621,10 +1038,17 @@ async def forward_non_streaming_with_retries(
         )
         candidate_response = upstream_response(upstream, forwarded_body)
         if HTTP_OK <= upstream.status_code < HTTP_SUCCESS_LIMIT:
+            result = _prepared_result(
+                azure_intake,
+                BackendRequestResult(response=candidate_response, retryable_failure=False),
+            )
             await set_backend_active(backend_id)
-            return BackendRequestResult(response=candidate_response, retryable_failure=False)
+            return result
         if not is_retryable_status(upstream.status_code):
-            return BackendRequestResult(response=candidate_response, retryable_failure=False)
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(response=candidate_response, retryable_failure=False),
+            )
 
         cooldown_state = (
             BackendHealthState.QUOTA_COOLDOWN
@@ -661,11 +1085,16 @@ async def forward_non_streaming_with_retries(
             if delay_seconds > 0:
                 await sleep(delay_seconds)
             continue
-        return BackendRequestResult(response=candidate_response, retryable_failure=True)
+        return _prepared_result(
+            azure_intake, BackendRequestResult(response=candidate_response, retryable_failure=True)
+        )
 
-    return BackendRequestResult(
-        response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
-        retryable_failure=True,
+    return _prepared_result(
+        azure_intake,
+        BackendRequestResult(
+            response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
+            retryable_failure=True,
+        ),
     )
 
 
@@ -696,10 +1125,20 @@ async def _shielded_google_cancel_cleanup(
 class DeadlineStreamingResponse(StreamingResponse):
     """Enforce the reservation deadline around ASGI delivery, including send."""
 
-    def __init__(self, content: Any, *, deadline: float, cleanup: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        content: Any,
+        *,
+        deadline: float,
+        cleanup: Any,
+        always_cleanup: bool = False,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(content, **kwargs)
         self.deadline = deadline
         self.cleanup = cleanup
+        self.always_cleanup = always_cleanup
+        self._close_task: asyncio.Task[None] | None = None
         self.iterator_started = False
         self.original_iterator: Any = content
 
@@ -715,13 +1154,34 @@ class DeadlineStreamingResponse(StreamingResponse):
             async with asyncio.timeout_at(self.deadline):
                 await super().stream_response(send)
         finally:
-            # Closing a suspended generator runs its usage-aware settlement.
-            # The fallback also covers a blocked response-start send, before
-            # the generator has ever been entered. Stores settle idempotently.
-            operations = [self.original_iterator.aclose]
-            if not self.iterator_started:
-                operations.append(self.cleanup)
-            await protected_cleanup(operations)
+            await self.close_stream()
+
+    async def _close_stream(self) -> None:
+        failure: BaseException | None = None
+        try:
+            await protected_cleanup([self.original_iterator.aclose])
+        except BaseException as exc:
+            failure = exc
+        if self.always_cleanup or not self.iterator_started:
+            await protected_cleanup([self.cleanup])
+        elif failure is not None:
+            raise failure
+
+    async def close_stream(self) -> None:
+        if self._close_task is None or (
+            self._close_task.done()
+            and (self._close_task.cancelled() or self._close_task.exception() is not None)
+        ):
+            self._close_task = asyncio.create_task(self._close_stream())
+        cancelled = False
+        while not self._close_task.done():
+            try:
+                await asyncio.shield(self._close_task)
+            except asyncio.CancelledError:
+                cancelled = True
+        self._close_task.result()
+        if cancelled:
+            raise asyncio.CancelledError()
 
 
 @dataclass
@@ -1720,7 +2180,7 @@ async def forward_streaming_with_retries(
     backend_id: str,
     request_id: str,
     headers: dict[str, str],
-    body: dict[str, Any],
+    body: dict[str, Any] | None,
     get_backend_client: Any,
     set_backend_active: Any,
     set_backend_cooldown: Any,
@@ -1731,6 +2191,7 @@ async def forward_streaming_with_retries(
     rate_limit_store: Any | None = None,
     pre_output_timeout_seconds: float = PRE_OUTPUT_TIMEOUT_SECONDS,
     reservation_deadline_monotonic: float | None = None,
+    azure_intake: AzureIntakeRequest | None = None,
     prepared_media: PreparedGoogleMedia | None = None,
     seal_context: SealContext | None = None,
     prepared_continuation: PreparedContinuation | None = None,
@@ -1738,38 +2199,65 @@ async def forward_streaming_with_retries(
     max_attempts = max(1, settings.retry_attempts)
     backend_client = get_backend_client()
     try:
-        build = partial(
-            _build_upstream_body,
-            settings,
-            backend_id,
-            "responses",
-            body,
-            prepared_media=prepared_media,
-            seal_context=seal_context,
-            prepared_continuation=prepared_continuation,
-        )
-        upstream_body = (
-            build()
-            if seal_context is None
-            else await bounded_signed_work(
-                build,
-                lease=seal_context.work_lease,
-                deadline=reservation_deadline_monotonic
+        if azure_intake is not None:
+            assert azure_intake.prepared is not None
+            azure_intake.validate(settings, azure_intake.prepared.model, "responses")
+            await azure_intake.encode(
+                backend_id,
+                reservation_deadline_monotonic
                 or time.monotonic() + settings.reservation_max_age_seconds,
             )
+            upstream_body = None
+        else:
+            assert body is not None
+            build = partial(
+                _build_upstream_body,
+                settings,
+                backend_id,
+                "responses",
+                body,
+                prepared_media=prepared_media,
+                seal_context=seal_context,
+                prepared_continuation=prepared_continuation,
+            )
+            upstream_body = (
+                build()
+                if seal_context is None
+                else await bounded_signed_work(
+                    build,
+                    lease=seal_context.work_lease,
+                    deadline=reservation_deadline_monotonic
+                    or time.monotonic() + settings.reservation_max_age_seconds,
+                )
+            )
+    except AzureIntakeError as exc:
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(exc.status, "Backend preparation failed", exc.code),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            ),
         )
     except SignedIntakeError as exc:
-        return BackendRequestResult(
-            response=api_error(exc.status, str(exc), exc.code),
-            retryable_failure=False,
-            confirmed_pre_dispatch=True,
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(exc.status, str(exc), exc.code),
+                retryable_failure=False,
+                confirmed_pre_dispatch=True,
+            ),
         )
     except Exception:
-        return BackendRequestResult(
-            response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
-            retryable_failure=False,
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=api_error(502, "Unable to prepare the backend request", "upstream_error"),
+                retryable_failure=False,
+            ),
         )
-    if _uses_translated_forwarding(settings, backend_id):
+    if azure_intake is None and _uses_translated_forwarding(settings, backend_id):
+        assert body is not None and upstream_body is not None
         return await _forward_google_streaming(
             seal_context=seal_context,
             prepared_continuation=prepared_continuation,
@@ -1789,7 +2277,8 @@ async def forward_streaming_with_retries(
             pre_output_timeout_seconds=pre_output_timeout_seconds,
             reservation_deadline_monotonic=reservation_deadline_monotonic,
         )
-    if _is_zen_provider(settings, backend_id):
+    if azure_intake is None and _is_zen_provider(settings, backend_id):
+        assert body is not None and upstream_body is not None
         return await _forward_zen_streaming(
             settings=settings,
             backend_id=backend_id,
@@ -1809,15 +2298,35 @@ async def forward_streaming_with_retries(
         )
 
     for attempt in range(1, max_attempts + 1):
+        if azure_intake is not None and attempt > 1 and azure_intake.quota is not None:  # noqa: SIM102 -- admit before dispatch
+            if not await azure_intake.quota.retry(
+                reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds
+            ):
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(
+                        response=api_error(
+                            429, "Retry quota capacity is unavailable", "rate_limit_exhausted"
+                        ),
+                        retryable_failure=False,
+                    ),
+                )
         context = backend_client.stream_backend(
             backend_id,
             "responses",
             headers=headers,
-            json=upstream_body,
+            **(
+                {"azure_intake": azure_intake}
+                if azure_intake is not None
+                else {"json": upstream_body}
+            ),
         )
         try:
             upstream = await context.__aenter__()
         except httpx.TransportError:
+            if azure_intake is not None:
+                azure_intake.uncertain()
             await set_backend_cooldown(
                 backend_id,
                 state=BackendHealthState.ERROR_COOLDOWN,
@@ -1833,55 +2342,78 @@ async def forward_streaming_with_retries(
                 if delay_seconds > 0:
                     await sleep(delay_seconds)
                 continue
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to contact the configured backend",
-                    "upstream_error",
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to contact the configured backend",
+                        "upstream_error",
+                    ),
+                    retryable_failure=True,
                 ),
-                retryable_failure=True,
             )
         except httpx.HTTPError:
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to contact the configured backend",
-                    "upstream_error",
+            if azure_intake is not None:
+                azure_intake.uncertain()
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to contact the configured backend",
+                        "upstream_error",
+                    ),
+                    retryable_failure=False,
                 ),
-                retryable_failure=False,
             )
 
         if upstream.status_code < HTTP_OK or upstream.status_code >= HTTP_SUCCESS_LIMIT:
             try:
                 error_body = (await upstream.aread())[:MAX_UPSTREAM_ERROR_BYTES]
             except httpx.TransportError:
+                if azure_intake is not None:
+                    azure_intake.uncertain()
                 await set_backend_cooldown(
                     backend_id,
                     state=BackendHealthState.ERROR_COOLDOWN,
                     cooldown_seconds=settings.retry_max_delay_seconds,
                 )
-                return BackendRequestResult(
-                    response=api_error(
-                        502,
-                        "Unable to read the configured backend error response",
-                        "upstream_error",
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(
+                        response=api_error(
+                            502,
+                            "Unable to read the configured backend error response",
+                            "upstream_error",
+                        ),
+                        retryable_failure=True,
                     ),
-                    retryable_failure=True,
                 )
             except httpx.HTTPError:
-                return BackendRequestResult(
-                    response=api_error(
-                        502,
-                        "Unable to read the configured backend error response",
-                        "upstream_error",
+                if azure_intake is not None:
+                    azure_intake.uncertain()
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(
+                        response=api_error(
+                            502,
+                            "Unable to read the configured backend error response",
+                            "upstream_error",
+                        ),
+                        retryable_failure=False,
                     ),
-                    retryable_failure=False,
                 )
             finally:
                 await context.__aexit__(None, None, None)
+            if azure_intake is not None:
+                azure_intake.completed()
             candidate_response = upstream_response(upstream, error_body)
             if not is_retryable_status(upstream.status_code):
-                return BackendRequestResult(response=candidate_response, retryable_failure=False)
+                return _prepared_result(
+                    azure_intake,
+                    BackendRequestResult(response=candidate_response, retryable_failure=False),
+                )
 
             cooldown_state = (
                 BackendHealthState.QUOTA_COOLDOWN
@@ -1920,7 +2452,10 @@ async def forward_streaming_with_retries(
                 if delay_seconds > 0:
                     await sleep(delay_seconds)
                 continue
-            return BackendRequestResult(response=candidate_response, retryable_failure=True)
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(response=candidate_response, retryable_failure=True),
+            )
 
         chunks = upstream.aiter_raw()
         try:
@@ -1933,6 +2468,8 @@ async def forward_streaming_with_retries(
                 if not first_chunk:
                     raise httpx.ReadError("Backend emitted too many empty pre-output chunks")
         except (StopAsyncIteration, TimeoutError, httpx.TransportError):
+            if azure_intake is not None:
+                azure_intake.uncertain()
             await context.__aexit__(None, None, None)
             await set_backend_cooldown(
                 backend_id,
@@ -1949,53 +2486,157 @@ async def forward_streaming_with_retries(
                 if delay_seconds > 0:
                     await sleep(delay_seconds)
                 continue
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to read the configured backend stream",
-                    "upstream_error",
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to read the configured backend stream",
+                        "upstream_error",
+                    ),
+                    retryable_failure=True,
                 ),
-                retryable_failure=True,
             )
+        except asyncio.CancelledError:
+            if azure_intake is not None:
+                azure_intake.uncertain()
+            await protected_cleanup([partial(context.__aexit__, None, None, None)])
+            raise
         except httpx.HTTPError:
+            if azure_intake is not None:
+                azure_intake.uncertain()
             await context.__aexit__(None, None, None)
-            return BackendRequestResult(
-                response=api_error(
-                    502,
-                    "Unable to read the configured backend stream",
-                    "upstream_error",
+            return _prepared_result(
+                azure_intake,
+                BackendRequestResult(
+                    response=api_error(
+                        502,
+                        "Unable to read the configured backend stream",
+                        "upstream_error",
+                    ),
+                    retryable_failure=False,
                 ),
-                retryable_failure=False,
             )
 
-        await set_backend_active(backend_id)
-        return BackendRequestResult(
-            response=StreamingResponse(
-                stream_response(
-                    chunks,
-                    first_chunk,
-                    context,
-                    request_id=request_id,
-                    backend_id=backend_id,
-                    cooldown_seconds=settings.retry_max_delay_seconds,
-                    model=body.get("model", ""),
-                    pricing=settings.pricing,
-                    status_code=upstream.status_code,
-                    set_backend_cooldown=set_backend_cooldown,
-                    credit_store=credit_store,
-                    metrics_store=metrics_store,
-                    rate_limit_store=rate_limit_store,
-                ),
+        if azure_intake is not None:
+            azure_intake.succeeded(
+                azure_intake.estimate.estimated_cost_usd, azure_intake.estimate.input_tokens
+            )
+            fallback_cost = azure_intake.uncertain_cost
+            fallback_input = azure_intake.settlement_input_tokens
+
+            async def unstarted_cleanup(
+                context: Any = context,
+                fallback_cost: float = fallback_cost,
+                fallback_input: int = fallback_input,
+            ) -> None:
+                cost = azure_intake.uncertain_cost if azure_intake.has_liability else fallback_cost
+                input_tokens = (
+                    azure_intake.settlement_input_tokens
+                    if azure_intake.has_liability
+                    else fallback_input
+                )
+
+                async def credit() -> None:
+                    await credit_store.finalize_request(
+                        request_id,
+                        backend_id=backend_id,
+                        charge_reserved=True,
+                        charged_cost_usd=cost,
+                    )
+                    azure_intake.financially_finalized()
+
+                await protected_cleanup(
+                    [
+                        credit,
+                        partial(context.__aexit__, None, None, None),
+                        *(
+                            [
+                                partial(
+                                    rate_limit_store.finalize_request,
+                                    request_id,
+                                    actual_input_tokens=input_tokens,
+                                )
+                            ]
+                            if rate_limit_store is not None
+                            else []
+                        ),
+                    ]
+                )
+
+            assert azure_intake.prepared is not None
+            iterator = stream_response(
+                chunks,
+                first_chunk,
+                context,
+                request_id=request_id,
+                backend_id=backend_id,
+                cooldown_seconds=settings.retry_max_delay_seconds,
+                model=azure_intake.prepared.model,
+                pricing=settings.pricing,
+                status_code=upstream.status_code,
+                set_backend_cooldown=set_backend_cooldown,
+                credit_store=credit_store,
+                metrics_store=metrics_store,
+                rate_limit_store=rate_limit_store,
+                azure_intake=azure_intake,
+            )
+            response = DeadlineStreamingResponse(
+                iterator,
+                deadline=reservation_deadline_monotonic
+                or time.monotonic() + settings.reservation_max_age_seconds,
+                cleanup=unstarted_cleanup,
+                always_cleanup=True,
                 status_code=upstream.status_code,
                 media_type="text/event-stream",
                 headers={"cache-control": "no-cache"},
+            )
+            azure_intake.lease.delivery_cleanup = response.close_stream
+            try:
+                await set_backend_active(backend_id)
+            except BaseException:
+                await response.close_stream()
+                raise
+            return BackendRequestResult(response=response, retryable_failure=False)
+        await set_backend_active(backend_id)
+        return _prepared_result(
+            azure_intake,
+            BackendRequestResult(
+                response=StreamingResponse(
+                    stream_response(
+                        chunks,
+                        first_chunk,
+                        context,
+                        request_id=request_id,
+                        backend_id=backend_id,
+                        cooldown_seconds=settings.retry_max_delay_seconds,
+                        model=azure_intake.prepared.model
+                        if azure_intake is not None and azure_intake.prepared is not None
+                        else body.get("model", "")
+                        if body is not None
+                        else "",
+                        pricing=settings.pricing,
+                        status_code=upstream.status_code,
+                        set_backend_cooldown=set_backend_cooldown,
+                        credit_store=credit_store,
+                        metrics_store=metrics_store,
+                        rate_limit_store=rate_limit_store,
+                        azure_intake=azure_intake,
+                    ),
+                    status_code=upstream.status_code,
+                    media_type="text/event-stream",
+                    headers={"cache-control": "no-cache"},
+                ),
+                retryable_failure=False,
             ),
-            retryable_failure=False,
         )
 
-    return BackendRequestResult(
-        response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
-        retryable_failure=True,
+    return _prepared_result(
+        azure_intake,
+        BackendRequestResult(
+            response=api_error(502, "Unable to contact the configured backend", "upstream_error"),
+            retryable_failure=True,
+        ),
     )
 
 

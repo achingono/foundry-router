@@ -396,3 +396,16 @@ Grok/Muse are excluded on the recorded over-bound failure. See the
 MAI native metadata and one bounded CRC-valid caBX chunk are supported through a server-owned inspection profile; default Google inspection remains strict. See [final production evidence](../plans/foundry-three-models/production-evidence.md).
 
 Responses estimation matches the validated intake size while preserving bounded work and conservative credit admission; known unestimable requests receive 422 separately from 503 pricing failures. **Implemented and deployed** with estimator boundary/no-egress API regressions and guarded production no-egress acceptance; [incident evidence](../plans/pricing-estimation-503/evidence.md).
+
+## Optional Azure intake and completion observations
+
+| Requirement | Status | Owning implementation and verification |
+| --- | --- | --- |
+| Bounded Azure capture, scratch leases and Linux child preparation without credentials | Implemented, default-off | `api/azure_intake.py`, `api/azure_intake_context.py`, `api/azure_intake_worker.py`; `test_azure_intake.py`, `test_azure_intake_runtime.py`, Linux fixture |
+| Native Azure file-backed forwarding with retry/cancellation ownership and unchanged SSE boundaries | Implemented, default-off | `api/common.py`, `api/routes/openai.py`, `forwarding/`, `routing/`; runtime and Linux regressions |
+| Translated Azure validation, estimation and bounded child encoding | Implemented, default-off | Azure adapters and intake worker; `test_azure_intake_translated.py` |
+| Bounded redacted asynchronous completion observations and authenticated loss counters | Implemented, default-off | `metrics/completion.py`, `main.py`, admin route; `test_completion_metrics.py`, `test_completion_pipeline.py` |
+| Full-runtime maximum/concurrent capacity, actual ingress and provider acceptance | Planned per environment | [Maintenance gates](../operations/production-deployment.md) |
+| Destination completeness, alerts, multi-worker aggregation and scaling | Planned per environment | [Completion acceptance](../operations/completion-logs.md) |
+
+The [public release evidence](../plans/public-runtime-release/evidence.md) records local candidate verification. Configuration ceilings and local mocks do not establish Azure deployment behavior.

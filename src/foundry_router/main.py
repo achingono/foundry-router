@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 import foundry_router.forwarding as forwarding_module
+from foundry_router.api.azure_intake import AzureIntakeDeliveryMiddleware, AzureIntakeRuntime
 from foundry_router.api.google_output_delivery import (
     GeneratedOutputDeliveryMiddleware,
     delivery_owner,
@@ -189,6 +190,11 @@ async def _extra_readiness_checks() -> dict[str, bool]:
     """Phase 11 readiness additions: table reachability + replica-share validity."""
     settings = _current_load_settings()
     checks: dict[str, bool] = {}
+    if getattr(settings, "azure_intake_enabled", False):
+        runtime = getattr(app.state, "azure_intake_runtime", None)
+        checks["azure_intake_ready"] = runtime is not None and runtime.matches(settings)
+        if runtime is not None:
+            runtime.recover()
     try:
         bad = zero_share_dimensions(
             {group: dict(limits) for group, limits in settings.quota_group_rate_limits.items()},
@@ -331,8 +337,14 @@ def _build_metrics_store(settings: Any) -> Any:
     if settings.telemetry_enabled:
         from foundry_router.metrics.otlp import OtlpMetricsStore
 
-        return OtlpMetricsStore(settings)
-    return InMemoryMetricsStore()
+        store: Any = OtlpMetricsStore(settings)
+    else:
+        store = InMemoryMetricsStore()
+    if settings.completion_logs_enabled:
+        from foundry_router.metrics.completion import CompletionMetricsStore
+
+        store = CompletionMetricsStore(store, settings)
+    return store
 
 
 async def _close_metrics_lifetime() -> None:
@@ -372,6 +384,8 @@ async def lifespan(_app: FastAPI) -> Any:
     global _shutdown_event
     owned_cost_provider: Any = None
     settings = load_settings()
+    intake = AzureIntakeRuntime(settings)
+    _app.state.azure_intake_runtime = intake
     setup_logging(settings.log_level)
     logger.info(
         "foundry_router_starting",
@@ -380,7 +394,11 @@ async def lifespan(_app: FastAPI) -> Any:
         models=list(settings.models.keys()),
     )
     global _metrics_store
-    if settings.telemetry_enabled or not isinstance(_metrics_store, InMemoryMetricsStore):
+    if (
+        settings.telemetry_enabled
+        or settings.completion_logs_enabled
+        or not isinstance(_metrics_store, InMemoryMetricsStore)
+    ):
         _metrics_store = _build_metrics_store(settings)
     try:
         # Combination-exclusion counters are process-local by design (memory-backed
@@ -388,6 +406,7 @@ async def lifespan(_app: FastAPI) -> Any:
         # three user-visible failures per sick triple before re-exclusion.
         await _exclusion_store.reset()
         logger.info("combination_exclusion_reset", reason="process_start")
+        await intake.start(settings)
         get_backend_client()
         # Phase 11: build lifespan-owned stores (memory singletons or Table stores).
         global _health_store, _credit_store, _rate_limit_store, _table_clients
@@ -426,6 +445,7 @@ async def lifespan(_app: FastAPI) -> Any:
             if not original_failure:
                 raise
         finally:
+            await intake.close()
             await _close_cost_provider(owned_cost_provider)
             await _close_metrics_lifetime()
 
@@ -512,6 +532,7 @@ async def track_active_requests(request: Request, call_next: Any) -> Response:
 
 
 app.add_middleware(GeneratedOutputDeliveryMiddleware)
+app.add_middleware(AzureIntakeDeliveryMiddleware)
 
 
 @app.exception_handler(Exception)

@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import time
 import uuid
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from foundry_router.api.adapters.base import AdapterRejection, TranslatedSuccess
@@ -15,6 +16,7 @@ from foundry_router.api.adapters.google_image_request import _IMAGE_TOOL, image_
 from foundry_router.api.google_output_png import MAX_PNG_BYTES
 
 if TYPE_CHECKING:
+    from foundry_router.api.azure_intake_context import PreparedAzureResponseContext
     from foundry_router.api.google_output_work import OutputInspectionLease
     from foundry_router.api.google_pdf import PreparedGoogleMedia
 
@@ -22,11 +24,20 @@ MAX_MAI_PROMPT_BYTES = 64 * 1024
 _REQUEST_FIELDS = {"model", "input", "tools", "stream", "store", "metadata"}
 
 
+@dataclass(frozen=True)
 class AzureMaiAdapter(CompatibleTextAdapter):
     """One PNG generation; every output requires the existing isolated inspector."""
 
     provider = "azure_mai"
     provider_label = "Foundry MAI"
+    request_text_budget: int = MAX_MAI_PROMPT_BYTES
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.request_text_budget) is not int
+            or not 1 <= self.request_text_budget <= 1024**3
+        ):
+            raise ValueError("Invalid Azure request text budget")
 
     def supports_operation(self, operation: str) -> bool:
         return operation == "responses"
@@ -50,7 +61,7 @@ class AzureMaiAdapter(CompatibleTextAdapter):
             or prepared_media is not None
             or not isinstance(prompt, str)
             or not prompt.strip()
-            or len(prompt.encode()) > MAX_MAI_PROMPT_BYTES
+            or len(prompt.encode()) > self.request_text_budget
         ):
             return AdapterRejection(
                 422, "unsupported_input", "MAI requires a bounded prompt and one nonstream PNG tool"
@@ -90,13 +101,27 @@ class AzureMaiAdapter(CompatibleTextAdapter):
 async def translate_mai_image_output(
     upstream: Any,
     *,
-    request_body: dict[str, Any],
+    request_body: dict[str, Any] | None = None,
+    prepared_context: PreparedAzureResponseContext | None = None,
+    backend_id: str | None = None,
     logical_model: str,
     lease: OutputInspectionLease,
     deadline: float,
 ) -> TranslatedSuccess:
-    if AzureMaiAdapter().check_request("responses", request_body):
-        raise ValueError("Unsupported MAI request")
+    if prepared_context is None:
+        if request_body is None or AzureMaiAdapter().check_request("responses", request_body):
+            raise ValueError("Unsupported MAI request")
+        metadata = dict(request_body.get("metadata") or {})
+    else:
+        if (
+            request_body is not None
+            or backend_id is None
+            or prepared_context.model != logical_model
+        ):
+            raise ValueError("Invalid prepared MAI context")
+        if prepared_context.for_backend(backend_id, "azure_mai").kind != "one_png":
+            raise ValueError("Invalid prepared MAI response policy")
+        metadata = prepared_context.metadata_dict()
     if not isinstance(upstream, dict) or "data" not in upstream:
         raise ValueError("Invalid MAI envelope")
     data = upstream["data"]
@@ -137,7 +162,7 @@ async def translate_mai_image_output(
                 }
             ],
             "usage": None,
-            "metadata": dict(request_body.get("metadata") or {}),
+            "metadata": metadata,
             "tools": [dict(_IMAGE_TOOL)],
             "tool_choice": "auto",
             "parallel_tool_calls": False,

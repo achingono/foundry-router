@@ -1,6 +1,6 @@
 # Observability and Troubleshooting
 
-## Status: Implemented (single-process Prometheus + live diagnostics; opt-in OTLP aggregation implemented locally; deployed collector unverified)
+## Status: Implemented locally; deployed collection and completeness require acceptance
 
 Use structured JSON logs with correlation IDs (`x-request-id`). Record request ID, model, backend, endpoint type, status, latency, tokens, estimated cost, retry count, streaming flag, routing state, and routing score. Never record authorization headers, API keys, prompts, or model outputs.
 
@@ -122,3 +122,7 @@ Actual local two-worker periodic collection, repeated/out-of-order snapshots and
 produced nine requests, $4.50 synthetic estimated cost and matching histogram/exclusion totals.
 This verifies local central aggregation semantics. Production remains memory/one until
 Table real-provider, admission, deployed collector and scale-out acceptance gates pass.
+
+## Optional completion console sink
+
+[Completion console observations](completion-logs.md) are implemented behind the default-off `FOUNDRY_COMPLETION_LOGS_ENABLED` setting. The bounded asynchronous sink reports local loss counters and creates process/event identities at existing metrics sites. Destination ingestion, completeness, alerts and multi-worker scale acceptance are separate operator gates. No collector or alert is provisioned by enabling the sink.

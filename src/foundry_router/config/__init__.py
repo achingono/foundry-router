@@ -39,6 +39,7 @@ from foundry_router.credit_groups import (
 
 MAX_COMPATIBLE_MODEL_BYTES = 512
 MAX_TABLE_QUOTA_AGE_SECONDS = 3600
+MAX_AZURE_INTEGER_DIGITS = 20
 ASCII_CONTROL_LIMIT = 32
 ASCII_DELETE = 127
 
@@ -556,6 +557,26 @@ class Settings(BaseSettings):
         description="Maximum accepted request body size in bytes, enforced before JSON parsing",
     )
 
+    # Explicit activation remains off until full runtime/resource/release gates pass.
+    azure_intake_enabled: bool = Field(
+        default=False, validation_alias="FOUNDRY_AZURE_INTAKE_ENABLED"
+    )
+    azure_intake_child_wall_timeout_seconds: Annotated[
+        float, Field(ge=0.1, le=120, allow_inf_nan=False)
+    ] = Field(default=30.0, validation_alias="FOUNDRY_AZURE_INTAKE_CHILD_WALL_TIMEOUT_SECONDS")
+    azure_intake_scratch_bytes: Annotated[int, Field(ge=1024, le=2304 * 1024 * 1024)] = Field(
+        default=2304 * 1024 * 1024, validation_alias="FOUNDRY_AZURE_INTAKE_SCRATCH_BYTES"
+    )
+    azure_max_request_body_bytes: Annotated[int | None, Field(ge=1024, le=1_073_741_824)] = Field(
+        default=None, validation_alias="FOUNDRY_AZURE_MAX_REQUEST_BODY_BYTES"
+    )
+    azure_intake_timeout_seconds: Annotated[
+        float | None, Field(ge=0.1, le=120, allow_inf_nan=False)
+    ] = Field(default=None, validation_alias="FOUNDRY_AZURE_INTAKE_TIMEOUT_SECONDS")
+    azure_intake_child_address_space_bytes: Annotated[
+        int | None, Field(ge=67_108_864, le=68_719_476_736)
+    ] = Field(default=None, validation_alias="FOUNDRY_AZURE_INTAKE_CHILD_ADDRESS_SPACE_BYTES")
+
     # Reservation lifecycle safety
     reservation_max_age_seconds: Annotated[float, Field(gt=0, allow_inf_nan=False)] = Field(
         default=900.0,
@@ -646,6 +667,9 @@ class Settings(BaseSettings):
     table_quota_name: str = Field(
         default="routerquota", validation_alias="FOUNDRY_TABLE_QUOTA_NAME"
     )
+    completion_logs_enabled: bool = Field(
+        default=False, validation_alias="FOUNDRY_COMPLETION_LOGS_ENABLED"
+    )
     telemetry_enabled: bool = Field(default=False, validation_alias="FOUNDRY_TELEMETRY_ENABLED")
     telemetry_endpoint: str = Field(
         default="", validation_alias="FOUNDRY_TELEMETRY_ENDPOINT", repr=False
@@ -708,6 +732,68 @@ class Settings(BaseSettings):
         default_factory=dict,
         exclude=True,
     )
+
+    @field_validator(
+        "azure_max_request_body_bytes",
+        "azure_intake_child_address_space_bytes",
+        "azure_intake_scratch_bytes",
+        mode="before",
+    )
+    @classmethod
+    def validate_azure_integer_budget(cls, value: object) -> object:
+        if value is None or type(value) is int:
+            return value
+        if (
+            isinstance(value, str)
+            and value.isascii()
+            and value.isdecimal()
+            and len(value) <= MAX_AZURE_INTEGER_DIGITS
+        ):
+            return int(value)
+        raise ValueError("Azure byte budgets must be finite integers")
+
+    @field_validator(
+        "azure_intake_timeout_seconds", "azure_intake_child_wall_timeout_seconds", mode="before"
+    )
+    @classmethod
+    def validate_azure_timeout_type(cls, value: object) -> object:
+        if isinstance(value, bool):
+            raise ValueError("Azure intake timeout must be numeric")  # noqa: TRY004 -- Pydantic requires ValueError
+        return value
+
+    @model_validator(mode="after")
+    def validate_azure_preparation_envelope(self) -> Settings:
+        bound = self.azure_max_request_body_bytes
+        if bound is not None and bound < self.max_request_body_bytes:
+            raise ValueError("Azure preparation cannot lower the ordinary body bound")
+        if (
+            bound is not None
+            and bound > self.max_request_body_bytes
+            and self.azure_intake_child_address_space_bytes is None
+        ):
+            raise ValueError(
+                "Larger Azure preparation requires an explicitly calibrated "
+                "child address-space budget"
+            )
+        if self.azure_intake_scratch_bytes < 2 * self.azure_effective_max_request_body_bytes:
+            raise ValueError("Azure scratch reservation must hold the input/output pair")
+        return self
+
+    @property
+    def azure_effective_max_request_body_bytes(self) -> int:
+        return (
+            self.max_request_body_bytes
+            if self.azure_max_request_body_bytes is None
+            else self.azure_max_request_body_bytes
+        )
+
+    @property
+    def azure_effective_intake_timeout_seconds(self) -> float:
+        return (
+            self.intake_timeout_seconds
+            if self.azure_intake_timeout_seconds is None
+            else self.azure_intake_timeout_seconds
+        )
 
     @field_validator("google_state_keys_json")
     @classmethod
@@ -1162,6 +1248,13 @@ class Settings(BaseSettings):
                 for key, backend in self.backends.items()
             ):
                 raise ValueError("Table quota requires nonempty limits for every backend group")
+
+        if self.completion_logs_enabled:
+            from foundry_router.metrics.completion import (  # noqa: PLC0415 -- opt-in boundary
+                validate_labels,
+            )
+
+            validate_labels([*self.models, *self.backends])
 
         if self.telemetry_enabled:
             raw = self.telemetry_endpoint
